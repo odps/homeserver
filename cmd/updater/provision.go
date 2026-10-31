@@ -25,6 +25,11 @@ func (u *updater) ensureApps(ctx context.Context, m manifest) (changed []string,
 		if err := u.provision(ctx, a.Name); err != nil {
 			return nil, fmt.Errorf("aprovisionar %s: %w", a.Name, err)
 		}
+		// Ficheros de la app (libros, imágenes…): fuera de las releases para
+		// que sobrevivan a los despliegues.
+		if err := os.MkdirAll(u.path("data", a.Name), 0o700); err != nil {
+			return nil, err
+		}
 		c, err := u.writeService(a)
 		if err != nil {
 			return nil, fmt.Errorf("servicio %s: %w", a.Name, err)
@@ -96,8 +101,9 @@ set -a
 . %s
 set +a
 export ADDR="127.0.0.1:%d"
+export DATA_DIR="%s"
 exec %s
-`, sh, u.path("env", a.Name+".env"), a.Port, u.path("current", "bin", a.Name))
+`, sh, u.path("env", a.Name+".env"), a.Port, u.path("data", a.Name), u.path("current", "bin", a.Name))
 	// svlogger de termux-services guarda el log en $PREFIX/var/log/sv/<servicio>.
 	logRun := fmt.Sprintf("#!%s\nexec %s \"$@\"\n", sh, filepath.Join(u.cfg.Prefix, "share", "termux-services", "svlogger"))
 

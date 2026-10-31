@@ -42,7 +42,7 @@ type updater struct {
 }
 
 func newUpdater(cfg config, log *slog.Logger) *updater {
-	for _, d := range []string{"releases", "env", "backups", "state"} {
+	for _, d := range []string{"releases", "env", "backups", "state", "data"} {
 		os.MkdirAll(filepath.Join(cfg.SrvDir, d), 0o700)
 	}
 	return &updater{cfg: cfg, log: log, http: &http.Client{Timeout: 5 * time.Minute}}

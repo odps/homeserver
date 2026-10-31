@@ -6,6 +6,7 @@
 //	DATABASE_URL  conexión con el rol de la app (obligatoria)
 //	ADDR          dirección HTTP, por ejemplo "127.0.0.1:8101" (por defecto
 //	              127.0.0.1:8080): solo local, se accede por la pasarela
+//	DATA_DIR      carpeta para los ficheros de la app (la crea el updater)
 package app
 
 import (

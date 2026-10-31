@@ -17,6 +17,7 @@
 //	releases/<tag>/   bin/, apps.json, VERSION
 //	current           enlace a la release activa
 //	env/<app>.env     DATABASE_URL de cada app (permisos 600)
+//	data/<app>/       ficheros de cada app (DATA_DIR)
 //	backups/          pg_dump antes de cada cambio de versión
 //	state/bad         tags que fallaron y no se reintentan
 package main

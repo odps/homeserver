@@ -35,7 +35,12 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 type appSpec struct {
 	Name string `json:"name"`
 	Port int    `json:"port"`
+	// MaxUploadMB amplía el límite de cuerpo (32 MB por defecto) y da plazos
+	// largos a la app, para subir y descargar ficheros grandes con datos móviles.
+	MaxUploadMB int `json:"max_upload_mb"`
 }
+
+const defaultUploadMB = 32
 
 func loadApps(path string) (map[string]appSpec, error) {
 	b, err := os.ReadFile(path)
@@ -86,10 +91,10 @@ func (g *gateway) listen(addr string) error {
 		Addr:              addr,
 		Handler:           g.handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    32 << 10,
+		// Sin ReadTimeout/WriteTimeout globales: cada petición recibe sus plazos
+		// en deadlines(), y las apps con ficheros grandes los amplían.
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 32 << 10,
 	}
 	return srv.ListenAndServe()
 }
@@ -110,7 +115,7 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/tokens/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeToken))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
 	mux.Handle("/{app}/", g.appAuth(http.HandlerFunc(g.proxy)))
-	return securityHeaders(limitInflight(64, sameOrigin(mux)))
+	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))
 }
 
 func cacheStatic(next http.Handler) http.Handler {
@@ -135,6 +140,18 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// deadlines pone a cada petición 60 s para leer el cuerpo y 120 s para
+// responder. proxy los amplía para las apps con max_upload_mb.
+func deadlines(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		now := time.Now()
+		rc.SetReadDeadline(now.Add(60 * time.Second))
+		rc.SetWriteDeadline(now.Add(120 * time.Second))
 		next.ServeHTTP(w, r)
 	})
 }
@@ -364,7 +381,14 @@ func (g *gateway) proxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+	limitMB := defaultUploadMB
+	if a.MaxUploadMB > limitMB {
+		limitMB = a.MaxUploadMB
+		rc := http.NewResponseController(w)
+		rc.SetReadDeadline(time.Now().Add(30 * time.Minute))
+		rc.SetWriteDeadline(time.Now().Add(30 * time.Minute))
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, int64(limitMB)<<20)
 	prefix := "/" + name
 	target := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", a.Port)}
 	rp := &httputil.ReverseProxy{

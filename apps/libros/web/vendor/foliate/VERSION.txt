@@ -1,0 +1,4 @@
+foliate-js (MIT) — https://github.com/johnfactotum/foliate-js
+commit 78914aef4466eb960965702401634c2cb348e9b1 (2026-05-01)
+Incluye pdf.js (Apache-2.0), zip.js (BSD-3-Clause) y fflate (MIT).
+Sin reader.js, ficheros .map ni configuración de desarrollo.
