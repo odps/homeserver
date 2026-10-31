@@ -36,6 +36,7 @@ const paths = {
   lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z',
   globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   user: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  layers: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
 }
 export function icon(name) {
   const ns = 'http://www.w3.org/2000/svg'

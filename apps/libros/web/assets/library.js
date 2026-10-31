@@ -57,6 +57,7 @@ function render(view, downloaded) {
       h('div', { class: 'search' }, icon('search'),
         h('input', { type: 'search', placeholder: 'Título, autor, género…', value: state.q, 'aria-label': 'Buscar',
           oninput: debounce(e => { state.q = e.target.value.trim(); refresh(view) }, 300) })),
+      seriesButton(),
       h('a', { class: 'btn', href: '#/explorar', title: 'Buscar en bibliotecas públicas' }, icon('globe'), h('span', { class: 'hide-sm' }, 'Explorar')),
       h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), h('span', { class: 'hide-sm' }, 'Añadir')),
       userMenu(),
@@ -464,6 +465,20 @@ function installCard(view) {
     } }, icon('close')))
   onInstallChange(() => { card.hidden = !canInstall() })
   return card
+}
+
+// Botón de las series de cómic, con los capítulos nuevos sin leer.
+function seriesButton() {
+  const badge = h('span', { class: 'count', hidden: true })
+  const btn = h('a', { class: 'btn', href: '#/series', title: 'Series de manga y manhwa que sigues' }, icon('layers'), h('span', { class: 'hide-sm' }, 'Series'), badge)
+  if (!state.offline) {
+    import('./series.js').then(m => m.unreadTotal()).then(n => {
+      badge.textContent = n > 99 ? '99+' : String(n)
+      badge.hidden = !n
+      if (n) btn.title = n === 1 ? "1 capítulo nuevo sin leer" : `${n} capítulos nuevos sin leer`
+    })
+  }
+  return btn
 }
 
 function debounce(fn, ms) {

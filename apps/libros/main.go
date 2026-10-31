@@ -5,8 +5,10 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"os"
+	"time"
 
 	"homeserver/platform/app"
 )
@@ -27,9 +29,15 @@ func setup(env *app.Env) error {
 	if err != nil {
 		return err
 	}
-	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false)}
+	series, err := newSeriesService(env.DB, dir, defaultSeriesURLs, seriesHosts, false, env.Log)
+	if err != nil {
+		return err
+	}
+	// Comprueba cada 30 minutos los capítulos nuevos de las series seguidas.
+	go series.watch(context.Background(), 30*time.Minute)
+	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false), series: series}
 	a.routes(env.Mux)
 	serveWeb(env.Mux)
-	addTools(env.MCP, a.store)
+	addTools(env.MCP, a.store, series.store)
 	return nil
 }

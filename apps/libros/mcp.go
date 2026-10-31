@@ -84,7 +84,7 @@ type statusIn struct {
 	Estado string `json:"estado" jsonschema:"pendiente, leyendo o leido"`
 }
 
-func addTools(server *mcp.Server, s store) {
+func addTools(server *mcp.Server, s store, ss seriesStore) {
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_leyendo", Description: "Libros que se están leyendo, con el porcentaje, el último dispositivo y cuándo"},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, booksOut, error) {
 			who, err := identity(req)
@@ -129,6 +129,51 @@ func addTools(server *mcp.Server, s store) {
 			}
 			b, err := s.get(ctx, who, in.ID)
 			return nil, summarize(b, false), err
+		})
+	addSeriesTools(server, ss)
+}
+
+type seriesSummary struct {
+	Title     string `json:"titulo"`
+	Source    string `json:"fuente"`
+	Latest    string `json:"ultimo_capitulo,omitempty"`
+	LatestAt  string `json:"publicado,omitempty"`
+	LastRead  string `json:"leido_hasta,omitempty"`
+	Unread    int    `json:"sin_leer"`
+	NextURL   string `json:"siguiente,omitempty"`
+	NextLabel string `json:"siguiente_capitulo,omitempty"`
+}
+
+type seriesOut struct {
+	Series []seriesSummary `json:"series"`
+}
+
+func addSeriesTools(server *mcp.Server, ss seriesStore) {
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_series", Description: "Series de cómic (manga, manhwa) que sigue esta persona, con los capítulos sin leer y el enlace al siguiente"},
+		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, seriesOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, seriesOut{}, err
+			}
+			list, err := ss.followed(ctx, who)
+			out := seriesOut{Series: []seriesSummary{}}
+			for _, s := range list {
+				sum := seriesSummary{Title: s.Title, Source: s.Source, Unread: s.Unread}
+				if s.LatestNumber != nil {
+					sum.Latest = numberLabel(*s.LatestNumber)
+				}
+				if s.LatestAt != nil {
+					sum.LatestAt = s.LatestAt.Format("2006-01-02 15:04")
+				}
+				if s.LastRead != nil {
+					sum.LastRead = numberLabel(*s.LastRead)
+				}
+				if s.Next != nil {
+					sum.NextURL, sum.NextLabel = s.Next.URL, numberLabel(s.Next.Number)
+				}
+				out.Series = append(out.Series, sum)
+			}
+			return nil, out, err
 		})
 }
 

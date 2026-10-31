@@ -25,6 +25,7 @@ type api struct {
 	store   store
 	files   files
 	catalog *catalog
+	series  *seriesService
 	log     *slog.Logger
 	legacy  sync.Once // asignación de los datos anteriores a las cuentas
 }
@@ -45,6 +46,7 @@ func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/isbn/{isbn}", a.user(a.isbnLookup))
 	mux.HandleFunc("PUT /api/books/{id}/progress", a.user(a.progress))
 	a.catalogRoutes(mux)
+	a.seriesRoutes(mux)
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, who app.Identity)

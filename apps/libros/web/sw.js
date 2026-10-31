@@ -49,6 +49,12 @@ self.addEventListener('fetch', event => {
     event.respondWith(caches.open(BOOKS).then(c => c.match(req)).then(hit => hit ?? fetch(req)))
     return
   }
+  // Portadas de las series que sigues; las de los resultados de búsqueda, no.
+  if (/^api\/series\/\d+\/portada$/.test(path)) {
+    event.respondWith(cacheFirst(COVERS, req))
+    return
+  }
+  if (path === 'api/series/portada' || path === 'api/series/buscar') return
   if (/^api\/books\/\d+\/cover$/.test(path)) {
     event.respondWith(cacheFirst(COVERS, req))
     return
