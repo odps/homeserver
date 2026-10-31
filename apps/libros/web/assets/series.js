@@ -13,6 +13,7 @@ const state = {
   items: [],
   more: false,
   loading: false,
+  notice: '',
 }
 
 export async function showSeries(view, hash) {
@@ -98,7 +99,9 @@ async function load(view, append = false) {
     const res = await api(`api/series/buscar?${params}`)
     state.items = append ? [...state.items, ...res.items] : res.items
     state.more = res.more
-    if (res.failed?.length) toast(`Sin respuesta de ${res.failed.map(f => SOURCES[f] ?? f).join(' y ')}`)
+    state.notice = res.failed?.length
+      ? `Sin respuesta de ${res.failed.map(f => SOURCES[f] ?? f).join(' y ')}${res.notice ? ': ' + res.notice.replace(/^[^:]*: /, '') : '.'}`
+      : ''
   } catch (e) {
     toast(e instanceof Offline ? 'Sin conexión: buscar necesita internet' : e.message)
     if (!append) state.items = []
@@ -111,9 +114,10 @@ async function load(view, append = false) {
 function renderResults(view) {
   const box = view.querySelector('#series-results')
   if (!box) return
+  const notice = state.notice && !state.loading ? h('p', { class: 'notice' }, state.notice) : ''
   if (state.loading && !state.items.length) return box.replaceChildren(h('div', { class: 'empty' }, 'Buscando…'))
-  if (!state.items.length) return box.replaceChildren(h('div', { class: 'empty' }, 'No hay resultados.'))
-  box.replaceChildren(
+  if (!state.items.length) return box.replaceChildren(notice, h('div', { class: 'empty' }, 'No hay resultados.'))
+  box.replaceChildren(notice,
     h('div', { class: 'grid' }, ...state.items.map(result)),
     state.more ? h('div', { class: 'more' }, h('button', { class: 'btn', disabled: state.loading, onclick: () => { state.page++; load(view, true) } },
       state.loading ? 'Cargando…' : 'Cargar más')) : null)

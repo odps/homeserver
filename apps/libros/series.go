@@ -327,8 +327,12 @@ func (sv *seriesService) search(ctx context.Context, who app.Identity, source, q
 	items := []seriesItem{}
 	more := false
 	failed := []string{}
+	notice := ""
 	for i := range names {
 		if errs[i] != nil {
+			if errors.Is(errs[i], errBlocked) {
+				notice = errBlocked.Error()
+			}
 			failed = append(failed, names[i])
 			sv.log.Warn("buscar series", "fuente", names[i], "err", errs[i])
 		}
@@ -362,7 +366,7 @@ func (sv *seriesService) search(ctx context.Context, who app.Identity, source, q
 	if err := sv.store.known(ctx, who, items); err != nil {
 		return nil, err
 	}
-	return map[string]any{"items": items, "more": more, "failed": failed}, nil
+	return map[string]any{"items": items, "more": more, "failed": failed, "notice": notice}, nil
 }
 
 // refresh vuelve a leer una serie de su fuente y guarda los capítulos.

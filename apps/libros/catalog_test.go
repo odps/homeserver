@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -141,6 +142,13 @@ func TestCatalogSafety(t *testing.T) {
 	if err != nil || dl.url != srv.URL+"/ebooks/2000.epub3.images" || dl.cover != srv.URL+"/cover.jpg" || dl.meta.Subjects[0] != "Novels" ||
 		dl.meta.Description != `"Don Quijote" es una novela & más.` || dl.meta.Downloads != 1234 || dl.meta.Language != "es" {
 		t.Errorf("ficha de Gutenberg: %v %+v", err, dl)
+	}
+	// La página de bloqueo del operador (certificado que no es el de la web).
+	tlsSrv := httptest.NewTLSServer(http.NotFoundHandler())
+	defer tlsSrv.Close()
+	tu, _ := url.Parse(tlsSrv.URL)
+	if _, err := newCatalog(catalogURLs{}, []string{tu.Hostname()}, true).get(ctx, tlsSrv.URL+"/x"); !errors.Is(err, errBlocked) || !errors.Is(err, errUpstream) {
+		t.Errorf("certificado ajeno: %v", err)
 	}
 	if _, err := c.get(ctx, "https://intranet.example/x"); err == nil {
 		t.Error("descarga de un dominio no permitido")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -139,6 +140,11 @@ func (c *catalog) allowed(u *url.URL) bool {
 
 var errUpstream = errors.New("la biblioteca no responde; inténtalo más tarde")
 
+// errBlocked: el operador ha cambiado la respuesta por su página de bloqueo
+// (en España pasa con IP de Cloudflare durante los partidos de LaLiga), así
+// que el certificado no es el de la web.
+var errBlocked = fmt.Errorf("%w: tu conexión bloquea esta web ahora mismo (en España, el operador bloquea IP de Cloudflare durante los partidos de LaLiga); se volverá a intentar más tarde", errUpstream)
+
 // get hace un GET limitado a los dominios permitidos.
 func (c *catalog) get(ctx context.Context, rawURL string) (*http.Response, error) {
 	u, err := url.Parse(rawURL)
@@ -149,6 +155,10 @@ func (c *catalog) get(ctx context.Context, rawURL string) (*http.Response, error
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := c.client.Do(req)
 	if err != nil {
+		var cert *tls.CertificateVerificationError
+		if errors.As(err, &cert) {
+			return nil, errBlocked
+		}
 		return nil, fmt.Errorf("%w (%v)", errUpstream, err)
 	}
 	if resp.StatusCode != http.StatusOK {
