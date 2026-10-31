@@ -20,6 +20,7 @@ import (
 var migrations embed.FS
 
 func main() {
+	panic("prueba de vuelta atrás: esta versión no arranca")
 	app.Run(app.App{Name: "hola", Title: "Hola (app de prueba)", Migrations: migrations, Setup: setup})
 }
 
