@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Tag
+        id: tag
+        # Empieza por fecha y hora para que se ordene solo; el updater lo usa.
+        run: echo "tag=v$(date -u +%Y%m%d.%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - run: bash deploy/build.sh "${{ steps.tag.outputs.tag }}"
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "$TAG" \
+            --notes "$(git log -1 --format='%s%n%n%b')"
+          # Conserva las 10 releases más recientes.
+          gh release list --limit 100 --json tagName --jq '.[10:][].tagName' |
+            xargs -r -n1 gh release delete --yes --cleanup-tag
