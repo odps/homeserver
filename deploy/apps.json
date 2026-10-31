@@ -1,5 +1,6 @@
 {
   "apps": [
     { "name": "hola", "port": 8101 }
-  ]
+  ],
+  "services": ["netwatch"]
 }

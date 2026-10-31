@@ -94,6 +94,18 @@ ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/homeserver-updater/log/r
 chmod 755 "$svdir/homeserver-updater/run"
 enable homeserver-updater
 
+echo "== Vigilante de red"
+# Reinicia la wifi si el móvil deja de llegar al router (ver cmd/netwatch).
+mkdir -p "$svdir/netwatch/log"
+cat > "$svdir/netwatch/run" <<EOF
+#!$PREFIX/bin/sh
+exec 2>&1
+exec $srv/current/bin/netwatch
+EOF
+ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/netwatch/log/run"
+chmod 755 "$svdir/netwatch/run"
+enable netwatch
+
 echo "== Arranque"
 cat > "$HOME/.termux/boot/20-services" <<EOF
 #!$PREFIX/bin/sh

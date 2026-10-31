@@ -22,6 +22,10 @@ const keepReleases, keepBackups = 3, 5
 
 type manifest struct {
 	Apps []appSpec `json:"apps"`
+	// Services son binarios auxiliares sin base de datos ni /health (netwatch).
+	// Su servicio runit lo crea bootstrap.sh solo donde hace falta; el updater
+	// los reinicia tras cada despliegue si existe.
+	Services []string `json:"services"`
 }
 
 type appSpec struct {
@@ -160,6 +164,11 @@ func (u *updater) manifest(tag string) (manifest, error) {
 			return m, fmt.Errorf("apps.json de %s: app no válida %+v", tag, a)
 		}
 	}
+	for _, s := range m.Services {
+		if !validName.MatchString(s) {
+			return m, fmt.Errorf("apps.json de %s: servicio no válido %q", tag, s)
+		}
+	}
 	return m, nil
 }
 
@@ -177,6 +186,14 @@ func (u *updater) restartAndCheck(ctx context.Context, m manifest, tag string) e
 	for _, a := range m.Apps {
 		if err := u.sv(ctx, "restart", a.Name); err != nil {
 			return err
+		}
+	}
+	for _, s := range m.Services {
+		if _, err := os.Stat(filepath.Join(u.cfg.SvDir, s)); err != nil {
+			continue
+		}
+		if err := u.sv(ctx, "restart", s); err != nil {
+			u.log.Error("reiniciar servicio auxiliar", "servicio", s, "err", err)
 		}
 	}
 	return u.checkAll(ctx, m, tag)

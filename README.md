@@ -15,7 +15,8 @@ Apps personales pequeñas con tools MCP para un agente de IA, pensadas para corr
 | `platform/dbtest` | Schema temporal por test |
 | `apps/<app>` | Cada app: `main.go`, `migrations/NNN_*.sql` |
 | `cmd/updater` | Updater pull con vuelta atrás |
-| `deploy/apps.json` | Apps que se despliegan y su puerto |
+| `cmd/netwatch` | Vigilante de red: reinicia la wifi del móvil si no llega al router |
+| `deploy/apps.json` | Apps que se despliegan y su puerto, y servicios auxiliares que se reinician tras cada despliegue |
 | `deploy/build.sh` | Compilación para android/arm64, linux/arm64 y linux/amd64 |
 | `deploy/termux/bootstrap.sh` | Preparación inicial del móvil |
 
