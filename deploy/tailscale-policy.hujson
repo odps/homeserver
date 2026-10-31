@@ -1,0 +1,32 @@
+// Política del tailnet (Panel de Tailscale → Access controls). Se pega
+// entera, sustituyendo la que haya.
+//
+// - Mis dispositivos se ven entre sí en todos los puertos (autogroup:self).
+// - El nodo público xperia-web (Tailscale userspace en Termux) va etiquetado
+//   como tag:web. Su netstack reenviaría al tailnet cualquier puerto local del
+//   móvil (PostgreSQL incluido), así que solo se permite el 443, que es la
+//   pasarela con login. Funnel no pasa por estas reglas.
+// - Los nodos etiquetados no caducan.
+{
+	"tagOwners": {
+		"tag:web": ["autogroup:admin"],
+	},
+
+	"grants": [
+		{"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
+		{"src": ["autogroup:member"], "dst": ["tag:web"], "ip": ["tcp:443"]},
+	],
+
+	"nodeAttrs": [
+		{"target": ["tag:web"], "attr": ["funnel"]},
+	],
+
+	"ssh": [
+		{
+			"action": "check",
+			"src":    ["autogroup:member"],
+			"dst":    ["autogroup:self"],
+			"users":  ["autogroup:nonroot", "root"],
+		},
+	],
+}

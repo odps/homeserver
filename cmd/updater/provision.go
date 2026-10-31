@@ -18,17 +18,22 @@ import (
 var validName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,30}$`)
 
 // ensureApps aprovisiona las apps que aún no lo están y deja su servicio runit
-// escrito. Es idempotente.
-func (u *updater) ensureApps(ctx context.Context, m manifest) error {
+// escrito. Es idempotente. Devuelve las apps cuyo script de arranque cambió,
+// que hay que reiniciar para que lo apliquen.
+func (u *updater) ensureApps(ctx context.Context, m manifest) (changed []string, err error) {
 	for _, a := range m.Apps {
 		if err := u.provision(ctx, a.Name); err != nil {
-			return fmt.Errorf("aprovisionar %s: %w", a.Name, err)
+			return nil, fmt.Errorf("aprovisionar %s: %w", a.Name, err)
 		}
-		if err := u.writeService(a); err != nil {
-			return fmt.Errorf("servicio %s: %w", a.Name, err)
+		c, err := u.writeService(a)
+		if err != nil {
+			return nil, fmt.Errorf("servicio %s: %w", a.Name, err)
+		}
+		if c {
+			changed = append(changed, a.Name)
 		}
 	}
-	return nil
+	return changed, nil
 }
 
 // provision crea el rol app_<nombre> con una contraseña aleatoria y el schema
@@ -75,12 +80,13 @@ func (u *updater) provision(ctx context.Context, name string) error {
 		RawQuery: "sslmode=disable",
 	}
 	u.log.Info("app aprovisionada", "app", name, "rol", roleName)
-	return writeFile(envFile, "DATABASE_URL="+dsn.String()+"\n", 0o600)
+	_, err = writeFile(envFile, "DATABASE_URL="+dsn.String()+"\n", 0o600)
+	return err
 }
 
 // writeService escribe el servicio runit de la app. Se reescribe en cada
-// despliegue por si cambia el puerto.
-func (u *updater) writeService(a appSpec) error {
+// despliegue por si cambia el puerto; devuelve si el script cambió.
+func (u *updater) writeService(a appSpec) (bool, error) {
 	dir := filepath.Join(u.cfg.SvDir, a.Name)
 	sh := filepath.Join(u.cfg.Prefix, "bin", "sh")
 	run := fmt.Sprintf(`#!%s
@@ -96,22 +102,23 @@ exec %s
 	logRun := fmt.Sprintf("#!%s\nexec %s \"$@\"\n", sh, filepath.Join(u.cfg.Prefix, "share", "termux-services", "svlogger"))
 
 	if err := os.MkdirAll(filepath.Join(dir, "log"), 0o755); err != nil {
-		return err
+		return false, err
 	}
-	if err := writeFile(filepath.Join(dir, "log", "run"), logRun, 0o755); err != nil {
-		return err
+	if _, err := writeFile(filepath.Join(dir, "log", "run"), logRun, 0o755); err != nil {
+		return false, err
 	}
 	return writeFile(filepath.Join(dir, "run"), run, 0o755)
 }
 
-// writeFile solo escribe si el contenido cambia, de forma atómica.
-func writeFile(path, content string, mode os.FileMode) error {
+// writeFile solo escribe si el contenido cambia, de forma atómica, y dice si
+// lo ha cambiado.
+func writeFile(path, content string, mode os.FileMode) (bool, error) {
 	if old, err := os.ReadFile(path); err == nil && string(old) == content {
-		return nil
+		return false, nil
 	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(content), mode); err != nil {
-		return err
+		return false, err
 	}
-	return os.Rename(tmp, path)
+	return true, os.Rename(tmp, path)
 }

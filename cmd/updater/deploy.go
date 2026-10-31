@@ -89,7 +89,7 @@ func (u *updater) deploy(ctx context.Context, r *release) error {
 	if err != nil {
 		return err
 	}
-	if err := u.ensureApps(ctx, m); err != nil {
+	if _, err := u.ensureApps(ctx, m); err != nil {
 		return err
 	}
 	prev := u.currentTag()
@@ -139,11 +139,16 @@ func (u *updater) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := u.ensureApps(ctx, m); err != nil {
+	changed, err := u.ensureApps(ctx, m)
+	if err != nil {
 		return err
 	}
 	for _, a := range m.Apps {
-		if err := u.sv(ctx, "up", a.Name); err != nil {
+		cmd := "up"
+		if slices.Contains(changed, a.Name) {
+			cmd = "restart"
+		}
+		if err := u.sv(ctx, cmd, a.Name); err != nil {
 			return err
 		}
 	}
