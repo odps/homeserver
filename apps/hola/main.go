@@ -8,6 +8,7 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,7 +21,9 @@ import (
 var migrations embed.FS
 
 func main() {
-	panic("prueba de vuelta atrás: esta versión no arranca")
+	if os.Getenv("HOLA_ARRANCA") == "" {
+		panic("prueba de vuelta atrás: esta versión no arranca")
+	}
 	app.Run(app.App{Name: "hola", Title: "Hola (app de prueba)", Migrations: migrations, Setup: setup})
 }
 
