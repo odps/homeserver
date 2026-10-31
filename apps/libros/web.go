@@ -40,9 +40,21 @@ func serveWeb(mux *http.ServeMux) {
 		files.ServeHTTP(w, r)
 	}
 	// Rutas concretas: un «GET /» genérico chocaría con /mcp de la plataforma.
-	for _, p := range []string{"GET /{$}", "GET /sw.js", "GET /manifest.webmanifest", "GET /assets/", "GET /vendor/"} {
+	for _, p := range []string{"GET /{$}", "GET /manifest.webmanifest", "GET /assets/", "GET /vendor/"} {
 		mux.HandleFunc(p, serve)
 	}
+	// El navegador solo instala un service worker nuevo si cambian sus bytes:
+	// se le inyecta la versión para que cada despliegue llegue a todos los
+	// dispositivos (si no, seguirían con la interfaz guardada la primera vez).
+	sw, _ := fs.ReadFile(static, "sw.js")
+	sw = []byte(strings.Replace(string(sw), "const VERSION = '__VERSION__'", "const VERSION = '"+version.Version+"'", 1))
+	mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
+		h.Set("Content-Security-Policy", csp)
+		h.Set("Cache-Control", "no-cache")
+		w.Write(sw)
+	})
 	// precache.json lista los ficheros que el service worker guarda para que la
 	// app funcione sin conexión. La versión cambia en cada despliegue.
 	mux.HandleFunc("GET /precache.json", func(w http.ResponseWriter, r *http.Request) {

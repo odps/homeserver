@@ -2,6 +2,7 @@
 // libro (con el progreso de cada dispositivo), edición y subida.
 import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, Offline } from './util.js'
 import { rememberLibrary, cachedLibrary, downloadedIds, isDownloaded, loadFile, removeDownload, localProgress } from './local.js'
+import { canInstall, installed, install, installHelp, onInstallChange } from './install.js'
 
 const statusLabel = { pendiente: 'Pendiente', leyendo: 'Leyendo', leido: 'Leído' }
 const state = {
@@ -59,6 +60,7 @@ function render(view, downloaded) {
       h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), 'Añadir'),
       userMenu(),
     ),
+    installCard(view),
     current && continueCard(current),
     h('div', { class: 'filters' },
       ...[['', 'Todos'], ['leyendo', 'Leyendo'], ['pendiente', 'Pendientes'], ['leido', 'Leídos']].map(([v, label]) =>
@@ -81,6 +83,11 @@ function render(view, downloaded) {
         .map(([v, label]) => h('option', { value: v, selected: state.sort === v }, label))),
     ),
     all.length ? h('div', { class: 'grid' }, ...all.map(b => tile(b, downloaded.has(b.id), view))) : emptyState(view),
+    h('footer', { class: 'account' },
+      h('span', {}, 'Conectado como ', h('strong', {}, me.name || me.user)),
+      h('a', { href: '_cuenta' }, 'Mi cuenta'),
+      !installed() ? h('button', { type: 'button', onclick: () => installHelp() }, 'Instalar la app') : null,
+      h('form', { method: 'post', action: '_logout' }, h('button', {}, 'Salir'))),
   )
   view.replaceChildren(root)
 }
@@ -344,19 +351,40 @@ async function extract(file) {
   return extract(file)
 }
 
-// Menú de la persona: su cuenta (contraseña, dispositivos) y salir. Ambas
-// páginas las sirve la pasarela dentro de la ruta de la app.
+// Menú de la persona: su cuenta (contraseña, dispositivos), instalar la app
+// y salir. La cuenta y la salida las sirve la pasarela dentro de la ruta de
+// la app.
 function userMenu() {
+  const name = me.name || me.user || 'Mi cuenta'
   const menu = h('div', { class: 'menu', hidden: true },
-    h('div', { class: 'meta' }, me.name || me.user),
-    h('a', { href: '_cuenta' }, 'Mi cuenta'),
-    h('form', { method: 'post', action: '_logout' }, h('button', {}, 'Salir')))
+    h('div', { class: 'who' }, h('strong', {}, name), me.user && me.user !== name ? h('span', { class: 'meta' }, me.user) : null),
+    h('a', { href: '_cuenta' }, icon('user'), 'Mi cuenta y contraseña'),
+    !installed() ? h('button', { type: 'button', onclick: () => { menu.hidden = true; installHelp() } }, icon('download'), 'Instalar la app') : null,
+    h('form', { method: 'post', action: '_logout' }, h('button', {}, icon('back'), 'Salir')))
   const wrap = h('div', { class: 'usermenu' },
-    h('button', { class: 'icon-btn', 'aria-label': 'Mi cuenta', 'aria-haspopup': 'true',
-      onclick: e => { e.stopPropagation(); menu.hidden = !menu.hidden } }, icon('user')),
+    h('button', { class: 'avatar', 'aria-label': `Cuenta de ${name}`, 'aria-haspopup': 'true',
+      onclick: e => { e.stopPropagation(); menu.hidden = !menu.hidden } },
+      h('span', { class: 'initial' }, name.trim()[0]?.toUpperCase() ?? '?'),
+      h('span', { class: 'label' }, name)),
     menu)
   document.addEventListener('click', () => { menu.hidden = true })
   return wrap
+}
+
+// Tarjeta para instalar la app, si el navegador lo permite y no se ha
+// descartado. Se vuelve a mostrar sola si el aviso llega después.
+function installCard(view) {
+  if (installed() || localStorage.getItem('libros.installDismissed')) return null
+  const card = h('div', { class: 'install', hidden: !canInstall() },
+    h('div', {}, h('strong', {}, 'Instala Libros como app'),
+      h('p', { class: 'meta' }, 'Ábrela desde la pantalla de inicio, a pantalla completa y sin volver a entrar.')),
+    h('button', { class: 'btn primary', onclick: () => install() }, icon('download'), 'Instalar'),
+    h('button', { class: 'icon-btn', 'aria-label': 'No mostrar más', onclick: () => {
+      localStorage.setItem('libros.installDismissed', '1')
+      card.remove()
+    } }, icon('close')))
+  onInstallChange(() => { card.hidden = !canInstall() })
+  return card
 }
 
 function debounce(fn, ms) {

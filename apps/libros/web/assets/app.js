@@ -1,5 +1,7 @@
 // Arranque: rutas por hash (#/ biblioteca, #/leer/<id> lector), service
 // worker para el modo sin conexión y envío del progreso pendiente.
+// install.js primero: el aviso de instalación puede llegar muy pronto.
+import './install.js'
 import { $, api, banner, me, toast, Offline } from './util.js'
 import { flushQueue, pendingCount } from './local.js'
 import { showLibrary } from './library.js'
@@ -37,7 +39,18 @@ window.addEventListener('offline', connectivity)
 setInterval(() => navigator.onLine && flushQueue(), 60_000)
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e))
+  const hadController = !!navigator.serviceWorker.controller
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Busca versiones nuevas al abrir y cada hora.
+    reg.update().catch(() => {})
+    setInterval(() => reg.update().catch(() => {}), 3_600_000)
+  }).catch(e => console.warn('service worker', e))
+  // Versión nueva activada: se recarga para usarla, salvo a mitad de lectura.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return
+    if (location.hash.startsWith('#/leer/')) toast('Hay una versión nueva: se aplicará al volver a la biblioteca')
+    else location.reload()
+  })
 }
 
 // Quién soy: de la red o, sin conexión, de la última vez.

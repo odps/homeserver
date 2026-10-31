@@ -95,6 +95,18 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
   width: 1.4rem; height: 1.4rem; display: grid; place-items: center; }
 .cover .lock svg { width: .8rem; height: .8rem; }
 .usermenu { position: relative; }
+.avatar { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: .2rem .7rem .2rem .2rem; cursor: pointer; font: inherit; font-size: .88rem; font-weight: 550; max-width: 11rem; }
+.avatar .initial { width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 700; flex: none; }
+.avatar .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.usermenu .menu .who { display: grid; padding: .3rem .6rem .5rem; border-bottom: 1px solid var(--border); margin-bottom: .2rem; }
+.usermenu .menu a, .usermenu .menu button { display: flex; align-items: center; gap: .55rem; }
+.usermenu .menu svg { width: 1rem; height: 1rem; }
+.install { display: flex; align-items: center; gap: .9rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: .85rem 1rem; margin-bottom: 1.2rem; box-shadow: var(--shadow); }
+.install > div { flex: 1; }
+.install p { margin: .15rem 0 0; }
+.steps { margin: 0; padding-left: 1.2rem; display: grid; gap: .5rem; line-height: 1.45; }
 .usermenu .menu { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 20; background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: var(--shadow); padding: .5rem; min-width: 180px; display: grid; gap: .2rem; }
 .usermenu .menu .meta { padding: .3rem .6rem; }
@@ -106,6 +118,10 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
   font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .book .bar { margin-top: 0; }
 
+.account { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; align-items: center; justify-content: center; margin-top: 3rem; padding-top: 1.2rem;
+  border-top: 1px solid var(--border); color: var(--muted); font-size: .88rem; }
+.account a, .account button { color: var(--accent); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
+.account form { margin: 0; }
 .empty { text-align: center; color: var(--muted); padding: 4rem 1rem; }
 .empty h2 { font-family: var(--serif); color: var(--text); font-weight: 600; }
 
@@ -191,6 +207,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); backdrop-filter: blur(2px); }
   .continue .cover { width: 64px; }
   .continue h2 { font-size: 1.05rem; }
   .continue .btn { display: none; }
+  .avatar .label { display: none; }
+  .avatar { padding: .2rem; }
+  .install { flex-wrap: wrap; }
   .continue .cover .ph { padding: .35rem; }
   .continue .cover .ph b { font-size: .62rem; -webkit-line-clamp: 4; }
   .continue .cover .ph small { display: none; }
