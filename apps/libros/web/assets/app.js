@@ -1,6 +1,6 @@
 // Arranque: rutas por hash (#/ biblioteca, #/leer/<id> lector), service
 // worker para el modo sin conexión y envío del progreso pendiente.
-import { $, banner, toast } from './util.js'
+import { $, api, banner, me, toast, Offline } from './util.js'
 import { flushQueue, pendingCount } from './local.js'
 import { showLibrary } from './library.js'
 
@@ -38,6 +38,26 @@ setInterval(() => navigator.onLine && flushQueue(), 60_000)
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e))
+}
+
+// Quién soy: de la red o, sin conexión, de la última vez.
+try {
+  Object.assign(me, await api('api/me'))
+} catch (e) {
+  if (e instanceof Offline) {
+    try { Object.assign(me, JSON.parse(localStorage.getItem('libros.me')) ?? {}) } catch {}
+  }
+}
+
+// Si en este navegador entra otra persona, se borran los libros guardados y
+// las copias de la anterior: los privados no deben quedar a su alcance.
+if (me.user) {
+  const last = localStorage.getItem('libros.lastUser')
+  if (last && last !== me.user && 'caches' in window) {
+    for (const name of ['libros-books', 'libros-data', 'libros-covers']) await caches.delete(name)
+    localStorage.removeItem(`libros.library.${last}`)
+  }
+  localStorage.setItem('libros.lastUser', me.user)
 }
 
 connectivity()

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi cuenta · {{.Title}}</title>
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" href="/{{.App}}/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a class="button ghost" href="/{{.App}}/">← {{.Title}}</a></div>
+  <nav></nav>
+  <form method="post" action="/{{.App}}/_logout"><button class="ghost">Salir</button></form>
+</header>
+<main class="container">
+  {{with .Msg}}<p class="flash" role="status">{{.}}</p>{{end}}
+  {{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
+  <section class="panel">
+    <h2>{{.Name}} <span class="muted small">({{.Username}})</span></h2>
+    <h3 class="sub">Cambiar contraseña</h3>
+    <form method="post" class="stack">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="password">
+      <input type="text" name="username" value="{{.Username}}" autocomplete="username" hidden>
+      <label>Contraseña actual<input type="password" name="current" autocomplete="current-password" required></label>
+      <label>Nueva contraseña (al menos {{.MinLen}} caracteres)<input type="password" name="new" autocomplete="new-password" minlength="{{.MinLen}}" required></label>
+      <label>Repítela<input type="password" name="repeat" autocomplete="new-password" minlength="{{.MinLen}}" required></label>
+      <button class="primary">Cambiar</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Dispositivos con sesión abierta</h2>
+    <ul class="list">
+      {{range .Sessions}}
+      <li><span class="grow"><span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>{{if eq .ID $.SessionID}}<span class="badge">este</span>{{end}}</li>
+      {{end}}
+    </ul>
+    <form method="post" data-confirm="¿Cerrar la sesión en los demás dispositivos?">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="logout-others">
+      <button class="ghost">Cerrar los demás</button>
+    </form>
+  </section>
+</main>
+</body>
+</html>

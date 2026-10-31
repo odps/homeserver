@@ -6,9 +6,26 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"homeserver/platform/app"
 )
 
-// Tools para el agente. Devuelven resúmenes: sin rutas de fichero ni hashes.
+// Tools para el agente. Actúan en nombre de la persona del token (la pasarela
+// pasa su identidad en las cabeceras) y devuelven resúmenes: sin rutas de
+// fichero ni hashes.
+
+var errNoUser = errors.New("este token no está asociado a ninguna persona: créalo «en nombre de» un usuario en el panel")
+
+func identity(req *mcp.CallToolRequest) (app.Identity, error) {
+	if req.Extra == nil {
+		return app.Identity{}, errNoUser
+	}
+	who := app.UserFrom(req.Extra.Header)
+	if !who.IsUser() {
+		return who, errNoUser
+	}
+	return who, nil
+}
 
 type bookSummary struct {
 	ID          int64    `json:"id"`
@@ -17,6 +34,8 @@ type bookSummary struct {
 	Genres      []string `json:"generos,omitempty"`
 	Series      string   `json:"serie,omitempty"`
 	Status      string   `json:"estado"`
+	Owner       string   `json:"subido_por,omitempty"`
+	Visibility  string   `json:"visibilidad"`
 	Format      string   `json:"formato"`
 	Percent     *int     `json:"porcentaje,omitempty"`
 	Where       string   `json:"donde,omitempty"`
@@ -25,7 +44,7 @@ type bookSummary struct {
 }
 
 func summarize(b Book, withDescription bool) bookSummary {
-	s := bookSummary{ID: b.ID, Title: b.Title, Authors: b.Authors, Genres: b.Genres, Status: b.Status, Format: b.Format}
+	s := bookSummary{ID: b.ID, Title: b.Title, Authors: b.Authors, Genres: b.Genres, Status: b.Status, Format: b.Format, Owner: b.Owner, Visibility: b.Visibility}
 	if b.Series != nil {
 		s.Series = *b.Series
 		if b.SeriesIndex != nil {
@@ -67,32 +86,48 @@ type statusIn struct {
 
 func addTools(server *mcp.Server, s store) {
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_leyendo", Description: "Libros que se están leyendo, con el porcentaje, el último dispositivo y cuándo"},
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, booksOut, error) {
-			books, err := s.list(ctx, listQuery{Status: "leyendo", Sort: "recent", Limit: 20})
+		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, booksOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, booksOut{}, err
+			}
+			books, err := s.list(ctx, who, listQuery{Status: "leyendo", Sort: "recent", Limit: 20})
 			return nil, toOut(books, false), err
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_buscar", Description: "Busca en la biblioteca por texto y/o estado"},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, booksOut, error) {
+		func(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, booksOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, booksOut{}, err
+			}
 			if in.Estado != "" && !statuses[in.Estado] {
 				return nil, booksOut{}, errors.New("estado no válido: pendiente, leyendo o leido")
 			}
-			books, err := s.list(ctx, listQuery{Text: in.Texto, Status: in.Estado, Sort: "recent", Limit: 50})
+			books, err := s.list(ctx, who, listQuery{Text: in.Texto, Status: in.Estado, Sort: "recent", Limit: 50})
 			return nil, toOut(books, false), err
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_detalle", Description: "Metadatos y descripción de un libro"},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, bookSummary, error) {
-			b, err := s.get(ctx, in.ID)
+		func(ctx context.Context, req *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, bookSummary, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, bookSummary{}, err
+			}
+			b, err := s.get(ctx, who, in.ID)
 			return nil, summarize(b, true), err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "libros_estado", Description: "Cambia el estado de un libro (pendiente, leyendo o leido)"},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, bookSummary, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_estado", Description: "Cambia el estado de lectura de un libro para esta persona (pendiente, leyendo o leido)"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, bookSummary, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, bookSummary{}, err
+			}
 			if !statuses[in.Estado] {
 				return nil, bookSummary{}, errors.New("estado no válido: pendiente, leyendo o leido")
 			}
-			if err := s.setStatus(ctx, in.ID, in.Estado); err != nil {
+			if err := s.setStatus(ctx, who, in.ID, in.Estado); err != nil {
 				return nil, bookSummary{}, err
 			}
-			b, err := s.get(ctx, in.ID)
+			b, err := s.get(ctx, who, in.ID)
 			return nil, summarize(b, false), err
 		})
 }

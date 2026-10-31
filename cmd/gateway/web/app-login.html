@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · {{.Title}}</title>
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" href="/{{.App}}/assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/{{.App}}/manifest.webmanifest">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login">
+<main class="login-card">
+  <div class="brand"><img src="/{{.App}}/assets/icon.svg" alt="" width="40" height="40"><span>{{.Title}}</span></div>
+  {{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
+  <form method="post" action="/{{.App}}/_login" class="stack">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>Usuario
+      <input name="username" value="{{.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+    </label>
+    <label>Contraseña
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button class="primary">Entrar</button>
+  </form>
+  <p class="hint">La sesión se mantiene en este dispositivo mientras uses la app. ¿Sin cuenta o sin contraseña? Pídesela al administrador.</p>
+</main>
+</body>
+</html>

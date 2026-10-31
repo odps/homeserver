@@ -118,6 +118,7 @@ type tokenStore struct {
 
 type tokenEntry struct {
 	Hash     string     `json:"hash"`
+	User     string     `json:"user,omitempty"` // cuenta de app en cuyo nombre actúa (opcional)
 	Created  time.Time  `json:"created"`
 	Apps     []string   `json:"apps"`
 	Expires  *time.Time `json:"expires,omitempty"`
@@ -162,7 +163,7 @@ func (s *tokenStore) list() (map[string]tokenEntry, error) {
 }
 
 // create genera un token nuevo y devuelve su valor, que no se vuelve a mostrar.
-func (s *tokenStore) create(name string, apps []string, ttl time.Duration) (string, error) {
+func (s *tokenStore) create(name, user string, apps []string, ttl time.Duration) (string, error) {
 	if !validTokenName(name) {
 		return "", errors.New("nombre de token no válido (letras, números, - y _)")
 	}
@@ -179,7 +180,7 @@ func (s *tokenStore) create(name string, apps []string, ttl time.Duration) (stri
 		return "", fmt.Errorf("ya existe un token %q", name)
 	}
 	tok := "hs_" + randomToken(32)
-	e := tokenEntry{Hash: hashToken(tok), Created: time.Now().UTC(), Apps: apps}
+	e := tokenEntry{Hash: hashToken(tok), User: user, Created: time.Now().UTC(), Apps: apps}
 	if ttl > 0 {
 		exp := e.Created.Add(ttl)
 		e.Expires = &exp
@@ -202,19 +203,19 @@ func (s *tokenStore) revoke(name string) error {
 	return s.save(m)
 }
 
-// check devuelve el nombre del token si es válido para la app.
-func (s *tokenStore) check(tok, app string, now time.Time) (string, bool) {
+// check devuelve el nombre y los datos del token si es válido para la app.
+func (s *tokenStore) check(tok, app string, now time.Time) (string, tokenEntry, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, err := s.load()
 	if err != nil {
-		return "", false
+		return "", tokenEntry{}, false
 	}
 	h := hashToken(tok)
 	for name, e := range m {
 		if subtle.ConstantTimeCompare([]byte(e.Hash), []byte(h)) == 1 {
 			if !e.allows(app, now) {
-				return name, false
+				return name, e, false
 			}
 			// Registra el último uso como mucho una vez por hora.
 			if e.LastUsed == nil || now.Sub(*e.LastUsed) > time.Hour {
@@ -223,10 +224,10 @@ func (s *tokenStore) check(tok, app string, now time.Time) (string, bool) {
 				m[name] = e
 				s.save(m)
 			}
-			return name, true
+			return name, e, true
 		}
 	}
-	return "", false
+	return "", tokenEntry{}, false
 }
 
 func validTokenName(n string) bool {

@@ -15,13 +15,17 @@ import (
 
 // Las sesiones viven en el servidor: la cookie solo lleva un identificador
 // aleatorio y en disco se guarda su hash. Así se pueden listar y cerrar.
+// Panel: 30 días como máximo y 7 sin uso. Apps: sin máximo y 90 días sin uso
+// (instaladas como app no vuelven a pedir la contraseña mientras se usen).
 const (
-	sessionTTL  = 30 * 24 * time.Hour // máximo absoluto
-	sessionIdle = 7 * 24 * time.Hour  // sin uso
+	sessionTTL     = 30 * 24 * time.Hour
+	sessionIdle    = 7 * 24 * time.Hour
+	appSessionIdle = 90 * 24 * time.Hour
 )
 
 type session struct {
-	ID       string    `json:"id"` // identificador corto para el panel (no es la cookie)
+	ID       string    `json:"id"`             // identificador corto para el panel (no es la cookie)
+	User     string    `json:"user,omitempty"` // cuenta de app; vacío en las del panel
 	Created  time.Time `json:"created"`
 	LastSeen time.Time `json:"last_seen"`
 	IP       string    `json:"ip"`
@@ -31,13 +35,15 @@ type session struct {
 
 type sessionStore struct {
 	path      string
+	ttl       time.Duration // máximo absoluto; 0 = sin máximo
+	idle      time.Duration
 	mu        sync.Mutex
 	byHash    map[string]*session
 	lastFlush time.Time
 }
 
-func newSessionStore(path string) (*sessionStore, error) {
-	s := &sessionStore{path: path, byHash: map[string]*session{}}
+func newSessionStore(path string, ttl, idle time.Duration) (*sessionStore, error) {
+	s := &sessionStore{path: path, ttl: ttl, idle: idle, byHash: map[string]*session{}}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -60,9 +66,9 @@ func hashSession(cookie string) string {
 }
 
 // create devuelve el valor de la cookie de una sesión nueva.
-func (s *sessionStore) create(ip, agent string, now time.Time) (string, *session, error) {
+func (s *sessionStore) create(user, ip, agent string, now time.Time) (string, *session, error) {
 	cookie := randomToken(32)
-	sess := &session{ID: randomToken(6), Created: now, LastSeen: now, IP: ip, Agent: truncate(agent, 160), CSRF: randomToken(24)}
+	sess := &session{ID: randomToken(6), User: user, Created: now, LastSeen: now, IP: ip, Agent: truncate(agent, 160), CSRF: randomToken(24)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.byHash[hashSession(cookie)] = sess
@@ -78,7 +84,7 @@ func (s *sessionStore) get(cookie, ip string, now time.Time) (*session, bool) {
 	if !ok {
 		return nil, false
 	}
-	if now.Sub(sess.Created) > sessionTTL || now.Sub(sess.LastSeen) > sessionIdle {
+	if s.expired(sess, now) {
 		delete(s.byHash, h)
 		s.flushLocked(now)
 		return nil, false
@@ -97,12 +103,31 @@ func (s *sessionStore) list(now time.Time) []session {
 	defer s.mu.Unlock()
 	var out []session
 	for _, sess := range s.byHash {
-		if now.Sub(sess.Created) <= sessionTTL && now.Sub(sess.LastSeen) <= sessionIdle {
+		if !s.expired(sess, now) {
 			out = append(out, *sess)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
 	return out
+}
+
+func (s *sessionStore) expired(sess *session, now time.Time) bool {
+	return (s.ttl > 0 && now.Sub(sess.Created) > s.ttl) || now.Sub(sess.LastSeen) > s.idle
+}
+
+// revokeUser cierra todas las sesiones de una cuenta de app.
+func (s *sessionStore) revokeUser(user string, now time.Time) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for h, sess := range s.byHash {
+		if sess.User == user {
+			delete(s.byHash, h)
+			n++
+		}
+	}
+	s.flushLocked(now)
+	return n
 }
 
 // revoke cierra la sesión con ese ID corto; con "" las cierra todas.

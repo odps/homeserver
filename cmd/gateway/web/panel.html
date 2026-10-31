@@ -15,7 +15,7 @@
 <header class="topbar">
   <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
   <nav aria-label="Secciones">
-    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#security">Seguridad</a>
+    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#security">Seguridad</a>
   </nav>
   <form method="post" action="/logout"><button class="ghost">Salir</button></form>
 </header>
@@ -28,10 +28,17 @@
     <div class="copy-row"><code id="new-token">{{.}}</code><button type="button" class="ghost" data-copy="new-token">Copiar</button></div>
   </div>
   {{end}}
+  {{with .NewSecret}}
+  <div class="token-once">
+    <p>Contraseña temporal de <strong>{{$.SecretFor}}</strong> (solo se muestra ahora):</p>
+    <div class="copy-row"><code id="new-secret">{{.}}</code><button type="button" class="ghost" data-copy="new-secret">Copiar</button></div>
+  </div>
+  {{end}}
 
   <section id="apps" class="panel" data-refresh="/panel/frag/apps" data-interval="20">{{template "sec-apps" .}}</section>
   <section id="phone" class="panel" data-refresh="/panel/frag/phone" data-interval="30">{{template "sec-phone" .}}</section>
   <section id="deploys" class="panel" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
+  <section id="users" class="panel" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
   <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
 </main>
 <footer class="container foot">homeserver {{.Version}}</footer>
@@ -187,7 +194,7 @@
     <ul class="list">
       {{range .Tokens}}
       <li>
-        <span class="grow"><span class="mono small">{{.Name}}</span><br><span class="muted small">{{.Apps}} · {{with .Expires}}caduca {{date .}}{{else}}sin caducidad{{end}} · {{with .LastUsed}}usado {{date .}}{{else}}sin uso{{end}}</span></span>
+        <span class="grow"><span class="mono small">{{.Name}}</span>{{with .User}} <span class="badge">como {{.}}</span>{{end}}<br><span class="muted small">{{.Apps}} · {{with .Expires}}caduca {{date .}}{{else}}sin caducidad{{end}} · {{with .LastUsed}}usado {{date .}}{{else}}sin uso{{end}}</span></span>
         <form method="post" action="/panel/tokens/revoke" data-confirm="¿Revocar {{.Name}}?">
           <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
           <button class="ghost small">Revocar</button>
@@ -206,6 +213,9 @@
           {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}"> {{.}}</label>{{end}}
           <label class="check"><input type="checkbox" name="apps" value="*"> todas</label>
         </fieldset>
+        <label>Actúa en nombre de
+          <select name="user"><option value="">Nadie (servicio)</option>{{range .Users}}<option value="{{.Username}}">{{.Username}}</option>{{end}}</select>
+        </label>
         <label>Caducidad
           <select name="days"><option value="30">30 días</option><option value="90" selected>90 días</option><option value="365">1 año</option><option value="0">Sin caducidad</option></select>
         </label>
@@ -225,6 +235,69 @@
   </li>
   {{else}}
   <li class="muted">Sin eventos.</li>
+  {{end}}
+</ul>
+{{end}}
+
+{{define "sec-users"}}
+<h2>Usuarios de las apps</h2>
+<p class="muted small">Entran en las apps con usuario y contraseña (sin 2FA) y la sesión dura mientras usen la app (90 días sin uso). No tienen acceso a este panel.</p>
+<ul class="list">
+  {{range .Users}}
+  <li>
+    <span class="dot {{if .Disabled}}off{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow">
+      <strong>{{.Name}}</strong> <span class="mono small">{{.Username}}</span> {{if eq .Role "admin"}}<span class="badge">admin</span>{{end}}{{if .Disabled}} <span class="badge">desactivado</span>{{end}}<br>
+      <span class="muted small">{{if .Apps}}{{join .Apps ", "}}{{else}}sin apps{{end}} · {{with .LastLogin}}último acceso {{date .}}{{else}}nunca ha entrado{{end}}</span>
+    </span>
+    <details class="inline">
+      <summary>Gestionar</summary>
+      <form method="post" action="/panel/users" class="stack">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="update">
+        <label>Nombre<input name="name" value="{{.Name}}" maxlength="60"></label>
+        <fieldset><legend>Apps</legend>
+          {{$u := .}}{{range $app := $.AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{$app}}"{{range $u.Apps}}{{if eq . $app}} checked{{end}}{{end}}> {{$app}}</label>{{end}}
+        </fieldset>
+        <label>Rol en las apps
+          <select name="role"><option value="usuario"{{if eq .Role "usuario"}} selected{{end}}>Usuario</option><option value="admin"{{if eq .Role "admin"}} selected{{end}}>Admin (gestiona el contenido de todos)</option></select>
+        </label>
+        <button class="primary">Guardar</button>
+      </form>
+      <div class="actions">
+        <form method="post" action="/panel/users"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="toggle"><button class="ghost small">{{if .Disabled}}Activar{{else}}Desactivar{{end}}</button></form>
+        <form method="post" action="/panel/users" data-confirm="¿Nueva contraseña para {{.Username}}? Se cerrarán sus sesiones."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="reset"><button class="ghost small">Nueva contraseña</button></form>
+        <form method="post" action="/panel/users" data-confirm="¿Borrar la cuenta {{.Username}}? Sus datos en las apps se conservan."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="delete"><button class="ghost small">Borrar</button></form>
+      </div>
+    </details>
+  </li>
+  {{else}}
+  <li class="muted">Todavía no hay usuarios. Crea el tuyo para usar las apps.</li>
+  {{end}}
+</ul>
+<details>
+  <summary>Crear usuario</summary>
+  <form method="post" action="/panel/users" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="create">
+    <label>Usuario (para entrar)<input name="username" required maxlength="32" pattern="[a-z0-9][a-z0-9._\-]{1,31}" autocapitalize="none" placeholder="maria"></label>
+    <label>Nombre visible<input name="name" maxlength="60" placeholder="María"></label>
+    <fieldset><legend>Apps</legend>
+      {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}" checked> {{.}}</label>{{end}}
+    </fieldset>
+    <label>Rol en las apps
+      <select name="role"><option value="usuario">Usuario</option><option value="admin">Admin (gestiona el contenido de todos)</option></select>
+    </label>
+    <button class="primary">Crear y generar contraseña</button>
+  </form>
+</details>
+<h3 class="sub">Sesiones en apps</h3>
+<ul class="list">
+  {{range .AppSess}}
+  <li>
+    <span class="grow"><strong class="small">{{.User}}</strong> <span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>
+    <form method="post" action="/panel/users"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="revoke-session"><input type="hidden" name="id" value="{{.ID}}"><button class="ghost small">Cerrar</button></form>
+  </li>
+  {{else}}
+  <li class="muted">Ninguna.</li>
   {{end}}
 </ul>
 {{end}}

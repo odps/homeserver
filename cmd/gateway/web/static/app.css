@@ -165,3 +165,9 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 16p
   .topbar .brand span { display: none; }
   .tile .value { font-size: 1.6rem; }
 }
+
+.list details.inline { margin: 0; }
+.list details.inline summary { margin: 0; font-size: .85rem; }
+.list details.inline[open] { flex-basis: 100%; }
+.list li:has(details.inline[open]) { flex-wrap: wrap; }
+.actions form { margin: 0; }

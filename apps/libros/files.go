@@ -142,7 +142,8 @@ func zipFormat(path, ext string) (string, error) {
 	return "", errors.New("zip sin libro reconocible")
 }
 
-// commit mueve el temporal a su sitio definitivo.
+// commit mueve el temporal a su sitio definitivo. Si el fichero ya estaba
+// (otra persona subió el mismo libro), se sustituye por una copia idéntica.
 func (f files) commit(u *upload, b Book) error {
 	if err := os.Rename(u.tmp, f.bookPath(b)); err != nil {
 		os.Remove(u.tmp)
@@ -168,6 +169,13 @@ func (f files) saveCover(b Book, r io.Reader) error {
 	return os.WriteFile(f.coverPath(b), data, 0o600)
 }
 
+func (f files) hasCover(b Book) bool {
+	_, err := os.Stat(f.coverPath(b))
+	return err == nil
+}
+
+// remove borra el fichero y la portada; quien llama comprueba antes que
+// ningún otro libro (de otra persona) los usa.
 func (f files) remove(b Book) {
 	os.Remove(f.bookPath(b))
 	os.Remove(f.coverPath(b))

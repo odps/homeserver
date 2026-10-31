@@ -33,6 +33,8 @@ const paths = {
   check: 'M20 6 9 17l-5-5',
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z',
+  lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z',
+  user: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 }
 export function icon(name) {
   const ns = 'http://www.w3.org/2000/svg'
@@ -106,8 +108,12 @@ export async function api(path, opts = {}) {
 
 export function sessionExpired() {
   const next = encodeURIComponent(location.pathname + location.hash)
-  banner(h('span', {}, 'La sesión ha caducado. ', h('a', { href: `/login?next=${next}` }, 'Entrar de nuevo')))
+  banner(h('span', {}, 'La sesión ha caducado. ', h('a', { href: `_login?next=${next}` }, 'Entrar de nuevo')))
 }
+
+// Persona con la sesión abierta (la fija app.js al arrancar). Los datos locales
+// del dispositivo se guardan por persona, por si varias comparten navegador.
+export const me = { user: '', name: '', admin: false }
 
 export function banner(content) {
   const b = $('#banner')

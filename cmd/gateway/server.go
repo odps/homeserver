@@ -37,7 +37,8 @@ type appSpec struct {
 	Port int    `json:"port"`
 	// MaxUploadMB amplía el límite de cuerpo (32 MB por defecto) y da plazos
 	// largos a la app, para subir y descargar ficheros grandes con datos móviles.
-	MaxUploadMB int `json:"max_upload_mb"`
+	MaxUploadMB int    `json:"max_upload_mb"`
+	Title       string `json:"title"`
 }
 
 const defaultUploadMB = 32
@@ -66,9 +67,12 @@ type gateway struct {
 	passwordHash string
 	totp         *totpVerifier // nil: TOTP sin configurar, no se puede entrar
 	recovery     *recoveryStore
-	sessions     *sessionStore
+	sessions     *sessionStore // panel (administrador)
+	appSessions  *sessionStore // cuentas de las apps
+	users        *userStore
 	ipLimit      *limiter // fallos por IP
 	globalLimit  *limiter // fallos en total, contra ataques repartidos entre IP
+	userLimit    *limiter // fallos por cuenta de app
 	tokens       *tokenStore
 	apps         map[string]appSpec
 	audit        *auditLog
@@ -113,8 +117,9 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/sessions/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeSession))))
 	mux.Handle("POST /panel/tokens", g.session(g.csrf(http.HandlerFunc(g.createToken))))
 	mux.Handle("POST /panel/tokens/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeToken))))
+	mux.Handle("POST /panel/users", g.session(g.csrf(http.HandlerFunc(g.userAction))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
-	mux.Handle("/{app}/", g.appAuth(http.HandlerFunc(g.proxy)))
+	mux.HandleFunc("/{app}/", g.appRoutes)
 	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))
 }
 
@@ -248,32 +253,6 @@ func (g *gateway) csrf(next http.Handler) http.Handler {
 	})
 }
 
-// appAuth deja pasar a una app con sesión web o con un token válido para ella.
-func (g *gateway) appAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		app := r.PathValue("app")
-		// Nadie de fuera puede hacerse pasar por un usuario ante las apps.
-		r.Header.Del("X-Auth-User")
-		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-			name, valid := g.tokens.check(tok, app, g.clock())
-			if valid {
-				r.Header.Set("X-Auth-User", "token:"+name)
-				next.ServeHTTP(w, r)
-				return
-			}
-			g.audit.add("token_rechazado", clientIP(r), map[string]string{"app": app, "token": name})
-			g.denied(w, r)
-			return
-		}
-		if _, ok := g.currentSession(r); ok {
-			r.Header.Set("X-Auth-User", "owner")
-			next.ServeHTTP(w, r)
-			return
-		}
-		g.denied(w, r)
-	})
-}
-
 func (g *gateway) render(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Security-Policy", gatewayCSP)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -331,7 +310,7 @@ func (g *gateway) login(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusUnauthorized, "Contraseña o código incorrectos.")
 		return
 	}
-	cookie, _, err := g.sessions.create(ip, r.UserAgent(), now)
+	cookie, _, err := g.sessions.create("", ip, r.UserAgent(), now)
 	if err != nil {
 		fail(http.StatusInternalServerError, "No se pudo crear la sesión.")
 		return
@@ -398,10 +377,13 @@ func (g *gateway) proxy(w http.ResponseWriter, r *http.Request) {
 			pr.Out.URL.RawPath = ""
 			pr.SetXForwarded()
 			pr.Out.Header.Set("X-Forwarded-Prefix", prefix)
-			pr.Out.Header.Set("X-Auth-User", r.Header.Get("X-Auth-User"))
+			for _, h := range authHeaders {
+				pr.Out.Header.Set(h, r.Header.Get(h))
+			}
 			// Las credenciales de la pasarela no llegan a las apps.
 			pr.Out.Header.Del("Authorization")
 			removeCookie(pr.Out, cookieName)
+			removeCookie(pr.Out, appCookie)
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			// Las redirecciones absolutas de la app («/x») se corrigen al prefijo.

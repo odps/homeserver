@@ -69,9 +69,9 @@ func TestRecovery(t *testing.T) {
 }
 
 func TestSessions(t *testing.T) {
-	s, _ := newSessionStore(filepath.Join(t.TempDir(), "s.json"))
+	s, _ := newSessionStore(filepath.Join(t.TempDir(), "s.json"), sessionTTL, sessionIdle)
 	now := time.Now()
-	cookie, sess, err := s.create("1.2.3.4", "test", now)
+	cookie, sess, err := s.create("", "1.2.3.4", "test", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,14 +82,14 @@ func TestSessions(t *testing.T) {
 		t.Fatal("acepta una cookie inventada")
 	}
 	// Persiste: otro proceso la ve.
-	s2, _ := newSessionStore(s.path)
+	s2, _ := newSessionStore(s.path, sessionTTL, sessionIdle)
 	if _, ok := s2.get(cookie, "", now.Add(2*time.Hour)); !ok {
 		t.Fatal("la sesión no sobrevive a un reinicio")
 	}
 	if _, ok := s.get(cookie, "", now.Add(sessionIdle+2*time.Hour)); ok {
 		t.Fatal("acepta una sesión inactiva demasiado tiempo")
 	}
-	cookie, sess, _ = s.create("", "", now)
+	cookie, sess, _ = s.create("", "", "", now)
 	if s.revoke(sess.ID, now) != 1 {
 		t.Fatal("no cierra la sesión por ID")
 	}
@@ -124,20 +124,20 @@ func TestLimiter(t *testing.T) {
 func TestTokenScope(t *testing.T) {
 	s := &tokenStore{path: filepath.Join(t.TempDir(), "t.json")}
 	now := time.Now()
-	tok, err := s.create("agente", []string{"hola"}, time.Hour)
+	tok, err := s.create("agente", "", []string{"hola"}, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.check(tok, "hola", now); !ok {
+	if _, _, ok := s.check(tok, "hola", now); !ok {
 		t.Fatal("token válido rechazado")
 	}
-	if _, ok := s.check(tok, "otra", now); ok {
+	if _, _, ok := s.check(tok, "otra", now); ok {
 		t.Fatal("token usado fuera de su app")
 	}
-	if _, ok := s.check(tok, "hola", now.Add(2*time.Hour)); ok {
+	if _, _, ok := s.check(tok, "hola", now.Add(2*time.Hour)); ok {
 		t.Fatal("token caducado aceptado")
 	}
-	if _, err := s.create("mal nombre", []string{"*"}, 0); err == nil {
+	if _, err := s.create("mal nombre", "", []string{"*"}, 0); err == nil {
 		t.Fatal("acepta un nombre con espacios")
 	}
 }
@@ -157,7 +157,7 @@ func newHarness(t *testing.T) *harness {
 			http.Redirect(w, r, "/destino", http.StatusSeeOther)
 			return
 		}
-		io.WriteString(w, "app:"+r.URL.Path+" user:"+r.Header.Get("X-Auth-User")+" cookie:"+r.Header.Get("Cookie")+" auth:"+r.Header.Get("Authorization"))
+		io.WriteString(w, "app:"+r.URL.Path+" user:"+r.Header.Get("X-Auth-User")+" role:"+r.Header.Get("X-Auth-Role")+" name:"+r.Header.Get("X-Auth-Name")+" cookie:"+r.Header.Get("Cookie")+" auth:"+r.Header.Get("Authorization"))
 	}))
 	t.Cleanup(backend.Close)
 	u, _ := url.Parse(backend.URL)
@@ -167,15 +167,19 @@ func newHarness(t *testing.T) *harness {
 	dir := t.TempDir()
 	secret := newTOTPSecret()
 	v, _ := newTOTPVerifier(secret)
-	sessions, _ := newSessionStore(filepath.Join(dir, "s.json"))
+	sessions, _ := newSessionStore(filepath.Join(dir, "s.json"), sessionTTL, sessionIdle)
+	appSessions, _ := newSessionStore(filepath.Join(dir, "as.json"), 0, appSessionIdle)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	g := &gateway{
 		passwordHash: hashPassword("correcta-y-larga"),
 		totp:         v,
 		recovery:     &recoveryStore{path: filepath.Join(dir, "r.json")},
 		sessions:     sessions,
+		appSessions:  appSessions,
+		users:        &userStore{path: filepath.Join(dir, "u.json")},
 		ipLimit:      newLimiter(5, time.Minute),
 		globalLimit:  newLimiter(30, time.Minute),
+		userLimit:    newLimiter(10, time.Minute),
 		tokens:       &tokenStore{path: filepath.Join(dir, "t.json")},
 		apps:         map[string]appSpec{"hola": {Name: "hola", Port: p}},
 		audit:        &auditLog{path: filepath.Join(dir, "audit.jsonl"), log: log},
@@ -268,17 +272,23 @@ func TestProxyAndPanel(t *testing.T) {
 	req, _ := http.NewRequest("GET", h.gw.URL+"/hola/", nil)
 	req.Header.Set("Accept", "text/html")
 	resp, _ := c.Do(req)
-	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login?next=%2Fhola%2F") {
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/hola/_login?next=%2Fhola%2F" {
 		t.Fatalf("sin sesión: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 
 	h.login(t, c)
+	// La sesión del panel no abre las apps.
+	req, _ = http.NewRequest("GET", h.gw.URL+"/hola/x", nil)
+	if resp, _ := c.Do(req); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("panel abriendo una app: %d", resp.StatusCode)
+	}
+	h.appLogin(t, c, "maria", []string{"hola"}, "usuario")
 	req, _ = http.NewRequest("GET", h.gw.URL+"/hola/x", nil)
 	req.Header.Set("X-Auth-User", "intruso")
 	req.AddCookie(&http.Cookie{Name: "otra", Value: "1"})
 	resp, _ = c.Do(req)
 	got := body(t, resp)
-	if !strings.HasPrefix(got, "app:/x user:owner") || strings.Contains(got, cookieName) || !strings.Contains(got, "otra=1") {
+	if !strings.HasPrefix(got, "app:/x user:maria role:usuario name:Mar%C3%ADa") || strings.Contains(got, cookieName) || strings.Contains(got, appCookie) || !strings.Contains(got, "otra=1") {
 		t.Fatalf("proxy: %q", got)
 	}
 	resp, _ = c.Get(h.gw.URL + "/hola/redir")
@@ -336,7 +346,7 @@ func TestPanelForms(t *testing.T) {
 	req, _ := http.NewRequest("GET", h.gw.URL+"/hola/mcp", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	resp, _ = http.DefaultClient.Do(req)
-	if got := body(t, resp); !strings.Contains(got, "user:token:agente") || !strings.HasSuffix(got, "auth:") {
+	if got := body(t, resp); !strings.Contains(got, "user:token:agente role:servicio") || !strings.HasSuffix(got, "auth:") {
 		t.Fatalf("token en la app: %q", got)
 	}
 	req, _ = http.NewRequest("GET", h.gw.URL+"/", nil)
@@ -359,5 +369,145 @@ func TestPanelForms(t *testing.T) {
 	events := h.g.audit.recent(10)
 	if len(events) < 3 || events[0].Event != "token_rechazado" {
 		t.Fatalf("auditoría: %+v", events)
+	}
+}
+
+// appLogin crea una cuenta de app y entra con ella por /<app>/_login.
+func (h *harness) appLogin(t *testing.T, c *http.Client, user string, apps []string, role string) {
+	t.Helper()
+	pass, err := h.g.users.create(user, "María", apps, role)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.PostForm(h.gw.URL+"/"+apps[0]+"/_login", url.Values{"username": {user}, "password": {pass}, "next": {"/" + apps[0] + "/x"}})
+	if err != nil || resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/"+apps[0]+"/x" {
+		t.Fatalf("login de app: %v %v", err, resp)
+	}
+	u, _ := url.Parse(h.gw.URL)
+	c.Jar.SetCookies(u, resp.Cookies())
+}
+
+func TestAppAccounts(t *testing.T) {
+	h := newHarness(t)
+	c := h.client()
+
+	// Sin sesión: al login de la propia app, dentro de su ruta.
+	req, _ := http.NewRequest("GET", h.gw.URL+"/hola/libro", nil)
+	req.Header.Set("Accept", "text/html")
+	resp, _ := c.Do(req)
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/hola/_login?next=%2Fhola%2Flibro" {
+		t.Fatalf("sin sesión: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	// El manifiesto y los iconos son públicos (instalación como app).
+	if resp, _ := c.Get(h.gw.URL + "/hola/manifest.webmanifest"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("manifiesto: %d", resp.StatusCode)
+	}
+
+	pass, _ := h.g.users.create("pepe", "Pepe", []string{"hola"}, "usuario")
+	bad, _ := c.PostForm(h.gw.URL+"/hola/_login", url.Values{"username": {"pepe"}, "password": {"mala"}})
+	if bad.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("contraseña mala: %d", bad.StatusCode)
+	}
+	resp, _ = c.PostForm(h.gw.URL+"/hola/_login", url.Values{"username": {"pepe"}, "password": {pass}, "next": {"https://evil.example"}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/hola/" {
+		t.Fatalf("login con next externo: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	var appC *http.Cookie
+	for _, ck := range resp.Cookies() {
+		if ck.Name == appCookie {
+			appC = ck
+		}
+	}
+	if appC == nil || !appC.HttpOnly || !appC.Secure || appC.MaxAge < 80*24*3600 {
+		t.Fatalf("cookie de app: %+v", appC)
+	}
+	u, _ := url.Parse(h.gw.URL)
+	c.Jar.SetCookies(u, resp.Cookies())
+
+	// La sesión de app no abre el panel ni otras apps.
+	req, _ = http.NewRequest("GET", h.gw.URL+"/", nil)
+	req.Header.Set("Accept", "text/html")
+	if resp, _ := c.Do(req); resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
+		t.Fatalf("app abriendo el panel: %d", resp.StatusCode)
+	}
+	h.g.apps["otra"] = h.g.apps["hola"]
+	if resp, _ := c.Get(h.gw.URL + "/otra/x"); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("app sin permiso: %d", resp.StatusCode)
+	}
+
+	// Las cabeceras de identidad que mande el cliente no llegan a la app.
+	req, _ = http.NewRequest("GET", h.gw.URL+"/hola/x", nil)
+	req.Header.Set("X-Auth-User", "admin")
+	req.Header.Set("X-Auth-Role", "admin")
+	resp, _ = c.Do(req)
+	if got := body(t, resp); !strings.Contains(got, "user:pepe role:usuario") {
+		t.Fatalf("cabeceras falsificadas: %q", got)
+	}
+
+	// Desactivar la cuenta corta el acceso al momento.
+	h.g.users.update("pepe", func(u *appUser) error { u.Disabled = true; return nil })
+	if resp, _ := c.Get(h.gw.URL + "/hola/x"); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("cuenta desactivada: %d", resp.StatusCode)
+	}
+}
+
+func TestAccountPasswordChange(t *testing.T) {
+	h := newHarness(t)
+	c := h.client()
+	h.appLogin(t, c, "ana", []string{"hola"}, "usuario")
+	resp, _ := c.Get(h.gw.URL + "/hola/_cuenta")
+	page := body(t, resp)
+	i := strings.Index(page, `name="csrf" value="`)
+	if resp.StatusCode != http.StatusOK || i < 0 {
+		t.Fatalf("cuenta: %d", resp.StatusCode)
+	}
+	csrf := page[i+len(`name="csrf" value="`):]
+	csrf = csrf[:strings.Index(csrf, `"`)]
+	post := func(v url.Values) int {
+		req, _ := http.NewRequest("POST", h.gw.URL+"/hola/_cuenta", strings.NewReader(v.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", h.gw.URL)
+		resp, _ := c.Do(req)
+		return resp.StatusCode
+	}
+	if st := post(url.Values{"csrf": {"x"}, "action": {"password"}}); st != http.StatusForbidden {
+		t.Fatalf("sin CSRF: %d", st)
+	}
+	if st := post(url.Values{"csrf": {csrf}, "action": {"password"}, "current": {"mala"}, "new": {"nuevacontraseña"}, "repeat": {"nuevacontraseña"}}); st != http.StatusUnauthorized {
+		t.Fatalf("actual mala: %d", st)
+	}
+	h.g.users.setPassword("ana", "contraseña-de-ana")
+	if st := post(url.Values{"csrf": {csrf}, "action": {"password"}, "current": {"contraseña-de-ana"}, "new": {"corta"}, "repeat": {"corta"}}); st != http.StatusBadRequest {
+		t.Fatalf("contraseña corta: %d", st)
+	}
+	if st := post(url.Values{"csrf": {csrf}, "action": {"password"}, "current": {"contraseña-de-ana"}, "new": {"otra-mas-larga"}, "repeat": {"otra-mas-larga"}}); st != http.StatusOK {
+		t.Fatalf("cambio válido: %d", st)
+	}
+	if _, ok, _ := h.g.users.check(context.Background(), "ana", "otra-mas-larga"); !ok {
+		t.Fatal("la contraseña nueva no vale")
+	}
+}
+
+func TestUsers(t *testing.T) {
+	s := &userStore{path: filepath.Join(t.TempDir(), "u.json")}
+	if _, err := s.create("Mal Nombre", "", nil, "usuario"); err == nil {
+		t.Fatal("acepta un usuario con espacios")
+	}
+	pass, err := s.create("luis", "Luis", []string{"libros"}, "admin")
+	if err != nil || len(pass) < 16 {
+		t.Fatal(pass, err)
+	}
+	if _, err := s.create("luis", "", nil, "usuario"); err == nil {
+		t.Fatal("acepta un usuario repetido")
+	}
+	ctx := context.Background()
+	if _, ok, _ := s.check(ctx, "luis", pass); !ok {
+		t.Fatal("la contraseña temporal no vale")
+	}
+	if _, ok, _ := s.check(ctx, "nadie", pass); ok {
+		t.Fatal("valida un usuario inexistente")
+	}
+	if err := s.setPassword("luis", "corta"); err == nil {
+		t.Fatal("acepta una contraseña corta")
 	}
 }

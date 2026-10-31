@@ -1,7 +1,7 @@
 {
   "apps": [
-    { "name": "hola", "port": 8101 },
-    { "name": "libros", "port": 8102, "max_upload_mb": 200 }
+    { "name": "hola", "port": 8101, "title": "Hola" },
+    { "name": "libros", "port": 8102, "max_upload_mb": 200, "title": "Libros" }
   ],
   "services": ["netwatch", "gateway", "tailscale_web"]
 }

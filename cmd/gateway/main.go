@@ -6,8 +6,9 @@
 //	gateway                         sirve (configuración abajo)
 //	gateway passwd                  fija la contraseña web (la pide sin eco)
 //	gateway totp                    configura el segundo factor y genera códigos de recuperación
-//	gateway token new <n> [apps] [días]  token para el agente o un cliente MCP
-//	                                (apps separadas por comas o *; días 0 = sin caducidad)
+//	gateway token new <n> [apps] [días] [usuario]  token para el agente o un cliente MCP
+//	                                (apps separadas por comas o *; días 0 = sin caducidad;
+//	                                con usuario, actúa en nombre de esa cuenta de app)
 //	gateway token list              lista los tokens
 //	gateway token revoke <n>        revoca un token
 //
@@ -55,14 +56,14 @@ func main() {
 		err = passwd(envFile)
 	case args[0] == "totp":
 		err = setupTOTP(envFile, recovery)
-	case len(args) >= 3 && len(args) <= 5 && args[0] == "token" && args[1] == "new":
+	case len(args) >= 3 && len(args) <= 6 && args[0] == "token" && args[1] == "new":
 		err = newToken(tokens, args[2:])
 	case len(args) == 2 && args[0] == "token" && args[1] == "list":
 		err = listTokens(tokens)
 	case len(args) == 3 && args[0] == "token" && args[1] == "revoke":
 		err = tokens.revoke(args[2])
 	default:
-		err = errors.New("uso: gateway [passwd | totp | token new <nombre> [apps] [días] | token list | token revoke <nombre>]")
+		err = errors.New("uso: gateway [passwd | totp | token new <nombre> [apps] [días] [usuario] | token list | token revoke <nombre>]")
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -89,7 +90,11 @@ func serve(srv string, tokens *tokenStore, recovery *recoveryStore) error {
 		log.Warn("sin GATEWAY_TOTP_SECRET: nadie podrá entrar hasta ejecutar «gateway totp»")
 	}
 	state := filepath.Join(srv, "state")
-	sessions, err := newSessionStore(filepath.Join(state, "gateway-sessions.json"))
+	sessions, err := newSessionStore(filepath.Join(state, "gateway-sessions.json"), sessionTTL, sessionIdle)
+	if err != nil {
+		return err
+	}
+	appSessions, err := newSessionStore(filepath.Join(state, "gateway-app-sessions.json"), 0, appSessionIdle)
 	if err != nil {
 		return err
 	}
@@ -104,8 +109,11 @@ func serve(srv string, tokens *tokenStore, recovery *recoveryStore) error {
 		totp:         totp,
 		recovery:     recovery,
 		sessions:     sessions,
+		appSessions:  appSessions,
+		users:        &userStore{path: filepath.Join(state, "gateway-users.json")},
 		ipLimit:      newLimiter(5, 15*time.Minute),
 		globalLimit:  newLimiter(30, 15*time.Minute),
+		userLimit:    newLimiter(10, 15*time.Minute),
 		tokens:       tokens,
 		apps:         apps,
 		audit:        &auditLog{path: filepath.Join(state, "audit.jsonl"), log: log},
@@ -166,7 +174,7 @@ func setupTOTP(envFile string, recovery *recoveryStore) error {
 }
 
 func newToken(tokens *tokenStore, args []string) error {
-	name, apps, days := args[0], []string{"*"}, 90
+	name, apps, days, user := args[0], []string{"*"}, 90, ""
 	if len(args) > 1 {
 		apps = strings.Split(args[1], ",")
 	}
@@ -176,7 +184,10 @@ func newToken(tokens *tokenStore, args []string) error {
 			return errors.New("días no válidos")
 		}
 	}
-	tok, err := tokens.create(name, apps, time.Duration(days)*24*time.Hour)
+	if len(args) > 3 {
+		user = args[3]
+	}
+	tok, err := tokens.create(name, user, apps, time.Duration(days)*24*time.Hour)
 	if err != nil {
 		return err
 	}

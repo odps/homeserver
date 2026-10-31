@@ -1,6 +1,6 @@
 // Estado local del dispositivo: progreso pendiente de enviar (cola sin
 // conexión), última posición conocida y libros guardados para leer sin red.
-import { api, device, Offline } from './util.js'
+import { api, device, me, Offline } from './util.js'
 
 const DB = 'libros'
 let dbp
@@ -32,15 +32,18 @@ const put = (store, key, val) => tx(store, 'readwrite', s => s.put(val, key))
 const del = (store, key) => tx(store, 'readwrite', s => s.delete(key))
 const keys = store => tx(store, 'readonly', s => s.getAllKeys())
 
-export const localProgress = id => get('local', id)
+// Las claves llevan la persona delante: «usuario|id».
+const key = id => `${me.user}|${id}`
+
+export const localProgress = id => get('local', key(id))
 
 // saveProgress guarda la posición en el dispositivo y la intenta enviar; si no
 // hay red queda en cola. Devuelve la última posición según el servidor.
 export async function saveProgress(id, { location, fraction, label }) {
   const d = device()
   const p = { device_id: d.id, device_name: d.name, location, fraction, label, updated_at: new Date().toISOString() }
-  await put('local', id, p)
-  await put('queue', id, p)
+  await put('local', key(id), p)
+  await put('queue', key(id), p)
   return flushOne(id, p)
 }
 
@@ -50,8 +53,8 @@ async function flushOne(id, p) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p),
     })
     // Solo se quita de la cola si no ha llegado otra posición mientras tanto.
-    const queued = await get('queue', id)
-    if (queued?.updated_at === p.updated_at) await del('queue', id)
+    const queued = await get('queue', key(id))
+    if (queued?.updated_at === p.updated_at) await del('queue', key(id))
     return last
   } catch (e) {
     if (!(e instanceof Offline)) console.warn('progreso', e)
@@ -63,10 +66,12 @@ let flushing
 export function flushQueue() {
   flushing ??= (async () => {
     try {
-      const ids = await keys('queue')
-      for (const id of ids) {
-        const p = await get('queue', id)
-        if (p) await flushOne(id, p)
+      // Solo la cola de quien tiene la sesión abierta.
+      for (const k of await keys('queue')) {
+        const [user, id] = String(k).split('|')
+        if (user !== me.user) continue
+        const p = await get('queue', k)
+        if (p) await flushOne(Number(id), p)
       }
     } finally {
       flushing = null
@@ -75,7 +80,7 @@ export function flushQueue() {
   return flushing
 }
 
-export const pendingCount = async () => (await keys('queue')).length
+export const pendingCount = async () => (await keys('queue')).filter(k => String(k).startsWith(`${me.user}|`)).length
 
 // Libros guardados en este dispositivo (Cache Storage, el mismo que usa el
 // service worker para servirlos sin conexión).
@@ -137,9 +142,10 @@ export async function loadFile(book, { keep = false, onProgress } = {}) {
 
 // Copia local de la biblioteca para verla sin conexión.
 export function rememberLibrary(books) {
-  try { localStorage.setItem('libros.library', JSON.stringify(books)) } catch {}
+  try { localStorage.setItem(`libros.library.${me.user}`, JSON.stringify(books)) } catch {}
+  try { localStorage.setItem('libros.me', JSON.stringify(me)) } catch {}
 }
 export function cachedLibrary() {
-  try { return JSON.parse(localStorage.getItem('libros.library')) ?? [] } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(`libros.library.${me.user}`)) ?? [] } catch { return [] }
 }
 

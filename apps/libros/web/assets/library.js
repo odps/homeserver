@@ -1,6 +1,6 @@
 // Biblioteca: «Continuar leyendo», filtros, cuadrícula de portadas, ficha del
 // libro (con el progreso de cada dispositivo), edición y subida.
-import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, Offline } from './util.js'
+import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, Offline } from './util.js'
 import { rememberLibrary, cachedLibrary, downloadedIds, isDownloaded, loadFile, removeDownload, localProgress } from './local.js'
 
 const statusLabel = { pendiente: 'Pendiente', leyendo: 'Leyendo', leido: 'Leído' }
@@ -8,6 +8,7 @@ const state = {
   q: '',
   status: localStorage.getItem('libros.filter') ?? '',
   sort: localStorage.getItem('libros.sort') ?? 'recent',
+  scope: localStorage.getItem('libros.scope') ?? '',
   books: [],
   offline: false,
 }
@@ -21,11 +22,12 @@ export async function showLibrary(view) {
 async function refresh(view) {
   const params = new URLSearchParams({ sort: state.sort })
   if (state.status) params.set('status', state.status)
+  if (state.scope) params.set('scope', state.scope)
   if (state.q) params.set('q', state.q)
   try {
     state.books = await api(`api/books?${params}`)
     state.offline = false
-    if (!state.q && !state.status) rememberLibrary(state.books)
+    if (!state.q && !state.status && !state.scope) rememberLibrary(state.books)
   } catch (e) {
     if (!(e instanceof Offline)) {
       toast(e.message)
@@ -41,12 +43,13 @@ async function refresh(view) {
 function filterLocal(books) {
   const q = state.q.toLowerCase()
   return books.filter(b => (!state.status || b.status === state.status) &&
+    (!state.scope || (state.scope === 'mine' ? b.owner === me.user : b.visibility === 'compartido')) &&
     (!q || [b.title, ...b.authors, ...b.genres, b.series ?? ''].some(s => s.toLowerCase().includes(q))))
 }
 
 function render(view, downloaded) {
   const all = state.books
-  const current = !state.q && !state.status ? all.find(b => b.last && b.status !== 'leido') : null
+  const current = !state.q && !state.status && !state.scope ? all.find(b => b.last && b.status !== 'leido') : null
   const root = h('div', { class: 'library' },
     h('div', { class: 'top' },
       h('h1', {}, 'Libros'),
@@ -54,6 +57,7 @@ function render(view, downloaded) {
         h('input', { type: 'search', placeholder: 'Título, autor, género…', value: state.q, 'aria-label': 'Buscar',
           oninput: debounce(e => { state.q = e.target.value.trim(); refresh(view) }, 300) })),
       h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), 'Añadir'),
+      userMenu(),
     ),
     current && continueCard(current),
     h('div', { class: 'filters' },
@@ -63,6 +67,12 @@ function render(view, downloaded) {
           localStorage.setItem('libros.filter', v)
           refresh(view)
         } }, label)),
+      h('select', { 'aria-label': 'Qué libros', onchange: e => {
+        state.scope = e.target.value
+        localStorage.setItem('libros.scope', state.scope)
+        refresh(view)
+      } }, ...[['', 'Todos los libros'], ['mine', 'Subidos por mí'], ['shared', 'Compartidos']]
+        .map(([v, label]) => h('option', { value: v, selected: state.scope === v }, label))),
       h('select', { 'aria-label': 'Ordenar', onchange: e => {
         state.sort = e.target.value
         localStorage.setItem('libros.sort', state.sort)
@@ -76,7 +86,7 @@ function render(view, downloaded) {
 }
 
 function emptyState(view) {
-  if (state.q || state.status) return h('div', { class: 'empty' }, 'Ningún libro coincide.')
+  if (state.q || state.status || state.scope) return h('div', { class: 'empty' }, 'Ningún libro coincide.')
   return h('div', { class: 'empty' },
     h('h2', {}, 'Tu biblioteca está vacía'),
     h('p', {}, 'Añade tus libros (EPUB, PDF, MOBI, AZW3, FB2, CBZ) y léelos desde cualquier dispositivo.'),
@@ -93,6 +103,7 @@ export function cover(b, badge) {
     c.append(img)
   }
   if (b.format !== 'epub') c.append(h('span', { class: 'fmt' }, b.format))
+  if (b.visibility === 'privado') c.append(h('span', { class: 'lock', title: 'Privado: solo lo ves tú' }, icon('lock')))
   if (badge) c.append(h('span', { class: 'badge', title: 'Guardado en este dispositivo' }, '✓'))
   return c
 }
@@ -136,7 +147,7 @@ async function openDetail(id, view) {
   const facts = [book.format.toUpperCase(), formatSize(book.size), book.language, book.publisher, book.published].filter(Boolean)
   const statusSel = h('select', { 'aria-label': 'Estado', onchange: async e => {
     try {
-      await api(`api/books/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editable(book), status: e.target.value }) })
+      await api(`api/books/${id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: e.target.value }) })
       toast('Estado actualizado')
       refresh(view)
     } catch (err) { toast(err.message) }
@@ -152,6 +163,8 @@ async function openDetail(id, view) {
         book.series ? h('p', { class: 'meta' }, `${book.series}${book.series_index != null ? ' #' + book.series_index : ''}`) : null,
         book.genres.length ? h('p', { class: 'meta' }, book.genres.join(' · ')) : null,
         h('p', { class: 'meta' }, facts.join(' · ')),
+        h('p', { class: 'meta' }, book.visibility === 'privado' ? 'Privado: solo lo ves tú'
+          : `Compartido${book.owner === me.user ? ' por ti' : book.owner ? ` · subido por ${book.owner}` : ''}`),
       )),
     book.description ? h('div', { class: 'desc' }, book.description) : null,
     h('div', { class: 'actions' },
@@ -178,10 +191,19 @@ async function openDetail(id, view) {
         h('span', {}, pct(d.fraction)),
         h('span', { class: 'meta' }, ago(d.updated_at)))))) : null,
     h('div', { class: 'actions' },
-      h('button', { class: 'btn', onclick: () => openEdit(book, view) }, icon('edit'), 'Editar'),
+      book.can_edit ? h('button', { class: 'btn', onclick: () => openEdit(book, view) }, icon('edit'), 'Editar') : null,
+      book.owner === me.user ? h('button', { class: 'btn', onclick: async () => {
+        const visibility = book.visibility === 'privado' ? 'compartido' : 'privado'
+        try {
+          await api(`api/books/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editable(book), visibility }) })
+          toast(visibility === 'privado' ? 'Ahora es privado' : 'Ahora lo ven todos')
+          openDetail(id, view)
+          refresh(view)
+        } catch (err) { toast(err.message) }
+      } }, book.visibility === 'privado' ? 'Compartir con todos' : 'Hacer privado') : null,
       h('a', { class: 'btn', href: `api/books/${id}/file`, download: book.file_name }, 'Descargar fichero'),
-      h('button', { class: 'btn danger', onclick: async () => {
-        if (!confirm(`¿Borrar «${book.title}» de la biblioteca? Se borra el fichero y el progreso en todos los dispositivos.`)) return
+      !book.can_edit ? null : h('button', { class: 'btn danger', onclick: async () => {
+        if (!confirm(`¿Borrar «${book.title}» de la biblioteca? ${book.visibility === 'compartido' ? 'Desaparece para todos y se pierde el progreso de cada persona.' : 'Se borra también tu progreso.'}`)) return
         try {
           await api(`api/books/${id}`, { method: 'DELETE' })
           await removeDownload(id)
@@ -211,7 +233,7 @@ function openEdit(book, view) {
     const body = {
       title: d.get('title'), authors: split(d.get('authors')), genres: split(d.get('genres')),
       series: d.get('series'), series_index: Number.isFinite(idx) ? idx : null, language: d.get('language'),
-      publisher: d.get('publisher'), published: d.get('published'), description: d.get('description'), status: book.status,
+      publisher: d.get('publisher'), published: d.get('published'), description: d.get('description'),
     }
     try {
       await api(`api/books/${book.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -248,24 +270,28 @@ function openUpload(view) {
     h('p', { class: 'meta' }, 'EPUB, PDF, MOBI, AZW3, FB2, FBZ y CBZ · hasta 200 MB cada uno'))
   let added = 0
   let chain = Promise.resolve()
+  const visibility = h('select', { 'aria-label': 'Quién los ve', onchange: e => localStorage.setItem('libros.visibility', e.target.value) },
+    ...[['privado', 'Solo yo'], ['compartido', 'Todos los usuarios']].map(([v, l]) =>
+      h('option', { value: v, selected: (localStorage.getItem('libros.visibility') ?? 'privado') === v }, l)))
   function add(files) {
     for (const file of files) {
       const status = h('span', {}, 'En cola')
       const bar = h('i', { style: 'width:0' })
       queue.append(h('li', {}, h('div', { class: 'row' }, h('span', {}, file.name), status), h('div', { class: 'bar' }, bar)))
       // De uno en uno: el móvil y la conexión lo agradecen.
-      chain = chain.then(() => uploadOne(file, status, bar)).then(ok => { if (ok) added++ })
+      chain = chain.then(() => uploadOne(file, status, bar, visibility.value)).then(ok => { if (ok) added++ })
     }
   }
   dlg.replaceChildren(h('div', { class: 'sheet' },
     h('header', {}, h('h2', {}, 'Añadir libros'),
       h('button', { class: 'icon-btn', 'aria-label': 'Cerrar', onclick: () => { dlg.close(); if (added) refresh(view) } }, icon('close'))),
+    h('label', {}, 'Quién verá los libros que subas', visibility),
     drop, input, queue))
   dlg.onclose = () => { if (added) refresh(view); dlg.onclose = null }
   dlg.showModal()
 }
 
-async function uploadOne(file, status, bar) {
+async function uploadOne(file, status, bar, visibility) {
   if (file.size > 200 * 1024 * 1024) {
     status.textContent = 'Supera 200 MB'
     status.className = 'err'
@@ -280,7 +306,7 @@ async function uploadOne(file, status, bar) {
     status.textContent = 'Sin metadatos, subiendo…'
   }
   const form = new FormData()
-  form.append('meta', JSON.stringify(meta))
+  form.append('meta', JSON.stringify({ ...meta, visibility }))
   if (cover) form.append('cover', cover, 'cover.jpg')
   form.append('file', file, file.name)
   return new Promise(resolve => {
@@ -316,6 +342,21 @@ async function uploadOne(file, status, bar) {
 async function extract(file) {
   const { extract } = await import('./meta.js')
   return extract(file)
+}
+
+// Menú de la persona: su cuenta (contraseña, dispositivos) y salir. Ambas
+// páginas las sirve la pasarela dentro de la ruta de la app.
+function userMenu() {
+  const menu = h('div', { class: 'menu', hidden: true },
+    h('div', { class: 'meta' }, me.name || me.user),
+    h('a', { href: '_cuenta' }, 'Mi cuenta'),
+    h('form', { method: 'post', action: '_logout' }, h('button', {}, 'Salir')))
+  const wrap = h('div', { class: 'usermenu' },
+    h('button', { class: 'icon-btn', 'aria-label': 'Mi cuenta', 'aria-haspopup': 'true',
+      onclick: e => { e.stopPropagation(); menu.hidden = !menu.hidden } }, icon('user')),
+    menu)
+  document.addEventListener('click', () => { menu.hidden = true })
+  return wrap
 }
 
 function debounce(fn, ms) {

@@ -87,9 +87,21 @@ func TestClean(t *testing.T) {
 // pngPixel es un PNG válido de 1×1.
 var pngPixel = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
 
+// harness: la API con su base de pruebas. user y role son la identidad que
+// la pasarela pondría en las cabeceras (se cambian para simular a otra persona).
 type harness struct {
 	srv   *httptest.Server
 	files files
+	user  string
+	role  string
+}
+
+func (h *harness) as(user, role string) { h.user, h.role = user, role }
+
+func (h *harness) identify(req *http.Request) {
+	req.Header.Set("X-Auth-User", h.user)
+	req.Header.Set("X-Auth-Name", h.user)
+	req.Header.Set("X-Auth-Role", h.role)
 }
 
 func newHarness(t *testing.T) *harness {
@@ -104,7 +116,7 @@ func newHarness(t *testing.T) *harness {
 	a.routes(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &harness{srv: srv, files: f}
+	return &harness{srv: srv, files: f, user: "ana", role: "admin"}
 }
 
 func (h *harness) upload(t *testing.T, name string, data []byte, meta map[string]any) (int, map[string]json.RawMessage) {
@@ -118,7 +130,10 @@ func (h *harness) upload(t *testing.T, name string, data []byte, meta map[string
 	fw, _ := mw.CreateFormFile("file", name)
 	fw.Write(data)
 	mw.Close()
-	resp, err := http.Post(h.srv.URL+"/api/books", mw.FormDataContentType(), &body)
+	req, _ := http.NewRequest("POST", h.srv.URL+"/api/books", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	h.identify(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,6 +151,7 @@ func (h *harness) do(t *testing.T, method, path string, body any) *http.Response
 		r = bytes.NewReader(b)
 	}
 	req, _ := http.NewRequest(method, h.srv.URL+path, r)
+	h.identify(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -260,14 +276,15 @@ func TestEditAndDelete(t *testing.T) {
 		t.Fatalf("título por defecto = %q", b.Title)
 	}
 	path := "/api/books/" + itoa(b.ID)
-	edited := decode[Book](t, h.do(t, "PATCH", path, map[string]any{"title": "Título nuevo", "authors": []string{"Yo"}, "status": "leido", "series": "Saga", "series_index": 2}))
-	if edited.Title != "Título nuevo" || edited.Status != "leido" || edited.FinishedAt == nil || *edited.Series != "Saga" {
+	edited := decode[Book](t, h.do(t, "PATCH", path, map[string]any{"title": "Título nuevo", "authors": []string{"Yo"}, "series": "Saga", "series_index": 2}))
+	read := decode[Book](t, h.do(t, "PUT", path+"/status", map[string]any{"status": "leido"}))
+	if edited.Title != "Título nuevo" || read.Status != "leido" || read.FinishedAt == nil || *edited.Series != "Saga" {
 		t.Fatalf("edición: %+v", edited)
 	}
-	if resp := h.do(t, "PATCH", path, map[string]any{"title": " ", "status": "leido"}); resp.StatusCode != http.StatusBadRequest {
+	if resp := h.do(t, "PATCH", path, map[string]any{"title": " "}); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("título vacío: %d", resp.StatusCode)
 	}
-	if resp := h.do(t, "PATCH", path, map[string]any{"title": "x", "status": "otro"}); resp.StatusCode != http.StatusBadRequest {
+	if resp := h.do(t, "PUT", path+"/status", map[string]any{"status": "otro"}); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("estado no válido: %d", resp.StatusCode)
 	}
 	if resp := h.do(t, "DELETE", path, nil); resp.StatusCode != http.StatusNoContent {
@@ -278,5 +295,96 @@ func TestEditAndDelete(t *testing.T) {
 	}
 	if resp := h.do(t, "GET", path, nil); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("libro borrado: %d", resp.StatusCode)
+	}
+}
+
+func TestPrivacyAndPermissions(t *testing.T) {
+	h := newHarness(t)
+	idOf := func(out map[string]json.RawMessage) string {
+		var b Book
+		json.Unmarshal(out["book"], &b)
+		return itoa(b.ID)
+	}
+	visibleTo := func(user, role string) []Book {
+		h.as(user, role)
+		return decode[[]Book](t, h.do(t, "GET", "/api/books", nil))
+	}
+
+	// Ana (admin) sube un libro privado: Luis no lo ve de ninguna forma.
+	h.as("ana", "admin")
+	_, out := h.upload(t, "diario.pdf", []byte("%PDF-1.7 diario"), map[string]any{"title": "Diario", "visibility": "privado"})
+	diario := idOf(out)
+	if books := visibleTo("luis", "usuario"); len(books) != 0 {
+		t.Fatalf("Luis ve un libro privado de Ana: %+v", books)
+	}
+	for _, p := range []string{"", "/file", "/cover"} {
+		if resp := h.do(t, "GET", "/api/books/"+diario+p, nil); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("Luis accede a %s: %d", p, resp.StatusCode)
+		}
+	}
+	if resp := h.do(t, "PUT", "/api/books/"+diario+"/progress", map[string]any{"device_id": "d", "device_name": "d", "location": "x", "fraction": 0.1}); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Luis guarda progreso en un libro privado ajeno: %d", resp.StatusCode)
+	}
+
+	// Ana lo comparte: Luis lo ve, no lo puede editar, y su estado es suyo.
+	h.as("ana", "admin")
+	h.do(t, "PATCH", "/api/books/"+diario, map[string]any{"title": "Diario", "visibility": "compartido"})
+	h.do(t, "PUT", "/api/books/"+diario+"/status", map[string]any{"status": "leido"})
+	books := visibleTo("luis", "usuario")
+	if len(books) != 1 || books[0].CanEdit || books[0].Status != "pendiente" || books[0].Owner != "ana" {
+		t.Fatalf("libro compartido visto por Luis: %+v", books)
+	}
+	if resp := h.do(t, "PATCH", "/api/books/"+diario, map[string]any{"title": "Mío"}); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Luis edita un libro ajeno: %d", resp.StatusCode)
+	}
+	if resp := h.do(t, "DELETE", "/api/books/"+diario, nil); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Luis borra un libro ajeno: %d", resp.StatusCode)
+	}
+	// Si Luis sube el mismo fichero, se le devuelve el compartido.
+	status, out := h.upload(t, "otro.pdf", []byte("%PDF-1.7 diario"), map[string]any{})
+	if status != http.StatusOK || string(out["duplicate"]) != "true" {
+		t.Fatalf("duplicado de un compartido: %d", status)
+	}
+
+	// Luis sube un libro privado; Ana sube el mismo fichero: son dos filas y el
+	// fichero sigue en disco hasta que nadie lo usa.
+	_, out = h.upload(t, "notas.epub", zipBytes(t, map[string]string{"mimetype": "application/epub+zip"}), map[string]any{"title": "Notas de Luis"})
+	notasLuis := idOf(out)
+	var b Book
+	json.Unmarshal(out["book"], &b)
+	if b.Visibility != "privado" {
+		t.Fatalf("visibilidad por defecto = %q", b.Visibility)
+	}
+	h.as("ana", "admin")
+	if resp := h.do(t, "GET", "/api/books/"+notasLuis, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("una admin ve un libro privado ajeno: %d", resp.StatusCode)
+	}
+	status, out = h.upload(t, "notas.epub", zipBytes(t, map[string]string{"mimetype": "application/epub+zip"}), map[string]any{"title": "Notas de Ana"})
+	if status != http.StatusCreated || idOf(out) == notasLuis {
+		t.Fatalf("copia propia de un fichero privado ajeno: %d", status)
+	}
+	h.as("luis", "usuario")
+	if resp := h.do(t, "DELETE", "/api/books/"+notasLuis, nil); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("Luis borra su libro: %d", resp.StatusCode)
+	}
+	if _, err := os.Stat(h.files.bookPath(b)); err != nil {
+		t.Fatal("se borró un fichero que Ana sigue usando")
+	}
+
+	// Un libro compartido de Luis: la admin lo puede editar, pero no hacerlo privado.
+	_, out = h.upload(t, "receta.fb2", []byte(`<?xml version="1.0"?><FictionBook>`), map[string]any{"title": "Recetas", "visibility": "compartido"})
+	recetas := idOf(out)
+	h.as("ana", "admin")
+	if resp := h.do(t, "PATCH", "/api/books/"+recetas, map[string]any{"title": "Recetas de Luis"}); resp.StatusCode != http.StatusOK {
+		t.Fatalf("una admin edita un compartido: %d", resp.StatusCode)
+	}
+	if resp := h.do(t, "PATCH", "/api/books/"+recetas, map[string]any{"title": "x", "visibility": "privado"}); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("una admin se queda un libro ajeno: %d", resp.StatusCode)
+	}
+
+	// Los tokens sin persona no tienen biblioteca.
+	h.as("token:agente", "servicio")
+	if resp := h.do(t, "GET", "/api/books", nil); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("token de servicio: %d", resp.StatusCode)
 	}
 }

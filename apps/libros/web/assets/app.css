@@ -72,10 +72,11 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
 .bar { height: 4px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: .5rem; }
 .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 
+.filters select:first-of-type { margin-left: auto; }
 .filters { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
 .chip { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: .3rem .8rem; cursor: pointer; font-size: .88rem; color: var(--muted); }
 .chip[aria-pressed=true] { background: var(--text); color: var(--bg); border-color: var(--text); }
-.filters select { width: auto; margin-left: auto; border-radius: 999px; padding: .3rem .7rem; font-size: .88rem; }
+.filters select { width: auto; border-radius: 999px; padding: .3rem .7rem; font-size: .88rem; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 1.6rem 1.1rem; }
 .book { cursor: pointer; display: flex; flex-direction: column; gap: .45rem; min-width: 0; }
@@ -90,6 +91,17 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
 .cover .ph small { font-family: var(--sans); font-size: .7rem; opacity: .85; }
 .cover .badge { z-index: 2; position: absolute; right: .35rem; bottom: .35rem; background: rgb(0 0 0 / .55); color: #fff; border-radius: 999px; padding: .1rem .45rem;
   font-size: .68rem; font-weight: 600; backdrop-filter: blur(4px); }
+.cover .lock { z-index: 2; position: absolute; right: .35rem; top: .35rem; background: rgb(0 0 0 / .5); color: #fff; border-radius: 999px;
+  width: 1.4rem; height: 1.4rem; display: grid; place-items: center; }
+.cover .lock svg { width: .8rem; height: .8rem; }
+.usermenu { position: relative; }
+.usermenu .menu { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 20; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow); padding: .5rem; min-width: 180px; display: grid; gap: .2rem; }
+.usermenu .menu .meta { padding: .3rem .6rem; }
+.usermenu .menu a, .usermenu .menu button { text-align: left; padding: .45rem .6rem; border-radius: 8px; border: 0; background: none;
+  color: var(--text); text-decoration: none; cursor: pointer; width: 100%; font-size: .92rem; }
+.usermenu .menu a:hover, .usermenu .menu button:hover { background: var(--surface-2); }
+.usermenu .menu form { margin: 0; }
 .cover .fmt { z-index: 2; position: absolute; left: .35rem; bottom: .35rem; background: rgb(0 0 0 / .45); color: #fff; border-radius: 4px; padding: 0 .3rem;
   font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .book .bar { margin-top: 0; }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,25 +14,57 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"homeserver/platform/app"
 )
 
 type api struct {
-	store store
-	files files
-	log   *slog.Logger
+	store  store
+	files  files
+	log    *slog.Logger
+	legacy sync.Once // asignación de los datos anteriores a las cuentas
 }
 
 func (a *api) routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/books", a.list)
-	mux.HandleFunc("POST /api/books", a.upload)
-	mux.HandleFunc("GET /api/books/{id}", a.get)
-	mux.HandleFunc("PATCH /api/books/{id}", a.patch)
-	mux.HandleFunc("DELETE /api/books/{id}", a.remove)
-	mux.HandleFunc("GET /api/books/{id}/file", a.file)
-	mux.HandleFunc("GET /api/books/{id}/cover", a.cover)
-	mux.HandleFunc("PUT /api/books/{id}/progress", a.progress)
+	mux.HandleFunc("GET /api/me", a.user(a.me))
+	mux.HandleFunc("GET /api/books", a.user(a.list))
+	mux.HandleFunc("POST /api/books", a.user(a.upload))
+	mux.HandleFunc("GET /api/books/{id}", a.user(a.get))
+	mux.HandleFunc("PATCH /api/books/{id}", a.user(a.patch))
+	mux.HandleFunc("DELETE /api/books/{id}", a.user(a.remove))
+	mux.HandleFunc("PUT /api/books/{id}/status", a.user(a.status))
+	mux.HandleFunc("GET /api/books/{id}/file", a.user(a.file))
+	mux.HandleFunc("GET /api/books/{id}/cover", a.user(a.cover))
+	mux.HandleFunc("PUT /api/books/{id}/progress", a.user(a.progress))
+}
+
+type handler func(w http.ResponseWriter, r *http.Request, who app.Identity)
+
+// user exige una persona identificada por la pasarela. Los tokens de servicio
+// (sin usuario) no tienen biblioteca.
+func (a *api) user(h handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		who := app.User(r)
+		if !who.IsUser() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "hace falta una cuenta de usuario"})
+			return
+		}
+		// El primer admin que entra hereda los libros y el progreso de antes
+		// de que hubiera cuentas.
+		if who.IsAdmin() {
+			a.legacy.Do(func() {
+				if n, err := a.store.claimLegacy(r.Context(), who); err != nil {
+					a.log.Error("asignar datos anteriores", "err", err)
+				} else if n > 0 {
+					a.log.Info("datos anteriores asignados", "usuario", who.User, "libros", n)
+				}
+			})
+		}
+		h(w, r, who)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -45,6 +78,8 @@ func (a *api) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "el libro no existe"})
+	case errors.Is(err, errForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "solo quien lo subió (o un admin, si es compartido) puede cambiarlo"})
 	case errors.As(err, new(badRequest)):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:
@@ -69,9 +104,22 @@ func bookID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (a *api) list(w http.ResponseWriter, r *http.Request) {
+// load devuelve el libro si la persona puede verlo.
+func (a *api) load(r *http.Request, who app.Identity) (Book, error) {
+	id, err := bookID(r)
+	if err != nil {
+		return Book{}, err
+	}
+	return a.store.get(r.Context(), who, id)
+}
+
+func (a *api) me(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	writeJSON(w, http.StatusOK, map[string]any{"user": who.User, "name": who.Name, "admin": who.IsAdmin()})
+}
+
+func (a *api) list(w http.ResponseWriter, r *http.Request, who app.Identity) {
 	q := r.URL.Query()
-	books, err := a.store.list(r.Context(), listQuery{Text: q.Get("q"), Status: q.Get("status"), Sort: q.Get("sort")})
+	books, err := a.store.list(r.Context(), who, listQuery{Text: q.Get("q"), Status: q.Get("status"), Sort: q.Get("sort"), Scope: q.Get("scope")})
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -79,18 +127,13 @@ func (a *api) list(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, books)
 }
 
-func (a *api) get(w http.ResponseWriter, r *http.Request) {
-	id, err := bookID(r)
+func (a *api) get(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	b, err := a.load(r, who)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	b, err := a.store.get(r.Context(), id)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	devices, err := a.store.devices(r.Context(), id)
+	devices, err := a.store.devices(r.Context(), who, b.ID)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -110,7 +153,7 @@ type metaIn struct {
 	Publisher   string   `json:"publisher"`
 	Published   string   `json:"published"`
 	Description string   `json:"description"`
-	Status      string   `json:"status"`
+	Visibility  string   `json:"visibility"`
 }
 
 // apply copia los metadatos saneados al libro.
@@ -125,6 +168,8 @@ func (m metaIn) apply(b *Book) {
 	b.Published = optional(m.Published, 40)
 	b.Description = optional(m.Description, 20000)
 }
+
+var visibilities = map[string]bool{"privado": true, "compartido": true}
 
 func clean(s string, max int) string {
 	s = strings.TrimSpace(strings.ToValidUTF8(s, ""))
@@ -155,10 +200,11 @@ func cleanList(in []string, maxItems, maxLen int) []string {
 	return out
 }
 
-// upload recibe multipart con «file» (obligatorio), «meta» (JSON) y «cover»
-// (imagen), en cualquier orden. Si el libro ya estaba (mismo SHA-256),
-// devuelve el existente con duplicate=true.
-func (a *api) upload(w http.ResponseWriter, r *http.Request) {
+// upload recibe multipart con «file» (obligatorio), «meta» (JSON, con la
+// visibilidad) y «cover» (imagen), en cualquier orden. Si la persona ya puede
+// ver un libro con ese fichero (suyo o compartido), lo devuelve con
+// duplicate=true. El fichero se guarda una sola vez en disco.
+func (a *api) upload(w http.ResponseWriter, r *http.Request, who app.Identity) {
 	ctx := r.Context()
 	mr, err := r.MultipartReader()
 	if err != nil {
@@ -211,7 +257,7 @@ func (a *api) upload(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, bad("falta el fichero"))
 		return
 	}
-	if existing, err := a.store.bySHA(ctx, up.sha256); err == nil {
+	if existing, err := a.store.findCopy(ctx, who, up.sha256); err == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"book": existing, "duplicate": true})
 		return
 	} else if !errors.Is(err, errNotFound) {
@@ -223,7 +269,11 @@ func (a *api) upload(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, bad("%s", err))
 		return
 	}
-	b := Book{SHA256: up.sha256, Format: format, FileName: clean(fileName, 300), Size: up.size}
+	visibility := meta.Visibility
+	if !visibilities[visibility] {
+		visibility = "privado"
+	}
+	b := Book{SHA256: up.sha256, Format: format, FileName: clean(fileName, 300), Size: up.size, Owner: who.User, Visibility: visibility}
 	meta.apply(&b)
 	if b.Title == "" {
 		b.Title = clean(strings.TrimSuffix(fileName, filepath.Ext(fileName)), 500)
@@ -238,33 +288,38 @@ func (a *api) upload(w http.ResponseWriter, r *http.Request) {
 	up = nil
 	if cover != nil && a.files.saveCover(b, bytes.NewReader(cover)) == nil {
 		b.HasCover = true
+	} else if a.files.hasCover(b) {
+		b.HasCover = true // otra persona ya subió este fichero con portada
 	}
 	id, err := a.store.insert(ctx, b)
 	if err != nil {
-		a.files.remove(b)
+		a.removeFileIfUnused(ctx, b)
 		a.fail(w, err)
 		return
 	}
-	saved, err := a.store.get(ctx, id)
+	saved, err := a.store.get(ctx, who, id)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	a.log.Info("libro añadido", "id", id, "titulo", b.Title, "formato", format, "bytes", b.Size)
+	a.log.Info("libro añadido", "id", id, "usuario", who.User, "titulo", b.Title, "formato", format, "visibilidad", visibility, "bytes", b.Size)
 	writeJSON(w, http.StatusCreated, map[string]any{"book": saved, "duplicate": false})
 }
 
-var statuses = map[string]bool{"pendiente": true, "leyendo": true, "leido": true}
+func (a *api) removeFileIfUnused(ctx context.Context, b Book) {
+	if used, err := a.store.fileInUse(ctx, b.SHA256); err == nil && !used {
+		a.files.remove(b)
+	}
+}
 
-func (a *api) patch(w http.ResponseWriter, r *http.Request) {
-	id, err := bookID(r)
+func (a *api) patch(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	b, err := a.load(r, who)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	b, err := a.store.get(r.Context(), id)
-	if err != nil {
-		a.fail(w, err)
+	if !b.CanEdit {
+		a.fail(w, errForbidden)
 		return
 	}
 	var m metaIn
@@ -277,18 +332,23 @@ func (a *api) patch(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, bad("el título no puede estar vacío"))
 		return
 	}
-	if m.Status != "" {
-		if !statuses[m.Status] {
-			a.fail(w, bad("estado no válido"))
+	if m.Visibility != "" {
+		if !visibilities[m.Visibility] {
+			a.fail(w, bad("visibilidad no válida"))
 			return
 		}
-		b.Status = m.Status
+		// Hacer privado un libro es cosa de su dueño (un admin no se lo puede quedar).
+		if m.Visibility == "privado" && b.Owner != who.User {
+			a.fail(w, errForbidden)
+			return
+		}
+		b.Visibility = m.Visibility
 	}
 	if err := a.store.update(r.Context(), b); err != nil {
 		a.fail(w, err)
 		return
 	}
-	b, err = a.store.get(r.Context(), id)
+	b, err = a.store.get(r.Context(), who, b.ID)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -296,30 +356,55 @@ func (a *api) patch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, b)
 }
 
-func (a *api) remove(w http.ResponseWriter, r *http.Request) {
+var statuses = map[string]bool{"pendiente": true, "leyendo": true, "leido": true}
+
+func (a *api) status(w http.ResponseWriter, r *http.Request, who app.Identity) {
 	id, err := bookID(r)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	b, err := a.store.delete(r.Context(), id)
+	var in struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil || !statuses[in.Status] {
+		a.fail(w, bad("estado no válido"))
+		return
+	}
+	if err := a.store.setStatus(r.Context(), who, id, in.Status); err != nil {
+		a.fail(w, err)
+		return
+	}
+	b, err := a.store.get(r.Context(), who, id)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	a.files.remove(b)
-	a.log.Info("libro borrado", "id", id, "titulo", b.Title)
+	writeJSON(w, http.StatusOK, b)
+}
+
+func (a *api) remove(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	b, err := a.load(r, who)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if !b.CanEdit {
+		a.fail(w, errForbidden)
+		return
+	}
+	if err := a.store.delete(r.Context(), b.ID); err != nil {
+		a.fail(w, err)
+		return
+	}
+	a.removeFileIfUnused(r.Context(), b)
+	a.log.Info("libro borrado", "id", b.ID, "usuario", who.User, "titulo", b.Title)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // file sirve el libro con soporte de rangos y ETag (el SHA-256 nunca cambia).
-func (a *api) file(w http.ResponseWriter, r *http.Request) {
-	id, err := bookID(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	b, err := a.store.get(r.Context(), id)
+func (a *api) file(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	b, err := a.load(r, who)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -338,13 +423,8 @@ func (a *api) file(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", b.AddedAt, f)
 }
 
-func (a *api) cover(w http.ResponseWriter, r *http.Request) {
-	id, err := bookID(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	b, err := a.store.get(r.Context(), id)
+func (a *api) cover(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	b, err := a.load(r, who)
 	if err != nil || !b.HasCover {
 		http.NotFound(w, r)
 		return
@@ -369,7 +449,7 @@ type progressIn struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-func (a *api) progress(w http.ResponseWriter, r *http.Request) {
+func (a *api) progress(w http.ResponseWriter, r *http.Request, who app.Identity) {
 	id, err := bookID(r)
 	if err != nil {
 		a.fail(w, err)
@@ -393,11 +473,8 @@ func (a *api) progress(w http.ResponseWriter, r *http.Request) {
 	if now := time.Now(); p.UpdatedAt.IsZero() || p.UpdatedAt.After(now.Add(5*time.Minute)) {
 		p.UpdatedAt = now
 	}
-	last, err := a.store.saveProgress(r.Context(), id, p)
+	last, err := a.store.saveProgress(r.Context(), who, id, p)
 	if err != nil {
-		if strings.Contains(err.Error(), "foreign key") {
-			err = errNotFound
-		}
 		a.fail(w, err)
 		return
 	}
