@@ -27,7 +27,7 @@ Apps personales pequeñas con tools MCP para un agente de IA, pensadas para corr
 2. Añadirla a `deploy/apps.json` con un puerto libre (8101, 8102…).
 3. Push a `main`. El updater crea su rol, su schema y su servicio runit.
 
-Cada app expone sus tools en `http://<servidor>:<puerto>/mcp` (MCP streamable HTTP, sin sesión) y prefija sus nombres con el de la app (`hola_saludar`).
+Cada app escucha solo en `127.0.0.1` y expone sus tools en `/mcp` (MCP streamable HTTP, sin sesión); desde fuera del móvil se llega por la pasarela, en `/<app>/mcp`, y prefija sus nombres con el de la app (`hola_saludar`).
 
 Las migraciones deben ser compatibles con la versión anterior (añadir columnas o tablas, no borrarlas en el mismo cambio): la vuelta atrás cambia el binario, no la base de datos. Antes de cada cambio de versión queda un `pg_dump` en `~/srv/backups`.
 

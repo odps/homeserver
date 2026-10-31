@@ -89,7 +89,7 @@ exec 2>&1
 set -a
 . %s
 set +a
-export ADDR=":%d"
+export ADDR="127.0.0.1:%d"
 exec %s
 `, sh, u.path("env", a.Name+".env"), a.Port, u.path("current", "bin", a.Name))
 	// svlogger de termux-services guarda el log en $PREFIX/var/log/sv/<servicio>.

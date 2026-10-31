@@ -4,7 +4,8 @@
 // Configuración por variables de entorno:
 //
 //	DATABASE_URL  conexión con el rol de la app (obligatoria)
-//	ADDR          dirección HTTP, por ejemplo ":8101" (por defecto ":8080")
+//	ADDR          dirección HTTP, por ejemplo "127.0.0.1:8101" (por defecto
+//	              127.0.0.1:8080): solo local, se accede por la pasarela
 package app
 
 import (
@@ -65,7 +66,7 @@ func run(a App, log *slog.Logger) error {
 	}
 	addr := os.Getenv("ADDR")
 	if addr == "" {
-		addr = ":8080"
+		addr = "127.0.0.1:8080"
 	}
 
 	pool, err := Connect(ctx, dsn, a.Name)
