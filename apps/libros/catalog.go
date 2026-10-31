@@ -143,7 +143,14 @@ var errUpstream = errors.New("la biblioteca no responde; inténtalo más tarde")
 // errBlocked: el operador ha cambiado la respuesta por su página de bloqueo
 // (en España pasa con IP de Cloudflare durante los partidos de LaLiga), así
 // que el certificado no es el de la web.
-var errBlocked = fmt.Errorf("%w: tu conexión bloquea esta web ahora mismo (en España, el operador bloquea IP de Cloudflare durante los partidos de LaLiga); se volverá a intentar más tarde", errUpstream)
+var errBlocked error = blockedError{}
+
+type blockedError struct{}
+
+func (blockedError) Error() string {
+	return "tu conexión bloquea esta web ahora mismo (en España, el operador bloquea IP de Cloudflare durante los partidos de LaLiga); se volverá a intentar más tarde"
+}
+func (blockedError) Unwrap() error { return errUpstream }
 
 // get hace un GET limitado a los dominios permitidos.
 func (c *catalog) get(ctx context.Context, rawURL string) (*http.Response, error) {

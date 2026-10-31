@@ -100,7 +100,7 @@ async function load(view, append = false) {
     state.items = append ? [...state.items, ...res.items] : res.items
     state.more = res.more
     state.notice = res.failed?.length
-      ? `Sin respuesta de ${res.failed.map(f => SOURCES[f] ?? f).join(' y ')}${res.notice ? ': ' + res.notice.replace(/^[^:]*: /, '') : '.'}`
+      ? `Sin respuesta de ${res.failed.map(f => SOURCES[f] ?? f).join(' y ')}${res.notice ? ': ' + res.notice : '.'}`
       : ''
   } catch (e) {
     toast(e instanceof Offline ? 'Sin conexión: buscar necesita internet' : e.message)
