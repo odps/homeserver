@@ -6,8 +6,8 @@ set -euo pipefail
 tag=${1:?uso: build.sh <tag>}
 cd "$(dirname "$0")/.."
 
-# android/arm64: el móvil (Termux). Con GOOS=linux el binario no resuelve DNS en
-# Android, que no tiene /etc/resolv.conf. linux/*: Raspberry Pi y VPS.
+# android/arm64: el móvil (Termux); platform/netfix arregla el DNS allí.
+# linux/*: Raspberry Pi y VPS.
 targets=(android/arm64 linux/arm64 linux/amd64)
 rm -rf dist && mkdir -p dist
 

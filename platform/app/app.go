@@ -24,6 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"homeserver/platform/db"
+	_ "homeserver/platform/netfix" // las apps también llaman a APIs externas
 	"homeserver/platform/version"
 )
 

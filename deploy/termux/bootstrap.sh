@@ -47,7 +47,13 @@ fi
 set +eu
 . "$PREFIX/etc/profile.d/start-services.sh"
 set -eu
-sv-enable postgres
+
+# runsvdir tarda unos segundos en ver cada servicio.
+enable() {
+	for _ in $(seq 20); do [ -e "$svdir/$1/supervise/ok" ] && break; sleep 1; done
+	sv-enable "$1"
+}
+enable postgres
 for _ in $(seq 30); do pg_isready -q -h "$PREFIX/tmp" && break; sleep 1; done
 psql -h "$PREFIX/tmp" -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'homeserver'" | grep -q 1 ||
 	createdb -h "$PREFIX/tmp" -U postgres homeserver
@@ -86,7 +92,7 @@ exec $srv/current/bin/updater
 EOF
 ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/homeserver-updater/log/run"
 chmod 755 "$svdir/homeserver-updater/run"
-sv-enable homeserver-updater
+enable homeserver-updater
 
 echo "== Arranque"
 cat > "$HOME/.termux/boot/20-services" <<EOF

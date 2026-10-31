@@ -31,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "homeserver/platform/netfix"
 	"homeserver/platform/version"
 )
 
