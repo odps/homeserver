@@ -105,7 +105,7 @@ echo "== Acceso público"
 # contraseña: ver el runbook.
 mkdir -p "$srv/tailscale" && chmod 700 "$srv/tailscale"
 touch "$srv/env/gateway.env" && chmod 600 "$srv/env/gateway.env"
-service tailscale-web "exec $srv/current/bin/tailscaled --tun=userspace-networking --statedir=$srv/tailscale --socket=$srv/tailscale/tailscaled.sock --port=0"
+service tailscale_web "exec $srv/current/bin/tailscaled --tun=userspace-networking --statedir=$srv/tailscale --socket=$srv/tailscale/tailscaled.sock --port=0"
 service gateway "set -a; . $srv/env/gateway.env; set +a
 exec $srv/current/bin/gateway"
 

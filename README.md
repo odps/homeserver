@@ -33,7 +33,7 @@ Las migraciones deben ser compatibles con la versión anterior (añadir columnas
 
 ## Acceso público
 
-Tailscale Funnel publica `https://xperia-web.tail36c376.ts.net` y envía todo a la pasarela (`127.0.0.1:8100`), que pide login antes de llegar a las apps (`/hola/`, …). El tráfico no pasa por Cloudflare, que en España se bloquea durante los partidos. En el móvil, Tailscale corre en modo userspace como un nodo aparte (`xperia-web`, servicio `tailscale-web`) compilado con `GOOS=android`, porque la app de Android no hace Funnel.
+Tailscale Funnel publica `https://xperia-web.tail36c376.ts.net` y envía todo a la pasarela (`127.0.0.1:8100`), que pide login antes de llegar a las apps (`/hola/`, …). El tráfico no pasa por Cloudflare, que en España se bloquea durante los partidos. En el móvil, Tailscale corre en modo userspace como un nodo aparte (`xperia-web`, servicio `tailscale_web`) compilado con `GOOS=android`, porque la app de Android no hace Funnel.
 
 - Navegador: contraseña única (`gateway passwd`, hash argon2id) y cookie de sesión de 30 días. Hay un límite de 5 intentos fallidos por IP cada 15 minutos.
 - Agente y clientes MCP: `Authorization: Bearer <token>` (`gateway token new <nombre>`). Las apps no reciben ni el token ni la cookie, solo `X-Auth-User`.

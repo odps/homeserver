@@ -2,5 +2,5 @@
   "apps": [
     { "name": "hola", "port": 8101 }
   ],
-  "services": ["netwatch", "gateway", "tailscale-web"]
+  "services": ["netwatch", "gateway", "tailscale_web"]
 }
