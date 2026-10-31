@@ -4,10 +4,7 @@
 // abrir, continúa desde la posición más reciente de cualquier dispositivo.
 import { h, icon, api, pct, toast, Offline } from './util.js'
 import { cachedLibrary, loadFile, localProgress, saveProgress } from './local.js'
-
-const defaults = { theme: 'light', size: 100, spacing: 1.5, margin: 'normal', justify: true, flow: 'paginated', font: 'original' }
-const settings = () => ({ ...defaults, ...JSON.parse(localStorage.getItem('libros.reader') ?? '{}') })
-const saveSettings = s => localStorage.setItem('libros.reader', JSON.stringify(s))
+import { readerSettings as settings, saveReaderSettings as saveSettings, syncSettings } from './settings.js'
 
 const themes = { light: ['#ffffff', '#1d1c1a', '#2f6f5e'], sepia: ['#f4ecd8', '#5b4636', '#8a5a2b'], dark: ['#121212', '#d7d4cd', '#6cc3a7'] }
 const margins = { narrow: ['24px', '3%'], normal: ['48px', '6%'], wide: ['64px', '10%'] }
@@ -41,6 +38,9 @@ let current = null // { view, book, save }
 
 export async function showReader(view, id) {
   closeReader()
+  // Los ajustes de la cuenta pueden haber cambiado en otro dispositivo; sin
+  // red (o si tarda) se usan los de aquí.
+  await Promise.race([syncSettings(), new Promise(r => setTimeout(r, 1500))])
   const s = settings()
   const root = h('div', { class: 'reader immersive', 'data-theme': s.theme })
   const loading = h('div', { class: 'loading' }, 'Abriendo…')
@@ -135,14 +135,17 @@ export function closeReader() {
 
 function applySettings(fv, root, s) {
   root.dataset.theme = s.theme
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', themes[s.theme][0])
   const r = fv.renderer
+  // Los libros de maquetación fija (PDF, cómics) solo admiten el tema: el
+  // resto de ajustes se aplica donde el texto es adaptable.
   r.setStyles?.(css(s))
+  if (fv.isFixedLayout) return
   r.setAttribute('flow', s.flow)
   r.setAttribute('margin', margins[s.margin][0])
   r.setAttribute('gap', margins[s.margin][1])
   r.setAttribute('max-inline-size', '720px')
   r.setAttribute('max-column-count', '2')
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', themes[s.theme][0])
 }
 
 // Toques dentro del libro: tercio izquierdo atrás, derecho adelante, centro
@@ -237,6 +240,9 @@ function openSettings(root, fv) {
       h('div', { class: 'row' }, h('span', {}, 'Márgenes'), seg('margin', [['narrow', 'Estrechos'], ['normal', 'Normales'], ['wide', 'Amplios']])),
       h('div', { class: 'row' }, h('span', {}, 'Alineación'), seg('justify', [[true, 'Justificado'], [false, 'Izquierda']])),
       h('div', { class: 'row' }, h('span', {}, 'Modo'), seg('flow', [['paginated', 'Páginas'], ['scrolled', 'Desplazamiento']])),
+      h('p', { class: 'meta' }, fv.isFixedLayout
+        ? 'Los ajustes se guardan en tu cuenta. En este libro (maquetación fija) solo se aplica el tema.'
+        : 'Los ajustes se guardan en tu cuenta y se aplican a todos tus libros, en cualquier dispositivo.'),
       h('div', { class: 'row' }, h('span', {}, 'Nombre de este dispositivo'),
         h('input', { type: 'text', value: localStorage.getItem('libros.device.name') ?? '', placeholder: 'Por ejemplo: Tablet del salón',
           onchange: e => { localStorage.setItem('libros.device.name', e.target.value.trim()); toast('Nombre guardado') } })),

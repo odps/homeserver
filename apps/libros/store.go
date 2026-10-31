@@ -28,6 +28,7 @@ type Book struct {
 	Publisher   *string    `json:"publisher"`
 	Published   *string    `json:"published"`
 	Description *string    `json:"description"`
+	ISBN        *string    `json:"isbn"`
 	HasCover    bool       `json:"has_cover"`
 	Owner       string     `json:"owner"`
 	Source      *string    `json:"source"`     // biblioteca pública de origen, p. ej. gutenberg:2000
@@ -59,7 +60,7 @@ var errForbidden = errors.New("no permitido")
 type store struct{ db *pgxpool.Pool }
 
 const bookCols = `b.id, b.sha256, b.format, b.file_name, b.size, b.title, b.authors, b.genres,
-	b.series, b.series_index, b.language, b.publisher, b.published, b.description, b.has_cover,
+	b.series, b.series_index, b.language, b.publisher, b.published, b.description, b.isbn, b.has_cover,
 	b.owner, b.visibility, b.source, b.added_at, b.updated_at,
 	coalesce(r.status, 'pendiente'), r.finished_at,
 	p.device_id, p.device_name, p.location, p.fraction, p.label, p.updated_at`
@@ -80,7 +81,7 @@ func scanBook(row pgx.Row, who app.Identity) (Book, error) {
 	var label *string
 	var at *time.Time
 	err := row.Scan(&b.ID, &b.SHA256, &b.Format, &b.FileName, &b.Size, &b.Title, &b.Authors, &b.Genres,
-		&b.Series, &b.SeriesIndex, &b.Language, &b.Publisher, &b.Published, &b.Description, &b.HasCover,
+		&b.Series, &b.SeriesIndex, &b.Language, &b.Publisher, &b.Published, &b.Description, &b.ISBN, &b.HasCover,
 		&b.Owner, &b.Visibility, &b.Source, &b.AddedAt, &b.UpdatedAt, &b.Status, &b.FinishedAt,
 		&devID, &devName, &loc, &frac, &label, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -193,10 +194,10 @@ func (s store) insert(ctx context.Context, b Book) (int64, error) {
 	var id int64
 	err := s.db.QueryRow(ctx, `INSERT INTO books
 		(sha256, format, file_name, size, title, authors, genres, series, series_index,
-		 language, publisher, published, description, has_cover, owner, visibility, source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+		 language, publisher, published, description, isbn, has_cover, owner, visibility, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
 		b.SHA256, b.Format, b.FileName, b.Size, b.Title, b.Authors, b.Genres, b.Series, b.SeriesIndex,
-		b.Language, b.Publisher, b.Published, b.Description, b.HasCover, b.Owner, b.Visibility, b.Source).Scan(&id)
+		b.Language, b.Publisher, b.Published, b.Description, b.ISBN, b.HasCover, b.Owner, b.Visibility, b.Source).Scan(&id)
 	return id, err
 }
 
@@ -205,9 +206,9 @@ func (s store) insert(ctx context.Context, b Book) (int64, error) {
 func (s store) update(ctx context.Context, b Book) error {
 	tag, err := s.db.Exec(ctx, `UPDATE books SET title = $2, authors = $3, genres = $4, series = $5,
 		series_index = $6, language = $7, publisher = $8, published = $9, description = $10,
-		visibility = $11, updated_at = now() WHERE id = $1`,
+		visibility = $11, isbn = $12, updated_at = now() WHERE id = $1`,
 		b.ID, b.Title, b.Authors, b.Genres, b.Series, b.SeriesIndex, b.Language, b.Publisher,
-		b.Published, b.Description, b.Visibility)
+		b.Published, b.Description, b.Visibility, b.ISBN)
 	if err == nil && tag.RowsAffected() == 0 {
 		return errNotFound
 	}
@@ -224,6 +225,13 @@ func (s store) setStatus(ctx context.Context, who app.Identity, id int64, status
 		ON CONFLICT (book_id, username) DO UPDATE SET status = excluded.status, updated_at = now(),
 			finished_at = CASE WHEN excluded.status = 'leido' THEN coalesce(reading.finished_at, now()) END`,
 		id, who.User, status)
+	return err
+}
+
+// coverChanged marca el libro (y las copias del mismo fichero, que comparten
+// portada) como cambiado, para que los dispositivos pidan la portada nueva.
+func (s store) coverChanged(ctx context.Context, sha string) error {
+	_, err := s.db.Exec(ctx, `UPDATE books SET has_cover = true, updated_at = now() WHERE sha256 = $1`, sha)
 	return err
 }
 

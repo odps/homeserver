@@ -31,6 +31,8 @@ type api struct {
 
 func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.user(a.me))
+	mux.HandleFunc("GET /api/settings", a.user(a.getSettings))
+	mux.HandleFunc("PUT /api/settings", a.user(a.putSettings))
 	mux.HandleFunc("GET /api/books", a.user(a.list))
 	mux.HandleFunc("POST /api/books", a.user(a.upload))
 	mux.HandleFunc("GET /api/books/{id}", a.user(a.get))
@@ -39,6 +41,8 @@ func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/books/{id}/status", a.user(a.status))
 	mux.HandleFunc("GET /api/books/{id}/file", a.user(a.file))
 	mux.HandleFunc("GET /api/books/{id}/cover", a.user(a.cover))
+	mux.HandleFunc("PUT /api/books/{id}/cover", a.user(a.putCover))
+	mux.HandleFunc("GET /api/isbn/{isbn}", a.user(a.isbnLookup))
 	mux.HandleFunc("PUT /api/books/{id}/progress", a.user(a.progress))
 	a.catalogRoutes(mux)
 }
@@ -155,6 +159,7 @@ type metaIn struct {
 	Publisher   string   `json:"publisher"`
 	Published   string   `json:"published"`
 	Description string   `json:"description"`
+	ISBN        string   `json:"isbn"`
 	Visibility  string   `json:"visibility"`
 }
 
@@ -169,6 +174,10 @@ func (m metaIn) apply(b *Book) {
 	b.Publisher = optional(m.Publisher, 300)
 	b.Published = optional(m.Published, 40)
 	b.Description = optional(m.Description, 20000)
+	b.ISBN = nil
+	if isbn, ok := normalizeISBN(m.ISBN); ok {
+		b.ISBN = &isbn
+	}
 }
 
 var visibilities = map[string]bool{"privado": true, "compartido": true}
@@ -329,6 +338,10 @@ func (a *api) patch(w http.ResponseWriter, r *http.Request, who app.Identity) {
 		a.fail(w, bad("datos no válidos"))
 		return
 	}
+	if _, ok := normalizeISBN(m.ISBN); !ok && strings.TrimSpace(m.ISBN) != "" {
+		a.fail(w, bad("el ISBN no es válido (revisa los dígitos)"))
+		return
+	}
 	m.apply(&b)
 	if b.Title == "" {
 		a.fail(w, bad("el título no puede estar vacío"))
@@ -437,9 +450,15 @@ func (a *api) cover(w http.ResponseWriter, r *http.Request, who app.Identity) {
 		return
 	}
 	defer f.Close()
-	w.Header().Set("ETag", `"`+b.SHA256+`"`)
+	// La portada se puede cambiar: la URL lleva la fecha del cambio (?v=) y el
+	// ETag, la del fichero.
+	mod := b.AddedAt
+	if st, err := f.Stat(); err == nil {
+		mod = st.ModTime()
+	}
+	w.Header().Set("ETag", fmt.Sprintf(`"%s-%d"`, b.SHA256[:16], mod.Unix()))
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	http.ServeContent(w, r, "", b.AddedAt, f)
+	http.ServeContent(w, r, "", mod, f)
 }
 
 type progressIn struct {

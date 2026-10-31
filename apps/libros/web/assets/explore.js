@@ -4,6 +4,7 @@
 import { h, icon, api, toast, hue, Offline } from './util.js'
 
 const SOURCES = [
+  ['todas', 'Todas', 'Busca a la vez en Project Gutenberg, Internet Archive y Wikisource.'],
   ['gutenberg', 'Project Gutenberg', 'Unos 75 000 clásicos en EPUB, con portadas. La mejor calidad.'],
   ['wikisource', 'Wikisource', 'Obras transcritas por voluntarios en muchos idiomas. Busca por título o autor.'],
   ['archive', 'Internet Archive', 'Solo documentos con licencia libre explícita; a veces son escaneos con OCR.'],
@@ -11,7 +12,7 @@ const SOURCES = [
 const LANGS = [['es', 'Español'], ['en', 'English'], ['fr', 'Français'], ['de', 'Deutsch'], ['it', 'Italiano'], ['pt', 'Português'], ['ca', 'Català'], ['', 'Todos los idiomas']]
 
 const state = {
-  source: localStorage.getItem('libros.explore.source') ?? 'gutenberg',
+  source: localStorage.getItem('libros.explore.source') ?? 'todas',
   lang: localStorage.getItem('libros.explore.lang') ?? 'es',
   q: '',
   page: 1,
@@ -37,6 +38,7 @@ async function load(view, append = false) {
     const res = await api(`api/catalog/search?${params}`)
     state.items = append ? [...state.items, ...res.items] : res.items
     state.more = res.more
+    if (res.failed?.length) toast(`Sin respuesta de ${res.failed.map(f => SOURCES.find(([id]) => id === f)?.[1] ?? f).join(' y ')}; se muestran las demás`)
   } catch (e) {
     toast(e instanceof Offline ? 'Sin conexión: explorar necesita internet' : e.message)
     if (!append) state.items = []
@@ -133,5 +135,6 @@ function result(item) {
     h('div', { class: 't', title: item.title }, item.title),
     h('div', { class: 'a' }, item.authors?.join(', ') || '—'),
     facts.length ? h('div', { class: 'meta small' }, facts.join(' · ')) : null,
+    state.source === 'todas' ? h('div', { class: 'meta small src' }, SOURCES.find(([id]) => id === item.source)?.[1] ?? item.source) : null,
     action)
 }

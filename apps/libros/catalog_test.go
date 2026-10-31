@@ -65,6 +65,18 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 			{"identifier":"libre1","title":"Libro libre","creator":["Autor"],"licenseurl":"http://creativecommons.org/publicdomain/mark/1.0/"},
 			{"identifier":"dudoso","title":"Sin licencia","creator":"X"}]}}`))
 	})
+	// Open Library y Google Books (datos por ISBN).
+	mux.HandleFunc("/api/books", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("bibkeys") != "ISBN:9780306406157" {
+			w.Write([]byte(`{}`))
+			return
+		}
+		w.Write([]byte(`{"ISBN:9780306406157":{"title":"Polymer Chemistry","authors":[{"name":"Ana Autora"}],
+			"publishers":[{"name":"Plenum"}],"publish_date":"March 1983","cover":{"large":"` + base + `/cover.jpg"}}}`))
+	})
+	mux.HandleFunc("/books/v1/volumes", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"items":[{"volumeInfo":{"title":"Otro","description":"<p>Química &amp; polímeros</p>","language":"en"}}]}`))
+	})
 	srv := httptest.NewServer(mux)
 	base = srv.URL
 	t.Cleanup(srv.Close)
@@ -73,7 +85,8 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 
 func testCatalog(srv *httptest.Server) *catalog {
 	u, _ := url.Parse(srv.URL)
-	urls := catalogURLs{Gutenberg: srv.URL, Wikisource: srv.URL + "/%s", WSExport: srv.URL, Archive: srv.URL}
+	urls := catalogURLs{Gutenberg: srv.URL, Wikisource: srv.URL + "/%s", WSExport: srv.URL, Archive: srv.URL,
+		OpenLibrary: srv.URL, GoogleBooks: srv.URL}
 	return newCatalog(urls, []string{u.Hostname()}, true)
 }
 
@@ -96,6 +109,10 @@ func TestCatalogSearch(t *testing.T) {
 	p, _ = c.search(ctx, "wikisource", "quijote", "es", 1)
 	if len(p.Items) != 1 || p.Items[0].ID != "es:Don Quijote de la Mancha" {
 		t.Fatalf("Wikisource sin subpáginas: %+v", p.Items)
+	}
+	p, err = c.search(ctx, "todas", "quijote", "es", 1)
+	if err != nil || len(p.Items) != 3 || p.Items[0].Source != "gutenberg" || p.Items[1].Source != "archive" || p.Items[2].Source != "wikisource" {
+		t.Fatalf("búsqueda en todas: %v %+v", err, p)
 	}
 	if _, err := c.search(ctx, "libgen", "x", "es", 1); err == nil {
 		t.Fatal("acepta una fuente desconocida")

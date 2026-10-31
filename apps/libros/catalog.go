@@ -39,8 +39,9 @@ type catalogItem struct {
 }
 
 type catalogPage struct {
-	Items []catalogItem `json:"items"`
-	More  bool          `json:"more"`
+	Items  []catalogItem `json:"items"`
+	More   bool          `json:"more"`
+	Failed []string      `json:"failed,omitempty"` // fuentes que no respondieron (búsqueda en todas)
 }
 
 // catalogURLs son las direcciones de cada fuente (sustituibles en los tests).
@@ -49,18 +50,24 @@ type catalogURLs struct {
 	Wikisource string // https://%s.wikisource.org (con el idioma)
 	WSExport   string // https://ws-export.wmcloud.org
 	Archive    string // https://archive.org
+	// Datos de libros por ISBN.
+	OpenLibrary string // https://openlibrary.org
+	GoogleBooks string // https://www.googleapis.com
 }
 
 var defaultCatalogURLs = catalogURLs{
-	Gutenberg:  "https://www.gutenberg.org",
-	Wikisource: "https://%s.wikisource.org",
-	WSExport:   "https://ws-export.wmcloud.org",
-	Archive:    "https://archive.org",
+	Gutenberg:   "https://www.gutenberg.org",
+	Wikisource:  "https://%s.wikisource.org",
+	WSExport:    "https://ws-export.wmcloud.org",
+	Archive:     "https://archive.org",
+	OpenLibrary: "https://openlibrary.org",
+	GoogleBooks: "https://www.googleapis.com",
 }
 
 // Dominios a los que puede conectarse el catálogo (y sus subdominios, para
 // las redirecciones de descarga como ia800….us.archive.org).
-var catalogHosts = []string{"gutenberg.org", "wikisource.org", "ws-export.wmcloud.org", "archive.org"}
+var catalogHosts = []string{"gutenberg.org", "wikisource.org", "ws-export.wmcloud.org", "archive.org",
+	"openlibrary.org", "googleapis.com", "books.google.com"}
 
 type catalog struct {
 	urls         catalogURLs
@@ -70,6 +77,7 @@ type catalog struct {
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
+	isbns map[string]isbnEntry
 }
 
 type cacheEntry struct {
@@ -80,7 +88,7 @@ type cacheEntry struct {
 const userAgent = "homeserver-libros/1.0 (biblioteca personal; +https://github.com/odps/homeserver)"
 
 func newCatalog(urls catalogURLs, hosts []string, allowPrivate bool) *catalog {
-	c := &catalog{urls: urls, hosts: hosts, allowPrivate: allowPrivate, cache: map[string]cacheEntry{}}
+	c := &catalog{urls: urls, hosts: hosts, allowPrivate: allowPrivate, cache: map[string]cacheEntry{}, isbns: map[string]isbnEntry{}}
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	if !allowPrivate {
 		// Defensa extra: aunque un dominio permitido resolviera a una dirección
@@ -175,6 +183,9 @@ var (
 // search busca en una fuente. Sin texto, devuelve los más populares (donde
 // la fuente lo permite). Las respuestas se guardan 10 minutos.
 func (c *catalog) search(ctx context.Context, source, q, lang string, page int) (catalogPage, error) {
+	if source == "todas" {
+		return c.searchAll(ctx, q, lang, page)
+	}
 	if !sources[source] {
 		return catalogPage{}, bad("fuente no válida")
 	}
@@ -213,6 +224,53 @@ func (c *catalog) search(ctx context.Context, source, q, lang string, page int) 
 	c.cache[key] = cacheEntry{at: time.Now(), page: p}
 	c.mu.Unlock()
 	return p, nil
+}
+
+// searchAll busca a la vez en todas las fuentes y mezcla los resultados
+// alternándolos. Si alguna falla, se muestran los de las demás.
+func (c *catalog) searchAll(ctx context.Context, q, lang string, page int) (catalogPage, error) {
+	names := []string{"gutenberg", "archive"}
+	if clean(q, 200) != "" {
+		names = append(names, "wikisource") // sin texto, Wikisource no tiene nada que mostrar
+	}
+	pages := make([]catalogPage, len(names))
+	errs := make([]error, len(names))
+	var wg sync.WaitGroup
+	for i, n := range names {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pages[i], errs[i] = c.search(ctx, n, q, lang, page)
+		}()
+	}
+	wg.Wait()
+	out := catalogPage{Items: []catalogItem{}}
+	for i, n := range names {
+		if errs[i] != nil {
+			if errors.As(errs[i], new(badRequest)) {
+				return catalogPage{}, errs[i]
+			}
+			out.Failed = append(out.Failed, n)
+			continue
+		}
+		out.More = out.More || pages[i].More
+	}
+	if len(out.Failed) == len(names) {
+		return catalogPage{}, errs[0]
+	}
+	for i := 0; ; i++ {
+		added := false
+		for _, p := range pages {
+			if i < len(p.Items) {
+				out.Items = append(out.Items, p.Items[i])
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return out, nil
 }
 
 // --- Project Gutenberg (catálogo OPDS oficial) ---

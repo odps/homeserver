@@ -17,6 +17,7 @@ type epubMeta struct {
 	Language    string
 	Subjects    []string
 	Description string
+	ISBN        string
 	cover       []byte
 }
 
@@ -27,7 +28,11 @@ type opfPackage struct {
 		Languages   []string `xml:"language"`
 		Subjects    []string `xml:"subject"`
 		Description string   `xml:"description"`
-		Metas       []struct {
+		Identifiers []struct {
+			Value  string `xml:",chardata"`
+			Scheme string `xml:"scheme,attr"`
+		} `xml:"identifier"`
+		Metas []struct {
 			Name     string `xml:"name,attr"`
 			Content  string `xml:"content,attr"`
 			Property string `xml:"property,attr"`
@@ -88,6 +93,12 @@ func readEPUBMeta(file string) epubMeta {
 	}
 	m.Subjects = md.Subjects
 	m.Description = md.Description
+	for _, id := range md.Identifiers {
+		if isbn, ok := normalizeISBN(id.Value); ok {
+			m.ISBN = isbn
+			break
+		}
+	}
 
 	// Portada: EPUB 3 (properties="cover-image") o EPUB 2 (<meta name="cover">).
 	coverID := ""

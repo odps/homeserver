@@ -1,6 +1,7 @@
 // Extracción de metadatos y portada en el navegador con foliate-js, antes de
 // subir el libro. Así funciona igual para todos los formatos que lee.
 import { makeBook } from '../vendor/foliate/view.js'
+import { shrinkCover } from './util.js'
 
 // Los metadatos siguen el esquema de Readium: los textos pueden ser una cadena
 // o un mapa por idioma, y las personas una cadena, un objeto o una lista.
@@ -28,17 +29,15 @@ function published(v) {
   return isNaN(d) ? String(v) : String(d.getUTCFullYear())
 }
 
-// Reduce la portada a 600 px de alto como máximo, en JPEG.
-async function shrink(blob) {
-  try {
-    const bmp = await createImageBitmap(blob)
-    const scale = Math.min(1, 600 / bmp.height)
-    const canvas = new OffscreenCanvas(Math.round(bmp.width * scale), Math.round(bmp.height * scale))
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 })
-  } catch {
-    return blob
+// ISBN: el identificador principal o los alternativos (urn:isbn:…). El
+// servidor comprueba el dígito de control.
+function isbn(m) {
+  const ids = [m.identifier, ...list(m.altIdentifier)].map(x => typeof x === 'string' ? x : x?.value ?? '')
+  for (const id of ids) {
+    const v = id.replace(/^urn:isbn:/i, '').replace(/[\s-]/g, '')
+    if (/^(97[89]\d{10}|\d{9}[\dXx])$/.test(v)) return v
   }
+  return ''
 }
 
 export async function extract(file) {
@@ -52,12 +51,13 @@ export async function extract(file) {
     publisher: names(m.publisher)[0] ?? '',
     published: published(m.published),
     description: stripHTML(m.description),
+    isbn: isbn(m),
     ...series(m),
   }
   let cover = null
   try {
     const blob = await book.getCover?.()
-    if (blob) cover = await shrink(blob)
+    if (blob) cover = await shrinkCover(blob)
   } catch {}
   book.destroy?.()
   return { meta, cover }

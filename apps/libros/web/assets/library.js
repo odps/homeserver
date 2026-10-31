@@ -1,6 +1,6 @@
 // Biblioteca: «Continuar leyendo», filtros, cuadrícula de portadas, ficha del
 // libro (con el progreso de cada dispositivo), edición y subida.
-import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, Offline } from './util.js'
+import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, coverURL, shrinkCover, Offline } from './util.js'
 import { rememberLibrary, cachedLibrary, downloadedIds, isDownloaded, loadFile, removeDownload, localProgress } from './local.js'
 import { canInstall, installed, install, installHelp, onInstallChange } from './install.js'
 
@@ -45,7 +45,7 @@ function filterLocal(books) {
   const q = state.q.toLowerCase()
   return books.filter(b => (!state.status || b.status === state.status) &&
     (!state.scope || (state.scope === 'mine' ? b.owner === me.user : b.visibility === 'compartido')) &&
-    (!q || [b.title, ...b.authors, ...b.genres, b.series ?? ''].some(s => s.toLowerCase().includes(q))))
+    (!q || [b.title, ...b.authors, ...b.genres, b.series ?? '', b.isbn ?? ''].some(s => s.toLowerCase().includes(q))))
 }
 
 function render(view, downloaded) {
@@ -109,7 +109,7 @@ export function cover(b, badge) {
     h('b', {}, b.title), h('small', {}, b.authors?.[0] ?? ''))
   c.append(ph)
   if (b.has_cover) {
-    const img = h('img', { src: `api/books/${b.id}/cover`, alt: '', loading: 'lazy', onerror: () => img.remove() })
+    const img = h('img', { src: coverURL(b), alt: '', loading: 'lazy', onerror: () => img.remove() })
     c.append(img)
   }
   if (b.format !== 'epub') c.append(h('span', { class: 'fmt' }, b.format))
@@ -154,7 +154,7 @@ async function openDetail(id, view) {
   }
   const local = await localProgress(id)
   const downloaded = await isDownloaded(id)
-  const facts = [book.format.toUpperCase(), formatSize(book.size), book.language, book.publisher, book.published].filter(Boolean)
+  const facts = [book.format.toUpperCase(), formatSize(book.size), book.language, book.publisher, book.published, book.isbn && `ISBN ${book.isbn}`].filter(Boolean)
   const statusSel = h('select', { 'aria-label': 'Estado', onchange: async e => {
     try {
       await api(`api/books/${id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: e.target.value }) })
@@ -164,7 +164,9 @@ async function openDetail(id, view) {
   } }, ...Object.entries(statusLabel).map(([v, l]) => h('option', { value: v, selected: book.status === v }, l)))
 
   dlg.replaceChildren(h('div', { class: 'sheet' },
-    h('header', {}, h('h2', {}, 'Libro'), h('button', { class: 'icon-btn', 'aria-label': 'Cerrar', onclick: () => dlg.close() }, icon('close'))),
+    h('header', {}, h('h2', {}, 'Libro'),
+      book.can_edit && !state.offline ? h('button', { class: 'icon-btn', 'aria-label': 'Editar datos', title: 'Editar datos', onclick: () => openEdit(book, view) }, icon('edit')) : null,
+      h('button', { class: 'icon-btn', 'aria-label': 'Cerrar', onclick: () => dlg.close() }, icon('close'))),
     h('div', { class: 'detail' },
       cover(book, downloaded),
       h('div', {},
@@ -230,11 +232,67 @@ async function openDetail(id, view) {
 const editable = b => ({
   title: b.title, authors: b.authors, genres: b.genres, series: b.series ?? '', series_index: b.series_index,
   language: b.language ?? '', publisher: b.publisher ?? '', published: b.published ?? '', description: b.description ?? '',
+  isbn: b.isbn ?? '',
 })
 
 function openEdit(book, view) {
   const dlg = $('#dialog')
   const f = name => h('input', { type: 'text', name, value: (Array.isArray(book[name]) ? book[name].join(', ') : book[name]) ?? '' })
+  let newCover = null      // imagen elegida a mano
+  let coverFromISBN = null // ISBN cuya portada se usará al guardar
+  const preview = cover(book)
+  const coverInput = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async e => {
+    const file = e.target.files[0]
+    if (!file) return
+    newCover = await shrinkCover(file)
+    coverFromISBN = null
+    showCover(URL.createObjectURL(newCover))
+  } })
+  const showCover = src => {
+    preview.querySelector('img')?.remove()
+    preview.querySelector('.fmt.new')?.remove()
+    preview.append(h('img', { src, alt: '' }))
+  }
+  const found = h('div', { class: 'found', hidden: true })
+  const isbnInput = h('input', { type: 'text', name: 'isbn', inputmode: 'numeric', value: book.isbn ?? '', placeholder: '978…' })
+  const lookup = async e => {
+    const btn = e.currentTarget
+    const v = isbnInput.value.trim()
+    if (!v) return toast('Escribe el ISBN')
+    btn.disabled = true
+    try {
+      const info = await api(`api/isbn/${encodeURIComponent(v)}`)
+      isbnInput.value = info.isbn
+      showFound(info)
+    } catch (err) { toast(err.message) }
+    btn.disabled = false
+  }
+  function showFound(info) {
+    const useCover = h('input', { type: 'checkbox', checked: info.has_cover })
+    const rows = [['Título', info.title], ['Autores', info.authors?.join(', ')], ['Editorial', info.publisher], ['Año', info.published],
+      ['Géneros', info.genres?.join(', ')], ['Idioma', info.language]].filter(([, v]) => v)
+    found.hidden = false
+    found.replaceChildren(
+      h('strong', {}, 'Datos encontrados'),
+      h('dl', {}, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+      info.has_cover ? h('label', { class: 'check' }, useCover, 'Usar también su portada') : null,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'btn small primary', onclick: () => {
+          const set = (name, v) => { if (v) form.elements[name].value = Array.isArray(v) ? v.join(', ') : v }
+          set('title', info.title); set('authors', info.authors); set('publisher', info.publisher); set('published', info.published)
+          set('genres', info.genres); set('language', info.language); set('description', info.description)
+          if (info.has_cover && useCover.checked) {
+            coverFromISBN = info.isbn
+            newCover = null
+            preview.querySelector('img')?.remove()
+            preview.querySelector('.fmt.new')?.remove()
+            preview.append(h('span', { class: 'fmt new' }, 'Nueva'))
+          }
+          found.hidden = true
+          toast('Datos copiados al formulario: revisa y guarda')
+        } }, 'Usar estos datos'),
+        h('button', { type: 'button', class: 'btn small', onclick: () => { found.hidden = true } }, 'Descartar')))
+  }
   const form = h('form', { class: 'form', onsubmit: async e => {
     e.preventDefault()
     const d = new FormData(form)
@@ -243,17 +301,33 @@ function openEdit(book, view) {
     const body = {
       title: d.get('title'), authors: split(d.get('authors')), genres: split(d.get('genres')),
       series: d.get('series'), series_index: Number.isFinite(idx) ? idx : null, language: d.get('language'),
-      publisher: d.get('publisher'), published: d.get('published'), description: d.get('description'),
+      publisher: d.get('publisher'), published: d.get('published'), description: d.get('description'), isbn: d.get('isbn'),
     }
+    const btn = e.submitter
+    if (btn) btn.disabled = true
     try {
       await api(`api/books/${book.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (newCover) await api(`api/books/${book.id}/cover`, { method: 'PUT', headers: { 'Content-Type': newCover.type || 'image/jpeg' }, body: newCover })
+      else if (coverFromISBN) await api(`api/books/${book.id}/cover?isbn=${encodeURIComponent(coverFromISBN)}`, { method: 'PUT' })
       toast('Guardado')
-      dlg.close()
+      openDetail(book.id, view)
       refresh(view)
-    } catch (err) { toast(err.message) }
+    } catch (err) {
+      toast(err.message)
+      if (btn) btn.disabled = false
+    }
   } },
+    h('div', { class: 'full cover-edit' }, preview,
+      h('div', {},
+        h('button', { type: 'button', class: 'btn small', onclick: () => coverInput.click() }, icon('edit'), 'Cambiar portada'),
+        h('p', { class: 'meta' }, 'Una imagen de tu dispositivo, o la que se encuentre por el ISBN.')),
+      coverInput),
     h('label', { class: 'full' }, 'Título', f('title')),
     h('label', { class: 'full' }, 'Autores (separados por comas)', f('authors')),
+    h('label', { class: 'full' }, 'ISBN',
+      h('div', { class: 'inline' }, isbnInput,
+        h('button', { type: 'button', class: 'btn small', onclick: lookup }, icon('search'), 'Buscar datos'))),
+    found,
     h('label', { class: 'full' }, 'Géneros (separados por comas)', f('genres')),
     h('label', {}, 'Serie', f('series')),
     h('label', {}, 'Número en la serie', h('input', { type: 'number', step: 'any', name: 'series_index', value: book.series_index ?? '' })),
@@ -263,7 +337,9 @@ function openEdit(book, view) {
     h('label', { class: 'full' }, 'Descripción', h('textarea', { name: 'description', rows: 5 }, book.description ?? '')),
     h('div', { class: 'actions full' }, h('button', { class: 'btn primary' }, 'Guardar'), h('button', { class: 'btn', type: 'button', onclick: () => openDetail(book.id, view) }, 'Cancelar')),
   )
-  dlg.replaceChildren(h('div', { class: 'sheet' }, h('header', {}, h('h2', {}, 'Editar libro')), form))
+  dlg.replaceChildren(h('div', { class: 'sheet' }, h('header', {}, h('h2', {}, 'Editar libro'),
+    h('button', { class: 'icon-btn', 'aria-label': 'Cerrar', onclick: () => dlg.close() }, icon('close'))), form))
+  if (!dlg.open) dlg.showModal()
 }
 
 // Subida: metadatos y portada se extraen aquí con foliate-js.

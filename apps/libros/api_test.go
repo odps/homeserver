@@ -92,6 +92,7 @@ var pngPixel = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x
 type harness struct {
 	srv   *httptest.Server
 	files files
+	api   *api
 	user  string
 	role  string
 }
@@ -116,7 +117,7 @@ func newHarness(t *testing.T) *harness {
 	a.routes(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &harness{srv: srv, files: f, user: "ana", role: "admin"}
+	return &harness{srv: srv, files: f, api: a, user: "ana", role: "admin"}
 }
 
 func (h *harness) upload(t *testing.T, name string, data []byte, meta map[string]any) (int, map[string]json.RawMessage) {

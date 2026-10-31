@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"net/http"
 	"strconv"
@@ -130,7 +131,7 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 	if format == "epub" {
 		em = readEPUBMeta(up.tmp)
 	}
-	meta := metaIn{Title: m.Title, Authors: m.Authors, Genres: m.Subjects, Language: m.Language, Published: m.Year, Description: m.Description}
+	meta := metaIn{Title: m.Title, Authors: m.Authors, Genres: m.Subjects, Language: m.Language, Published: m.Year, Description: m.Description, ISBN: em.ISBN}
 	if len(meta.Authors) == 0 {
 		meta.Authors = em.Authors
 	}
@@ -196,5 +197,5 @@ func stripTags(s string) string {
 			out.WriteRune(r)
 		}
 	}
-	return out.String()
+	return strings.TrimSpace(html.UnescapeString(out.String()))
 }

@@ -150,6 +150,15 @@ dialog::backdrop { background: rgb(0 0 0 / .35); backdrop-filter: blur(2px); }
 .devices li span:first-child { flex: 1; }
 .form { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
 .form .full { grid-column: 1 / -1; }
+.form .inline { display: flex; gap: .5rem; align-items: center; }
+.form .inline input { flex: 1; min-width: 0; }
+.cover-edit { display: flex; gap: 1rem; align-items: center; }
+.cover-edit .cover { width: 72px; flex: none; }
+.found { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 12px; padding: .8rem 1rem; }
+.found dl { display: grid; grid-template-columns: auto 1fr; gap: .2rem .8rem; margin: .6rem 0; font-size: .9rem; }
+.found dt { color: var(--muted); }
+.found dd { margin: 0; }
+.check { display: flex; gap: .5rem; align-items: center; }
 
 .drop { border: 2px dashed var(--border); border-radius: 16px; padding: 2rem 1rem; text-align: center; color: var(--muted); cursor: pointer; }
 .drop.over { border-color: var(--accent); color: var(--accent); }

@@ -131,6 +131,22 @@ export function toast(msg) {
   toastTimer = setTimeout(() => { t.hidden = true }, 3500)
 }
 
+// Reduce una portada a 600 px de alto como máximo, en JPEG.
+export async function shrinkCover(blob) {
+  try {
+    const bmp = await createImageBitmap(blob)
+    const scale = Math.min(1, 600 / bmp.height)
+    const canvas = new OffscreenCanvas(Math.round(bmp.width * scale), Math.round(bmp.height * scale))
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 })
+  } catch {
+    return blob
+  }
+}
+
+// URL de la portada de un libro; cambia cuando se edita, para no ver la vieja.
+export const coverURL = b => `api/books/${b.id}/cover?v=${Date.parse(b.updated_at) || 0}`
+
 // Color estable para las portadas generadas, a partir del título.
 export function hue(text) {
   let n = 0

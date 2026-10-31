@@ -4,6 +4,7 @@
 import './install.js'
 import { $, api, banner, me, toast, Offline } from './util.js'
 import { flushQueue, pendingCount } from './local.js'
+import { syncSettings } from './settings.js'
 import { showLibrary } from './library.js'
 
 const view = $('#view')
@@ -29,7 +30,7 @@ async function route() {
 
 async function connectivity() {
   if (navigator.onLine) {
-    await flushQueue()
+    await Promise.all([flushQueue(), syncSettings()])
     banner(null)
   } else {
     const n = await pendingCount()
