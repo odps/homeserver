@@ -35,9 +35,28 @@ Las migraciones deben ser compatibles con la versión anterior (añadir columnas
 
 Tailscale Funnel publica `https://xperia-web.tail36c376.ts.net` y envía todo a la pasarela (`127.0.0.1:8100`), que pide login antes de llegar a las apps (`/hola/`, …). El tráfico no pasa por Cloudflare, que en España se bloquea durante los partidos. En el móvil, Tailscale corre en modo userspace como un nodo aparte (`xperia-web`, servicio `tailscale_web`) compilado con `GOOS=android`, porque la app de Android no hace Funnel.
 
-- Navegador: contraseña única (`gateway passwd`, hash argon2id) y cookie de sesión de 30 días. Hay un límite de 5 intentos fallidos por IP cada 15 minutos.
-- Agente y clientes MCP: `Authorization: Bearer <token>` (`gateway token new <nombre>`). Las apps no reciben ni el token ni la cookie, solo `X-Auth-User`.
+- **Navegador:** contraseña (`gateway passwd`, argon2id) y código TOTP (`gateway totp`, con 8 códigos de recuperación de un solo uso).
+  - Las sesiones viven en el servidor (30 días como máximo, 7 sin uso) y se pueden cerrar desde el panel.
+  - Límites de intentos fallidos: 5 por IP y 30 en total cada 15 minutos, y como mucho 2 cálculos argon2 a la vez.
+- **Agente y clientes MCP:** `Authorization: Bearer <token>`. Cada token vale para unas apps concretas y caduca (`gateway token new <nombre> [apps] [días]` o desde el panel). Los tokens no abren el panel. Las apps no reciben ni el token ni la cookie, solo `X-Auth-User`.
+- **Protecciones de las peticiones:**
+  - Las que no son GET deben venir del mismo origen (`Origin`/`Sec-Fetch-Site`), y los formularios del panel llevan token CSRF.
+  - CSP estricta en la pasarela, y otra básica (sin iframes) para las apps que no pongan la suya.
+  - HSTS.
+  - Límites de tamaño y de tiempo por petición, y como mucho 64 peticiones simultáneas.
+- **Auditoría** en `~/srv/state/audit.jsonl`: logins, fallos, tokens y acciones del panel.
 - Las apps deben usar enlaces relativos o respetar `X-Forwarded-Prefix`. Las redirecciones absolutas se corrigen solas.
+
+## Panel
+
+`/` es el panel de inicio. Es una PWA instalable, con tema claro u oscuro según el sistema, sin CDN externos ni scripts en línea. Tiene cuatro secciones:
+- **Apps:** estado por `/health`, versión, abrir y reiniciar.
+- **Servicios runit.**
+- **Móvil:** batería, temperatura, memoria, disco, wifi y eventos de `netwatch`.
+- **Despliegues:** versión activa, historial del updater, versiones descartadas y copias de la base de datos.
+- **Seguridad:** sesiones, tokens y auditoría.
+
+Cada sección se refresca sola.
 
 ## Desarrollo
 

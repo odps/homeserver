@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -15,6 +18,19 @@ import (
 )
 
 const cookieName = "__Host-hs_session"
+
+// Rutas propias de la pasarela; ninguna app puede llamarse así.
+var reserved = map[string]bool{"static": true, "login": true, "logout": true, "panel": true, "healthz": true}
+
+//go:embed web
+var webFS embed.FS
+
+var templates = template.Must(template.New("").Funcs(template.FuncMap{
+	"since": func(t time.Time) string { return humanDuration(time.Since(t)) },
+	"date":  func(t time.Time) string { return t.Local().Format("02/01 15:04") },
+	"short": func(s string) string { return truncate(s, 60) },
+	"join":  strings.Join,
+}).ParseFS(webFS, "web/*.html"))
 
 type appSpec struct {
 	Name string `json:"name"`
@@ -34,24 +50,28 @@ func loadApps(path string) (map[string]appSpec, error) {
 	}
 	apps := map[string]appSpec{}
 	for _, a := range m.Apps {
-		apps[a.Name] = a
+		if !reserved[a.Name] {
+			apps[a.Name] = a
+		}
 	}
 	return apps, nil
 }
 
 type gateway struct {
 	passwordHash string
-	sessions     sessions
-	limiter      *limiter
-	tokens       tokenStore
+	totp         *totpVerifier // nil: TOTP sin configurar, no se puede entrar
+	recovery     *recoveryStore
+	sessions     *sessionStore
+	ipLimit      *limiter // fallos por IP
+	globalLimit  *limiter // fallos en total, contra ataques repartidos entre IP
+	tokens       *tokenStore
 	apps         map[string]appSpec
+	audit        *auditLog
 	log          *slog.Logger
+	srvDir       string
+	svDir        string
+	slowPhone    cached[phoneStatus]
 	now          func() time.Time // sustituible en los tests
-}
-
-func (g *gateway) listen(addr string) error {
-	srv := &http.Server{Addr: addr, Handler: g.handler(), ReadHeaderTimeout: 10 * time.Second}
-	return srv.ListenAndServe()
 }
 
 func (g *gateway) clock() time.Time {
@@ -61,109 +81,261 @@ func (g *gateway) clock() time.Time {
 	return time.Now()
 }
 
-func (g *gateway) handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
-	mux.HandleFunc("GET /login", g.loginPage)
-	mux.HandleFunc("POST /login", g.login)
-	mux.HandleFunc("POST /logout", g.logout)
-	mux.Handle("GET /{$}", g.auth(http.HandlerFunc(g.index)))
-	mux.Handle("/{app}", g.auth(http.HandlerFunc(g.addSlash)))
-	mux.Handle("/{app}/", g.auth(http.HandlerFunc(g.proxy)))
-	return securityHeaders(mux)
+func (g *gateway) listen(addr string) error {
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           g.handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    32 << 10,
+	}
+	return srv.ListenAndServe()
 }
 
+func (g *gateway) handler() http.Handler {
+	static, _ := fs.Sub(webFS, "web/static")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
+	mux.Handle("GET /static/", cacheStatic(http.StripPrefix("/static/", http.FileServerFS(static))))
+	mux.HandleFunc("GET /login", g.loginPage)
+	mux.HandleFunc("POST /login", g.login)
+	mux.Handle("POST /logout", g.session(http.HandlerFunc(g.logout)))
+	mux.Handle("GET /{$}", g.session(http.HandlerFunc(g.dashboard)))
+	mux.Handle("GET /panel/frag/{section}", g.session(http.HandlerFunc(g.fragment)))
+	mux.Handle("POST /panel/restart", g.session(g.csrf(http.HandlerFunc(g.restart))))
+	mux.Handle("POST /panel/sessions/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeSession))))
+	mux.Handle("POST /panel/tokens", g.session(g.csrf(http.HandlerFunc(g.createToken))))
+	mux.Handle("POST /panel/tokens/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeToken))))
+	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
+	mux.Handle("/{app}/", g.appAuth(http.HandlerFunc(g.proxy)))
+	return securityHeaders(limitInflight(64, sameOrigin(mux)))
+}
+
+func cacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// gatewayCSP es estricta: la pasarela no carga nada de fuera ni scripts en línea.
+const gatewayCSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; " +
+	"connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+
+// securityHeaders se aplica a todo. Las apps pueden poner su propia CSP; si no
+// la ponen, reciben una básica que impide incrustarlas y robar formularios.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Strict-Transport-Security", "max-age=31536000")
 		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 		next.ServeHTTP(w, r)
 	})
 }
 
-// auth deja pasar con una sesión válida o un token Bearer. Sin ellas, las
-// peticiones de navegador van al login y el resto recibe 401.
-func (g *gateway) auth(next http.Handler) http.Handler {
+// limitInflight rechaza con 503 lo que pase de n peticiones simultáneas, para
+// que una avalancha no tumbe el móvil.
+func limitInflight(n int, next http.Handler) http.Handler {
+	slots := make(chan struct{}, n)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Nadie de fuera puede hacerse pasar por un usuario ante las apps.
-		r.Header.Del("X-Auth-User")
-		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-			if name, valid := g.tokens.check(tok); valid {
-				r.Header.Set("X-Auth-User", "token:"+name)
-				next.ServeHTTP(w, r)
-				return
-			}
-			g.log.Warn("token no válido", "ip", clientIP(r))
-			unauthorized(w)
-			return
-		}
-		if c, err := r.Cookie(cookieName); err == nil && g.sessions.valid(c.Value, g.clock()) {
-			r.Header.Set("X-Auth-User", "owner")
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
 			next.ServeHTTP(w, r)
-			return
+		default:
+			http.Error(w, "ocupado", http.StatusServiceUnavailable)
 		}
-		if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") {
-			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
-			return
-		}
-		unauthorized(w)
 	})
 }
 
-func unauthorized(w http.ResponseWriter) {
+// sameOrigin rechaza peticiones que cambian cosas (no GET/HEAD) cuando vienen
+// de otra web con la cookie del navegador. Los clientes con token Bearer no
+// envían cookies y quedan fuera de esta comprobación.
+func sameOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safe := r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions
+		if !safe && !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && !sameSite(r) {
+			http.Error(w, "origen no permitido", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// sameSite usa Sec-Fetch-Site y Origin, que los navegadores ponen en todo POST.
+// Un cliente sin ninguna de las dos (curl) no es un navegador engañado y pasa;
+// sin cookie válida no podrá hacer nada.
+func sameSite(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		return err == nil && u.Host == r.Host
+	}
+	return true
+}
+
+type ctxKey int
+
+const sessionKey ctxKey = 0
+
+// session exige una sesión web válida (el panel no acepta tokens).
+func (g *gateway) session(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sess, ok := g.currentSession(r); ok {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
+			return
+		}
+		g.denied(w, r)
+	})
+}
+
+func (g *gateway) currentSession(r *http.Request) (*session, bool) {
+	c, err := r.Cookie(cookieName)
+	if err != nil {
+		return nil, false
+	}
+	return g.sessions.get(c.Value, clientIP(r), g.clock())
+}
+
+func sessionFrom(r *http.Request) *session {
+	s, _ := r.Context().Value(sessionKey).(*session)
+	return s
+}
+
+func (g *gateway) denied(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") {
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		return
+	}
 	w.Header().Set("WWW-Authenticate", `Bearer realm="homeserver"`)
 	http.Error(w, "no autorizado", http.StatusUnauthorized)
 }
 
-var loginTmpl = template.Must(template.New("").Parse(`<!doctype html>
-<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Entrar</title>
-<style>body{font-family:system-ui,sans-serif;max-width:22rem;margin:15vh auto;padding:0 1rem}
-input,button{font:inherit;width:100%;padding:.6rem;margin:.3rem 0;box-sizing:border-box}</style>
-<h1>homeserver</h1>
-{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-<form method="post" action="/login">
-<input type="hidden" name="next" value="{{.Next}}">
-<input type="password" name="password" autocomplete="current-password" placeholder="Contraseña" required autofocus>
-<button>Entrar</button>
-</form>
-</html>`))
+// csrf exige el token de la sesión en los formularios del panel.
+func (g *gateway) csrf(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		if s := sessionFrom(r); s == nil || r.FormValue("csrf") != s.CSRF {
+			http.Error(w, "formulario caducado, recarga la página", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// appAuth deja pasar a una app con sesión web o con un token válido para ella.
+func (g *gateway) appAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app := r.PathValue("app")
+		// Nadie de fuera puede hacerse pasar por un usuario ante las apps.
+		r.Header.Del("X-Auth-User")
+		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			name, valid := g.tokens.check(tok, app, g.clock())
+			if valid {
+				r.Header.Set("X-Auth-User", "token:"+name)
+				next.ServeHTTP(w, r)
+				return
+			}
+			g.audit.add("token_rechazado", clientIP(r), map[string]string{"app": app, "token": name})
+			g.denied(w, r)
+			return
+		}
+		if _, ok := g.currentSession(r); ok {
+			r.Header.Set("X-Auth-User", "owner")
+			next.ServeHTTP(w, r)
+			return
+		}
+		g.denied(w, r)
+	})
+}
+
+func (g *gateway) render(w http.ResponseWriter, name string, data any) {
+	w.Header().Set("Content-Security-Policy", gatewayCSP)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.ExecuteTemplate(w, name, data); err != nil {
+		g.log.Error("plantilla", "nombre", name, "err", err)
+	}
+}
 
 func (g *gateway) loginPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Frame-Options", "DENY")
-	loginTmpl.Execute(w, map[string]string{"Next": safeNext(r.URL.Query().Get("next"))})
+	if _, ok := g.currentSession(r); ok {
+		http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
+		return
+	}
+	g.render(w, "login.html", map[string]any{"Next": safeNext(r.URL.Query().Get("next")), "NoTOTP": g.totp == nil})
 }
 
 func (g *gateway) login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	ip, now := clientIP(r), g.clock()
 	next := safeNext(r.FormValue("next"))
-	render := func(status int, msg string) {
-		w.Header().Set("X-Frame-Options", "DENY")
+	fail := func(status int, msg string) {
 		w.WriteHeader(status)
-		loginTmpl.Execute(w, map[string]string{"Next": next, "Error": msg})
+		g.render(w, "login.html", map[string]any{"Next": next, "Error": msg, "NoTOTP": g.totp == nil})
 	}
-	if !g.limiter.allowed(ip, now) {
-		g.log.Warn("login bloqueado por intentos", "ip", ip)
-		render(http.StatusTooManyRequests, "Demasiados intentos. Prueba dentro de un rato.")
+	if g.totp == nil {
+		fail(http.StatusServiceUnavailable, "Falta configurar el segundo factor (gateway totp).")
 		return
 	}
-	if !checkPassword(g.passwordHash, r.FormValue("password")) {
-		g.limiter.fail(ip, now)
-		g.log.Warn("contraseña incorrecta", "ip", ip)
-		render(http.StatusUnauthorized, "Contraseña incorrecta.")
+	if !g.ipLimit.allowed(ip, now) || !g.globalLimit.allowed("*", now) {
+		g.audit.add("login_bloqueado", ip, nil)
+		fail(http.StatusTooManyRequests, "Demasiados intentos. Prueba dentro de un rato.")
 		return
 	}
-	g.log.Info("login", "ip", ip)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	okPass, err := checkPassword(ctx, g.passwordHash, r.FormValue("password"))
+	if err != nil {
+		fail(http.StatusServiceUnavailable, "Servidor ocupado, inténtalo de nuevo.")
+		return
+	}
+	code := strings.TrimSpace(r.FormValue("code"))
+	how := "totp"
+	okCode := okPass && g.totp.verify(code, now)
+	if okPass && !okCode && strings.Contains(code, "-") && g.recovery.use(code) {
+		okCode, how = true, "recuperación"
+	}
+	if !okPass || !okCode {
+		g.ipLimit.fail(ip, now)
+		g.globalLimit.fail("*", now)
+		reason := "contraseña"
+		if okPass {
+			reason = "código"
+		}
+		g.audit.add("login_fallido", ip, map[string]string{"motivo": reason})
+		fail(http.StatusUnauthorized, "Contraseña o código incorrectos.")
+		return
+	}
+	cookie, _, err := g.sessions.create(ip, r.UserAgent(), now)
+	if err != nil {
+		fail(http.StatusInternalServerError, "No se pudo crear la sesión.")
+		return
+	}
+	detail := map[string]string{"factor": how}
+	if how == "recuperación" {
+		detail["quedan"] = fmt.Sprint(g.recovery.remaining())
+	}
+	g.audit.add("login", ip, detail)
 	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: g.sessions.issue(now), Path: "/",
-		MaxAge: int(g.sessions.ttl.Seconds()), HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
+		Name: cookieName, Value: cookie, Path: "/",
+		MaxAge: int(sessionTTL.Seconds()), HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 func (g *gateway) logout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(cookieName); err == nil {
+		g.sessions.revokeCookie(c.Value, g.clock())
+	}
+	g.audit.add("logout", clientIP(r), nil)
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -174,23 +346,6 @@ func safeNext(next string) string {
 		return "/"
 	}
 	return next
-}
-
-var indexTmpl = template.Must(template.New("").Parse(`<!doctype html>
-<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>homeserver</title>
-<style>body{font-family:system-ui,sans-serif;max-width:30rem;margin:2rem auto;padding:0 1rem}</style>
-<h1>homeserver</h1>
-<ul>{{range .}}<li><a href="/{{.Name}}/">{{.Name}}</a></li>{{end}}</ul>
-<form method="post" action="/logout"><button>Salir</button></form>
-</html>`))
-
-func (g *gateway) index(w http.ResponseWriter, r *http.Request) {
-	var list []appSpec
-	for _, a := range g.apps {
-		list = append(list, a)
-	}
-	indexTmpl.Execute(w, list)
 }
 
 func (g *gateway) addSlash(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +364,7 @@ func (g *gateway) proxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	prefix := "/" + name
 	target := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", a.Port)}
 	rp := &httputil.ReverseProxy{
@@ -223,10 +379,13 @@ func (g *gateway) proxy(w http.ResponseWriter, r *http.Request) {
 			pr.Out.Header.Del("Authorization")
 			removeCookie(pr.Out, cookieName)
 		},
-		// Las redirecciones absolutas de la app («/x») se corrigen al prefijo.
 		ModifyResponse: func(resp *http.Response) error {
+			// Las redirecciones absolutas de la app («/x») se corrigen al prefijo.
 			if loc := resp.Header.Get("Location"); strings.HasPrefix(loc, "/") && !strings.HasPrefix(loc, "//") {
 				resp.Header.Set("Location", prefix+loc)
+			}
+			if resp.Header.Get("Content-Security-Policy") == "" {
+				resp.Header.Set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 			}
 			return nil
 		},

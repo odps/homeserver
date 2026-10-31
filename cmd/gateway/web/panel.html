@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homeserver</title>
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
+  <nav aria-label="Secciones">
+    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#security">Seguridad</a>
+  </nav>
+  <form method="post" action="/logout"><button class="ghost">Salir</button></form>
+</header>
+
+<main class="container">
+  {{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}
+  {{with .NewToken}}
+  <div class="token-once">
+    <p>Token nuevo (solo se muestra ahora):</p>
+    <div class="copy-row"><code id="new-token">{{.}}</code><button type="button" class="ghost" data-copy="new-token">Copiar</button></div>
+  </div>
+  {{end}}
+
+  <section id="apps" class="panel" data-refresh="/panel/frag/apps" data-interval="20">{{template "sec-apps" .}}</section>
+  <section id="phone" class="panel" data-refresh="/panel/frag/phone" data-interval="30">{{template "sec-phone" .}}</section>
+  <section id="deploys" class="panel" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
+  <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
+</main>
+<footer class="container foot">homeserver {{.Version}}</footer>
+</body>
+</html>
+
+{{define "sec-apps"}}
+<h2>Apps</h2>
+<div class="grid apps">
+  {{range .Apps}}
+  <article class="card app">
+    <div class="app-head">
+      <span class="dot {{if .OK}}ok{{else}}bad{{end}}" aria-hidden="true"></span>
+      <h3>{{.Name}}</h3>
+    </div>
+    <p class="muted">{{if .OK}}Funcionando{{else}}{{.Error}}{{end}}</p>
+    <p class="mono small">{{.Version}}</p>
+    <div class="actions">
+      <a class="button primary" href="/{{.Name}}/">Abrir</a>
+      <form method="post" action="/panel/restart" data-confirm="¿Reiniciar {{.Name}}?">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
+        <button class="ghost">Reiniciar</button>
+      </form>
+    </div>
+  </article>
+  {{else}}
+  <p class="muted">No hay apps desplegadas.</p>
+  {{end}}
+</div>
+<h3 class="sub">Servicios</h3>
+<ul class="list">
+  {{range .Services}}
+  <li>
+    <span class="dot {{if .Up}}ok{{else}}off{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{.Name}}</span>
+    <span class="muted small">{{if .Up}}en marcha · {{.Uptime}}{{else}}parado{{end}}</span>
+    {{if .Up}}
+    <form method="post" action="/panel/restart" data-confirm="¿Reiniciar {{.Name}}?">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
+      <button class="ghost small">Reiniciar</button>
+    </form>
+    {{end}}
+  </li>
+  {{else}}
+  <li class="muted">Sin datos de runit.</li>
+  {{end}}
+</ul>
+{{end}}
+
+{{define "sec-phone"}}
+<h2>Móvil</h2>
+{{with .Phone}}
+<div class="grid tiles">
+  <div class="tile">
+    <span class="label">Batería</span>
+    {{if .HasBattery}}
+    <span class="value">{{.BatteryPct}}<small>%</small></span>
+    <meter min="0" max="100" low="20" high="80" optimum="60" value="{{.BatteryPct}}"></meter>
+    <span class="muted small">{{.BatteryStatus}} · {{printf "%.0f" .BatteryTemp}} °C</span>
+    {{else}}<span class="value">—</span><span class="muted small">sin datos de termux-api</span>{{end}}
+  </div>
+  <div class="tile">
+    <span class="label">CPU</span>
+    {{if .CPUTemp}}<span class="value">{{printf "%.0f" .CPUTemp}}<small>°C</small></span>
+    <meter min="20" max="95" low="60" high="80" optimum="35" value="{{.CPUTemp}}"></meter>{{else}}<span class="value">—</span>{{end}}
+    <span class="muted small">temperatura máxima</span>
+  </div>
+  <div class="tile">
+    <span class="label">Memoria</span>
+    <span class="value">{{.MemUsedPct}}<small>%</small></span>
+    <meter min="0" max="100" low="70" high="90" optimum="30" value="{{.MemUsedPct}}"></meter>
+    <span class="muted small">{{.MemAvailMB}} MB disponibles</span>
+  </div>
+  <div class="tile">
+    <span class="label">Disco</span>
+    <span class="value">{{.DiskUsedPct}}<small>%</small></span>
+    <meter min="0" max="100" low="70" high="90" optimum="20" value="{{.DiskUsedPct}}"></meter>
+    <span class="muted small">{{printf "%.1f" .DiskFreeGB}} GB libres</span>
+  </div>
+  <div class="tile">
+    <span class="label">Wifi</span>
+    {{if .HasWifi}}
+    <span class="value">{{.WifiRSSI}}<small>dBm</small></span>
+    <meter min="-90" max="-30" low="-75" high="-60" optimum="-40" value="{{.WifiRSSI}}"></meter>
+    <span class="muted small">{{if ge .WifiMHz 5000}}5 GHz{{else}}2,4 GHz{{end}} · {{.WifiMbps}} Mbps · {{.WifiIP}}</span>
+    {{else}}<span class="value">—</span><span class="muted small">sin conexión o sin datos</span>{{end}}
+  </div>
+</div>
+{{end}}
+<h3 class="sub">Red</h3>
+<ul class="list">
+  {{range .NetEvents}}
+  <li><span class="grow">{{if eq .Event "recuperada"}}Red recuperada{{else}}Wifi reiniciada por netwatch{{end}}</span><span class="muted small">{{date .Time}}</span></li>
+  {{else}}
+  <li class="muted">Sin cortes registrados.</li>
+  {{end}}
+</ul>
+{{end}}
+
+{{define "sec-deploys"}}
+<h2>Despliegues</h2>
+<p>Versión activa: <span class="mono">{{.Deploys.Current}}</span></p>
+<ul class="list">
+  {{range .Deploys.Events}}
+  <li>
+    <span class="dot {{if eq .Event "desplegada"}}ok{{else}}bad{{end}}" aria-hidden="true"></span>
+    <span class="grow mono small">{{.Tag}}</span>
+    <span class="small">{{.Event}}</span>
+    <span class="muted small">{{date .Time}}</span>
+  </li>
+  {{else}}
+  <li class="muted">Sin despliegues registrados todavía.</li>
+  {{end}}
+</ul>
+<div class="grid two">
+  <div>
+    <h3 class="sub">Releases guardadas</h3>
+    <ul class="list compact">{{range .Deploys.Releases}}<li class="mono small">{{.}}</li>{{end}}</ul>
+    {{with .Deploys.Bad}}<h3 class="sub">Descartadas</h3><ul class="list compact">{{range .}}<li class="mono small">{{.}}</li>{{end}}</ul>{{end}}
+  </div>
+  <div>
+    <h3 class="sub">Copias de la base de datos</h3>
+    <ul class="list compact">{{range .Deploys.Backups}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small">{{.Size}}</span></li>{{else}}<li class="muted">Ninguna.</li>{{end}}</ul>
+  </div>
+</div>
+{{end}}
+
+{{define "sec-security"}}
+<h2>Seguridad</h2>
+<div class="grid two">
+  <div>
+    <h3 class="sub">Sesiones abiertas</h3>
+    <ul class="list">
+      {{range .Sessions}}
+      <li>
+        <span class="grow"><span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>
+        {{if eq .ID $.SessionID}}<span class="badge">esta</span>{{else}}
+        <form method="post" action="/panel/sessions/revoke">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+          <button class="ghost small">Cerrar</button>
+        </form>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    <form method="post" action="/panel/sessions/revoke" data-confirm="¿Cerrar todas las demás sesiones?">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="ghost">Cerrar las demás</button>
+    </form>
+    <p class="muted small">Códigos de recuperación sin usar: {{.Recovery}}{{if lt .Recovery 3}} — genera nuevos con <code>gateway totp</code>.{{end}}</p>
+  </div>
+  <div>
+    <h3 class="sub">Tokens (agente y MCP)</h3>
+    <ul class="list">
+      {{range .Tokens}}
+      <li>
+        <span class="grow"><span class="mono small">{{.Name}}</span><br><span class="muted small">{{.Apps}} · {{with .Expires}}caduca {{date .}}{{else}}sin caducidad{{end}} · {{with .LastUsed}}usado {{date .}}{{else}}sin uso{{end}}</span></span>
+        <form method="post" action="/panel/tokens/revoke" data-confirm="¿Revocar {{.Name}}?">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
+          <button class="ghost small">Revocar</button>
+        </form>
+      </li>
+      {{else}}
+      <li class="muted">Ningún token.</li>
+      {{end}}
+    </ul>
+    <details>
+      <summary>Crear token</summary>
+      <form method="post" action="/panel/tokens" class="stack">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <label>Nombre<input name="name" required maxlength="40" pattern="[A-Za-z0-9_\-]+" placeholder="agente"></label>
+        <fieldset><legend>Apps</legend>
+          {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}"> {{.}}</label>{{end}}
+          <label class="check"><input type="checkbox" name="apps" value="*"> todas</label>
+        </fieldset>
+        <label>Caducidad
+          <select name="days"><option value="30">30 días</option><option value="90" selected>90 días</option><option value="365">1 año</option><option value="0">Sin caducidad</option></select>
+        </label>
+        <button class="primary">Crear</button>
+      </form>
+    </details>
+  </div>
+</div>
+<h3 class="sub">Auditoría</h3>
+<ul class="list audit">
+  {{range .Audit}}
+  <li>
+    <span class="tag {{.Event}}">{{.Event}}</span>
+    <span class="grow small">{{range $k, $v := .Detail}}{{$k}}: {{$v}} {{end}}</span>
+    <span class="muted small mono">{{.IP}}</span>
+    <span class="muted small">{{date .Time}}</span>
+  </li>
+  {{else}}
+  <li class="muted">Sin eventos.</li>
+  {{end}}
+</ul>
+{{end}}

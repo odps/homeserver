@@ -69,13 +69,33 @@ func (u *updater) tick(ctx context.Context) (bool, error) {
 	if err != nil || r == nil || r.Tag == u.currentTag() || u.isBad(r.Tag) {
 		return false, err
 	}
-	u.log.Info("nueva versión", "tag", r.Tag, "actual", u.currentTag())
+	prev := u.currentTag()
+	u.log.Info("nueva versión", "tag", r.Tag, "actual", prev)
 	if err := u.deploy(ctx, r); err != nil {
+		// Los fallos de red se reintentan sin dejar rastro; las versiones
+		// descartadas quedan en el historial.
+		if u.isBad(r.Tag) {
+			u.event("descartada", r.Tag, prev, err.Error())
+		}
 		return false, err
 	}
 	u.log.Info("versión desplegada", "tag", r.Tag)
+	u.event("desplegada", r.Tag, prev, "")
 	u.prune()
 	return u.updaterChanged(), nil
+}
+
+// event añade una línea al historial de despliegues que muestra el panel.
+func (u *updater) event(kind, tag, prev, detail string) {
+	f, err := os.OpenFile(u.path("state", "deploys.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		u.log.Error("historial de despliegues", "err", err)
+		return
+	}
+	defer f.Close()
+	json.NewEncoder(f).Encode(map[string]string{
+		"time": time.Now().UTC().Format(time.RFC3339), "event": kind, "tag": tag, "prev": prev, "detail": detail,
+	})
 }
 
 func (u *updater) deploy(ctx context.Context, r *release) error {

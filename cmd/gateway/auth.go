@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/hmac"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +27,10 @@ const (
 	argonKeyLen  = 32
 )
 
+// argonSlots limita los cálculos simultáneos: cada uno reserva 19 MiB y una
+// avalancha de intentos agotaría la RAM del móvil.
+var argonSlots = make(chan struct{}, 2)
+
 // hashPassword devuelve el formato estándar $argon2id$v=19$m=…,t=…,p=…$sal$hash.
 func hashPassword(password string) string {
 	salt := make([]byte, 16)
@@ -37,64 +41,37 @@ func hashPassword(password string) string {
 		argon2.Version, argonMemory, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key))
 }
 
-func checkPassword(encoded, password string) bool {
+var errBusy = errors.New("demasiados intentos simultáneos")
+
+// checkPassword espera turno (hasta que venza ctx) antes de calcular argon2.
+func checkPassword(ctx context.Context, encoded, password string) (bool, error) {
+	select {
+	case argonSlots <- struct{}{}:
+		defer func() { <-argonSlots }()
+	case <-ctx.Done():
+		return false, errBusy
+	}
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {
-		return false
+		return false, nil
 	}
 	var m, t uint32
 	var p uint8
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &m, &t, &p); err != nil {
-		return false
+		return false, nil
 	}
 	enc := base64.RawStdEncoding
 	salt, err1 := enc.DecodeString(parts[4])
 	want, err2 := enc.DecodeString(parts[5])
 	if err1 != nil || err2 != nil {
-		return false
+		return false, nil
 	}
 	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
-	return subtle.ConstantTimeCompare(got, want) == 1
+	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
 
-// sessions firma cookies "caducidad.firma" con HMAC-SHA256. No guarda estado:
-// cambiar la clave cierra todas las sesiones.
-type sessions struct {
-	key []byte
-	ttl time.Duration
-}
-
-func (s sessions) issue(now time.Time) string {
-	exp := strconv.FormatInt(now.Add(s.ttl).Unix(), 10)
-	return exp + "." + s.sign(exp)
-}
-
-func (s sessions) valid(cookie string, now time.Time) bool {
-	exp, sig, ok := strings.Cut(cookie, ".")
-	if !ok || !hmac.Equal([]byte(sig), []byte(s.sign(exp))) {
-		return false
-	}
-	t, err := strconv.ParseInt(exp, 10, 64)
-	return err == nil && now.Unix() < t
-}
-
-func (s sessions) sign(msg string) string {
-	m := hmac.New(sha256.New, s.key)
-	m.Write([]byte("session:" + msg))
-	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
-}
-
-// loadKey lee la clave de sesiones o la crea la primera vez.
-func loadKey(path string) ([]byte, error) {
-	if b, err := os.ReadFile(path); err == nil && len(b) >= 32 {
-		return b, nil
-	}
-	key := make([]byte, 32)
-	rand.Read(key)
-	return key, os.WriteFile(path, key, 0o600)
-}
-
-// limiter cuenta intentos de login fallidos por IP en una ventana deslizante.
+// limiter cuenta intentos fallidos por clave (IP, o "*" para el total) en una
+// ventana deslizante.
 type limiter struct {
 	mu     sync.Mutex
 	max    int
@@ -106,43 +83,55 @@ func newLimiter(max int, window time.Duration) *limiter {
 	return &limiter{max: max, window: window, fails: map[string][]time.Time{}}
 }
 
-func (l *limiter) allowed(ip string, now time.Time) bool {
+func (l *limiter) allowed(key string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return len(l.recent(ip, now)) < l.max
+	return len(l.recent(key, now)) < l.max
 }
 
-func (l *limiter) fail(ip string, now time.Time) {
+func (l *limiter) fail(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.fails[ip] = append(l.recent(ip, now), now)
+	l.fails[key] = append(l.recent(key, now), now)
 }
 
-func (l *limiter) recent(ip string, now time.Time) []time.Time {
+func (l *limiter) recent(key string, now time.Time) []time.Time {
 	var out []time.Time
-	for _, t := range l.fails[ip] {
+	for _, t := range l.fails[key] {
 		if now.Sub(t) < l.window {
 			out = append(out, t)
 		}
 	}
 	if len(out) == 0 {
-		delete(l.fails, ip)
+		delete(l.fails, key)
 	}
 	return out
 }
 
 // tokens son credenciales para el agente y los clientes MCP. En disco solo se
-// guarda su SHA-256.
+// guarda su SHA-256. Cada token vale para unas apps concretas ("*" = todas) y
+// puede caducar. No dan acceso al panel.
 type tokenStore struct {
 	path string
+	mu   sync.Mutex
 }
 
 type tokenEntry struct {
-	Hash    string    `json:"hash"`
-	Created time.Time `json:"created"`
+	Hash     string     `json:"hash"`
+	Created  time.Time  `json:"created"`
+	Apps     []string   `json:"apps"`
+	Expires  *time.Time `json:"expires,omitempty"`
+	LastUsed *time.Time `json:"last_used,omitempty"`
 }
 
-func (s tokenStore) load() (map[string]tokenEntry, error) {
+func (e tokenEntry) allows(app string, now time.Time) bool {
+	if e.Expires != nil && now.After(*e.Expires) {
+		return false
+	}
+	return slices.Contains(e.Apps, "*") || slices.Contains(e.Apps, app)
+}
+
+func (s *tokenStore) load() (map[string]tokenEntry, error) {
 	m := map[string]tokenEntry{}
 	b, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -154,7 +143,7 @@ func (s tokenStore) load() (map[string]tokenEntry, error) {
 	return m, json.Unmarshal(b, &m)
 }
 
-func (s tokenStore) save(m map[string]tokenEntry) error {
+func (s *tokenStore) save(m map[string]tokenEntry) error {
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -166,8 +155,22 @@ func (s tokenStore) save(m map[string]tokenEntry) error {
 	return os.Rename(tmp, s.path)
 }
 
+func (s *tokenStore) list() (map[string]tokenEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.load()
+}
+
 // create genera un token nuevo y devuelve su valor, que no se vuelve a mostrar.
-func (s tokenStore) create(name string) (string, error) {
+func (s *tokenStore) create(name string, apps []string, ttl time.Duration) (string, error) {
+	if !validTokenName(name) {
+		return "", errors.New("nombre de token no válido (letras, números, - y _)")
+	}
+	if len(apps) == 0 {
+		return "", errors.New("indica al menos una app (o * para todas)")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	m, err := s.load()
 	if err != nil {
 		return "", err
@@ -175,14 +178,19 @@ func (s tokenStore) create(name string) (string, error) {
 	if _, dup := m[name]; dup {
 		return "", fmt.Errorf("ya existe un token %q", name)
 	}
-	b := make([]byte, 32)
-	rand.Read(b)
-	tok := "hs_" + base64.RawURLEncoding.EncodeToString(b)
-	m[name] = tokenEntry{Hash: hashToken(tok), Created: time.Now().UTC()}
+	tok := "hs_" + randomToken(32)
+	e := tokenEntry{Hash: hashToken(tok), Created: time.Now().UTC(), Apps: apps}
+	if ttl > 0 {
+		exp := e.Created.Add(ttl)
+		e.Expires = &exp
+	}
+	m[name] = e
 	return tok, s.save(m)
 }
 
-func (s tokenStore) revoke(name string) error {
+func (s *tokenStore) revoke(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	m, err := s.load()
 	if err != nil {
 		return err
@@ -194,8 +202,10 @@ func (s tokenStore) revoke(name string) error {
 	return s.save(m)
 }
 
-// check devuelve el nombre del token si es válido.
-func (s tokenStore) check(tok string) (string, bool) {
+// check devuelve el nombre del token si es válido para la app.
+func (s *tokenStore) check(tok, app string, now time.Time) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	m, err := s.load()
 	if err != nil {
 		return "", false
@@ -203,10 +213,32 @@ func (s tokenStore) check(tok string) (string, bool) {
 	h := hashToken(tok)
 	for name, e := range m {
 		if subtle.ConstantTimeCompare([]byte(e.Hash), []byte(h)) == 1 {
+			if !e.allows(app, now) {
+				return name, false
+			}
+			// Registra el último uso como mucho una vez por hora.
+			if e.LastUsed == nil || now.Sub(*e.LastUsed) > time.Hour {
+				t := now.UTC()
+				e.LastUsed = &t
+				m[name] = e
+				s.save(m)
+			}
 			return name, true
 		}
 	}
 	return "", false
+}
+
+func validTokenName(n string) bool {
+	if n == "" || len(n) > 40 {
+		return false
+	}
+	for _, c := range n {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func hashToken(tok string) string {

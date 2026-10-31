@@ -1,22 +1,24 @@
-// gateway es la única puerta pública del servidor. Pide login antes de dejar
-// pasar a las apps y reparte por ruta: /<app>/… va al puerto de esa app según
-// apps.json. Tailscale Funnel (u otro proxy) le envía todo el tráfico.
+// gateway es la única puerta pública del servidor. Pide contraseña y código
+// TOTP antes de dejar pasar, sirve el panel de inicio y reparte por ruta:
+// /<app>/… va al puerto de esa app según apps.json. Tailscale Funnel (u otro
+// proxy) le envía todo el tráfico.
 //
-//	gateway                    sirve (configuración abajo)
-//	gateway passwd             fija la contraseña web (la pide sin eco)
-//	gateway token new <nombre> crea un token para el agente o un cliente MCP
-//	gateway token list         lista los tokens
-//	gateway token revoke <n>   revoca un token
+//	gateway                         sirve (configuración abajo)
+//	gateway passwd                  fija la contraseña web (la pide sin eco)
+//	gateway totp                    configura el segundo factor y genera códigos de recuperación
+//	gateway token new <n> [apps] [días]  token para el agente o un cliente MCP
+//	                                (apps separadas por comas o *; días 0 = sin caducidad)
+//	gateway token list              lista los tokens
+//	gateway token revoke <n>        revoca un token
 //
-// Configuración por variables de entorno:
+// Configuración por variables de entorno (las dos primeras, en env/gateway.env):
 //
+//	GATEWAY_PASSWORD_HASH  hash argon2id de la contraseña
+//	GATEWAY_TOTP_SECRET    secreto TOTP en base32
 //	GATEWAY_ADDR           dirección de escucha (por defecto 127.0.0.1:8100)
-//	GATEWAY_PASSWORD_HASH  hash argon2id de la contraseña (lo escribe passwd)
 //	APPS_FILE              apps.json de la versión activa (por defecto ~/srv/current/apps.json)
 //	SRV_DIR                directorio base (por defecto ~/srv)
-//
-// La web usa una cookie de sesión firmada; las peticiones con
-// "Authorization: Bearer <token>" se aceptan sin cookie.
+//	SVDIR                  servicios runit (por defecto $PREFIX/var/service)
 package main
 
 import (
@@ -27,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,26 +41,28 @@ import (
 func main() {
 	home, _ := os.UserHomeDir()
 	srv := env("SRV_DIR", filepath.Join(home, "srv"))
-	tokens := tokenStore{path: filepath.Join(srv, "state", "gateway-tokens.json")}
+	state := filepath.Join(srv, "state")
+	envFile := filepath.Join(srv, "env", "gateway.env")
+	tokens := &tokenStore{path: filepath.Join(state, "gateway-tokens.json")}
+	recovery := &recoveryStore{path: filepath.Join(state, "gateway-recovery.json")}
 
 	args := os.Args[1:]
 	var err error
 	switch {
 	case len(args) == 0:
-		err = serve(srv, tokens)
+		err = serve(srv, tokens, recovery)
 	case args[0] == "passwd":
-		err = passwd(filepath.Join(srv, "env", "gateway.env"))
-	case len(args) == 3 && args[0] == "token" && args[1] == "new":
-		var tok string
-		if tok, err = tokens.create(args[2]); err == nil {
-			fmt.Printf("Token %q creado. Guárdalo ahora, no se vuelve a mostrar:\n%s\n", args[2], tok)
-		}
+		err = passwd(envFile)
+	case args[0] == "totp":
+		err = setupTOTP(envFile, recovery)
+	case len(args) >= 3 && len(args) <= 5 && args[0] == "token" && args[1] == "new":
+		err = newToken(tokens, args[2:])
 	case len(args) == 2 && args[0] == "token" && args[1] == "list":
 		err = listTokens(tokens)
 	case len(args) == 3 && args[0] == "token" && args[1] == "revoke":
 		err = tokens.revoke(args[2])
 	default:
-		err = errors.New("uso: gateway [passwd | token new <nombre> | token list | token revoke <nombre>]")
+		err = errors.New("uso: gateway [passwd | totp | token new <nombre> [apps] [días] | token list | token revoke <nombre>]")
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -65,7 +70,7 @@ func main() {
 	}
 }
 
-func serve(srv string, tokens tokenStore) error {
+func serve(srv string, tokens *tokenStore, recovery *recoveryStore) error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	hash := os.Getenv("GATEWAY_PASSWORD_HASH")
 	if hash == "" {
@@ -74,7 +79,17 @@ func serve(srv string, tokens tokenStore) error {
 		time.Sleep(time.Minute)
 		return errors.New("sin contraseña configurada")
 	}
-	key, err := loadKey(filepath.Join(srv, "state", "gateway.key"))
+	var totp *totpVerifier
+	if s := os.Getenv("GATEWAY_TOTP_SECRET"); s != "" {
+		var err error
+		if totp, err = newTOTPVerifier(s); err != nil {
+			return err
+		}
+	} else {
+		log.Warn("sin GATEWAY_TOTP_SECRET: nadie podrá entrar hasta ejecutar «gateway totp»")
+	}
+	state := filepath.Join(srv, "state")
+	sessions, err := newSessionStore(filepath.Join(state, "gateway-sessions.json"))
 	if err != nil {
 		return err
 	}
@@ -82,17 +97,91 @@ func serve(srv string, tokens tokenStore) error {
 	if err != nil {
 		return err
 	}
+	// Ya no se usa: las sesiones viven en el servidor.
+	os.Remove(filepath.Join(state, "gateway.key"))
 	g := &gateway{
 		passwordHash: hash,
-		sessions:     sessions{key: key, ttl: 30 * 24 * time.Hour},
-		limiter:      newLimiter(5, 15*time.Minute),
+		totp:         totp,
+		recovery:     recovery,
+		sessions:     sessions,
+		ipLimit:      newLimiter(5, 15*time.Minute),
+		globalLimit:  newLimiter(30, 15*time.Minute),
 		tokens:       tokens,
 		apps:         apps,
+		audit:        &auditLog{path: filepath.Join(state, "audit.jsonl"), log: log},
 		log:          log,
+		srvDir:       srv,
+		svDir:        env("SVDIR", filepath.Join(env("PREFIX", "/data/data/com.termux/files/usr"), "var", "service")),
 	}
 	addr := env("GATEWAY_ADDR", "127.0.0.1:8100")
-	log.Info("escuchando", "addr", addr, "version", version.Version, "apps", len(apps))
+	log.Info("escuchando", "addr", addr, "version", version.Version, "apps", len(apps), "totp", totp != nil)
 	return g.listen(addr)
+}
+
+// setupTOTP crea un secreto nuevo, enseña el QR, pide un código para comprobar
+// que la app lo ha leído bien y genera códigos de recuperación nuevos.
+func setupTOTP(envFile string, recovery *recoveryStore) error {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return errors.New("totp necesita una terminal (ssh -t)")
+	}
+	secret := newTOTPSecret()
+	uri := otpauthURI(secret)
+	qr, err := qrText(uri)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Escanea este código con tu app de autenticación (Aegis, Google Authenticator…):\n\n%s\n", qr)
+	fmt.Fprintf(os.Stderr, "Si no puedes escanearlo, introduce la clave a mano: %s\n\n", secret)
+	v, _ := newTOTPVerifier(secret)
+	in := bufio.NewReader(os.Stdin)
+	for tries := 0; ; tries++ {
+		fmt.Fprint(os.Stderr, "Escribe el código de 6 dígitos que muestra la app: ")
+		line, err := in.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		if v.verify(strings.TrimSpace(line), time.Now()) {
+			break
+		}
+		if tries == 2 {
+			return errors.New("el código no coincide; no se ha cambiado nada")
+		}
+		fmt.Fprintln(os.Stderr, "No coincide. Revisa que la hora del móvil sea correcta.")
+	}
+	if err := setEnv(envFile, "GATEWAY_TOTP_SECRET", secret); err != nil {
+		return err
+	}
+	codes, err := recovery.generate(8)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "\nSegundo factor guardado. Códigos de recuperación (cada uno sirve una vez).")
+	fmt.Fprintln(os.Stderr, "Guárdalos en tu gestor de contraseñas; no se vuelven a mostrar:")
+	for _, c := range codes {
+		fmt.Fprintln(os.Stderr, "  "+c)
+	}
+	fmt.Fprintln(os.Stderr, "\nReinicia la pasarela para aplicarlo: sv restart gateway")
+	return nil
+}
+
+func newToken(tokens *tokenStore, args []string) error {
+	name, apps, days := args[0], []string{"*"}, 90
+	if len(args) > 1 {
+		apps = strings.Split(args[1], ",")
+	}
+	if len(args) > 2 {
+		var err error
+		if days, err = strconv.Atoi(args[2]); err != nil || days < 0 {
+			return errors.New("días no válidos")
+		}
+	}
+	tok, err := tokens.create(name, apps, time.Duration(days)*24*time.Hour)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Token %q creado para %s. Guárdalo ahora, no se vuelve a mostrar:\n%s\n", name, strings.Join(apps, ","), tok)
+	return nil
 }
 
 // passwd pide la contraseña dos veces sin eco y guarda su hash en gateway.env.
@@ -149,8 +238,8 @@ func setEnv(path, key, value string) error {
 	return os.Rename(tmp, path)
 }
 
-func listTokens(tokens tokenStore) error {
-	m, err := tokens.load()
+func listTokens(tokens *tokenStore) error {
+	m, err := tokens.list()
 	if err != nil {
 		return err
 	}
@@ -160,7 +249,12 @@ func listTokens(tokens tokenStore) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		fmt.Printf("%-20s creado %s\n", n, m[n].Created.Format("2006-01-02 15:04"))
+		e := m[n]
+		exp := "sin caducidad"
+		if e.Expires != nil {
+			exp = "caduca " + e.Expires.Format("2006-01-02")
+		}
+		fmt.Printf("%-20s %-15s creado %s, %s\n", n, strings.Join(e.Apps, ","), e.Created.Format("2006-01-02"), exp)
 	}
 	return nil
 }
