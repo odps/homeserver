@@ -81,30 +81,33 @@ if [ ! -e "$srv/current" ]; then
 	rm -rf "$tmp"
 fi
 
-mkdir -p "$svdir/homeserver-updater/log"
-cat > "$svdir/homeserver-updater/run" <<EOF
-#!$PREFIX/bin/sh
-exec 2>&1
-set -a
-. $srv/env/updater.env
-set +a
-exec $srv/current/bin/updater
-EOF
-ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/homeserver-updater/log/run"
-chmod 755 "$svdir/homeserver-updater/run"
-enable homeserver-updater
+# service <nombre> <órdenes>: crea un servicio runit con su log y lo activa.
+service() {
+	name=$1
+	mkdir -p "$svdir/$name/log"
+	printf '#!%s/bin/sh\nexec 2>&1\n%s\n' "$PREFIX" "$2" > "$svdir/$name/run"
+	chmod 755 "$svdir/$name/run"
+	ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/$name/log/run"
+	enable "$name"
+}
+
+service homeserver-updater "set -a; . $srv/env/updater.env; set +a
+exec $srv/current/bin/updater"
 
 echo "== Vigilante de red"
 # Reinicia la wifi si el móvil deja de llegar al router (ver cmd/netwatch).
-mkdir -p "$svdir/netwatch/log"
-cat > "$svdir/netwatch/run" <<EOF
-#!$PREFIX/bin/sh
-exec 2>&1
-exec $srv/current/bin/netwatch
-EOF
-ln -sf "$PREFIX/share/termux-services/svlogger" "$svdir/netwatch/log/run"
-chmod 755 "$svdir/netwatch/run"
-enable netwatch
+service netwatch "exec $srv/current/bin/netwatch"
+
+echo "== Acceso público"
+# Tailscale en modo userspace como nodo aparte («xperia-web») para Funnel, y la
+# pasarela con login (cmd/gateway) a la que Funnel envía el tráfico. Tras el
+# primer arranque hay que autorizar el nodo, activar Funnel y fijar la
+# contraseña: ver el runbook.
+mkdir -p "$srv/tailscale" && chmod 700 "$srv/tailscale"
+touch "$srv/env/gateway.env" && chmod 600 "$srv/env/gateway.env"
+service tailscale-web "exec $srv/current/bin/tailscaled --tun=userspace-networking --statedir=$srv/tailscale --socket=$srv/tailscale/tailscaled.sock --port=0"
+service gateway "set -a; . $srv/env/gateway.env; set +a
+exec $srv/current/bin/gateway"
 
 echo "== Arranque"
 cat > "$HOME/.termux/boot/20-services" <<EOF

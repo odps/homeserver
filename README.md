@@ -16,6 +16,7 @@ Apps personales pequeñas con tools MCP para un agente de IA, pensadas para corr
 | `apps/<app>` | Cada app: `main.go`, `migrations/NNN_*.sql` |
 | `cmd/updater` | Updater pull con vuelta atrás |
 | `cmd/netwatch` | Vigilante de red: reinicia la wifi del móvil si no llega al router |
+| `cmd/gateway` | Pasarela pública con login: `/<app>/…` → puerto de la app; sesión web o token `Bearer` |
 | `deploy/apps.json` | Apps que se despliegan y su puerto, y servicios auxiliares que se reinician tras cada despliegue |
 | `deploy/build.sh` | Compilación para android/arm64, linux/arm64 y linux/amd64 |
 | `deploy/termux/bootstrap.sh` | Preparación inicial del móvil |
@@ -29,6 +30,14 @@ Apps personales pequeñas con tools MCP para un agente de IA, pensadas para corr
 Cada app expone sus tools en `http://<servidor>:<puerto>/mcp` (MCP streamable HTTP, sin sesión) y prefija sus nombres con el de la app (`hola_saludar`).
 
 Las migraciones deben ser compatibles con la versión anterior (añadir columnas o tablas, no borrarlas en el mismo cambio): la vuelta atrás cambia el binario, no la base de datos. Antes de cada cambio de versión queda un `pg_dump` en `~/srv/backups`.
+
+## Acceso público
+
+Tailscale Funnel publica `https://xperia-web.tail36c376.ts.net` y envía todo a la pasarela (`127.0.0.1:8100`), que pide login antes de llegar a las apps (`/hola/`, …). El tráfico no pasa por Cloudflare, que en España se bloquea durante los partidos. En el móvil, Tailscale corre en modo userspace como un nodo aparte (`xperia-web`, servicio `tailscale-web`) compilado con `GOOS=android`, porque la app de Android no hace Funnel.
+
+- Navegador: contraseña única (`gateway passwd`, hash argon2id) y cookie de sesión de 30 días. Hay un límite de 5 intentos fallidos por IP cada 15 minutos.
+- Agente y clientes MCP: `Authorization: Bearer <token>` (`gateway token new <nombre>`). Las apps no reciben ni el token ni la cookie, solo `X-Auth-User`.
+- Las apps deben usar enlaces relativos o respetar `X-Forwarded-Prefix`. Las redirecciones absolutas se corrigen solas.
 
 ## Desarrollo
 
