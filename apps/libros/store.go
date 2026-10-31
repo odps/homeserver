@@ -30,6 +30,7 @@ type Book struct {
 	Description *string    `json:"description"`
 	HasCover    bool       `json:"has_cover"`
 	Owner       string     `json:"owner"`
+	Source      *string    `json:"source"`     // biblioteca pública de origen, p. ej. gutenberg:2000
 	Visibility  string     `json:"visibility"` // privado o compartido
 	AddedAt     time.Time  `json:"added_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -59,7 +60,7 @@ type store struct{ db *pgxpool.Pool }
 
 const bookCols = `b.id, b.sha256, b.format, b.file_name, b.size, b.title, b.authors, b.genres,
 	b.series, b.series_index, b.language, b.publisher, b.published, b.description, b.has_cover,
-	b.owner, b.visibility, b.added_at, b.updated_at,
+	b.owner, b.visibility, b.source, b.added_at, b.updated_at,
 	coalesce(r.status, 'pendiente'), r.finished_at,
 	p.device_id, p.device_name, p.location, p.fraction, p.label, p.updated_at`
 
@@ -80,7 +81,7 @@ func scanBook(row pgx.Row, who app.Identity) (Book, error) {
 	var at *time.Time
 	err := row.Scan(&b.ID, &b.SHA256, &b.Format, &b.FileName, &b.Size, &b.Title, &b.Authors, &b.Genres,
 		&b.Series, &b.SeriesIndex, &b.Language, &b.Publisher, &b.Published, &b.Description, &b.HasCover,
-		&b.Owner, &b.Visibility, &b.AddedAt, &b.UpdatedAt, &b.Status, &b.FinishedAt,
+		&b.Owner, &b.Visibility, &b.Source, &b.AddedAt, &b.UpdatedAt, &b.Status, &b.FinishedAt,
 		&devID, &devName, &loc, &frac, &label, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return b, errNotFound
@@ -156,6 +157,30 @@ func (s store) findCopy(ctx context.Context, who app.Identity, sha string) (Book
 		WHERE b.sha256 = $2 AND `+visible+` ORDER BY b.owner = $1 DESC LIMIT 1`, who.User, sha), who)
 }
 
+// idsBySource dice cuáles de esas procedencias («fuente:id») ya están en la
+// biblioteca que ve la persona, con el id del libro.
+func (s store) idsBySource(ctx context.Context, who app.Identity, keys []string) (map[string]int64, error) {
+	out := map[string]int64{}
+	if len(keys) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.Query(ctx, `SELECT b.source, b.id FROM books b
+		WHERE b.source = ANY($2) AND `+visible+` ORDER BY b.owner = $1`, who.User, keys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var src string
+		var id int64
+		if err := rows.Scan(&src, &id); err != nil {
+			return nil, err
+		}
+		out[src] = id // el propio gana: va el último por el ORDER BY
+	}
+	return out, rows.Err()
+}
+
 // fileInUse indica si algún libro sigue usando el fichero.
 func (s store) fileInUse(ctx context.Context, sha string) (bool, error) {
 	var n int
@@ -168,10 +193,10 @@ func (s store) insert(ctx context.Context, b Book) (int64, error) {
 	var id int64
 	err := s.db.QueryRow(ctx, `INSERT INTO books
 		(sha256, format, file_name, size, title, authors, genres, series, series_index,
-		 language, publisher, published, description, has_cover, owner, visibility)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
+		 language, publisher, published, description, has_cover, owner, visibility, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
 		b.SHA256, b.Format, b.FileName, b.Size, b.Title, b.Authors, b.Genres, b.Series, b.SeriesIndex,
-		b.Language, b.Publisher, b.Published, b.Description, b.HasCover, b.Owner, b.Visibility).Scan(&id)
+		b.Language, b.Publisher, b.Published, b.Description, b.HasCover, b.Owner, b.Visibility, b.Source).Scan(&id)
 	return id, err
 }
 

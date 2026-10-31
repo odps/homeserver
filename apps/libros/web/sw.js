@@ -43,6 +43,8 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(req).catch(async () => (await caches.match('./', { ignoreSearch: true })) ?? Response.error()))
     return
   }
+  // El catálogo público solo funciona con red: no se guarda en el dispositivo.
+  if (path.startsWith('api/catalog/')) return
   if (/^api\/books\/\d+\/file$/.test(path)) {
     event.respondWith(caches.open(BOOKS).then(c => c.match(req)).then(hit => hit ?? fetch(req)))
     return

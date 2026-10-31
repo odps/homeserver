@@ -27,7 +27,7 @@ func setup(env *app.Env) error {
 	if err != nil {
 		return err
 	}
-	a := &api{store: store{env.DB}, files: f, log: env.Log}
+	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false)}
 	a.routes(env.Mux)
 	serveWeb(env.Mux)
 	addTools(env.MCP, a.store)

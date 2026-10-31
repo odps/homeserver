@@ -14,7 +14,7 @@ Apps personales pequeñas con tools MCP para un agente de IA, pensadas para corr
 | `platform/db` | Migraciones SQL por schema |
 | `platform/dbtest` | Schema temporal por test |
 | `apps/<app>` | Cada app: `main.go`, `migrations/NNN_*.sql` |
-| `apps/libros` | Biblioteca y lector (EPUB, PDF, MOBI, AZW3, FB2, FBZ, CBZ) con progreso sincronizado entre dispositivos y PWA sin conexión; lector basado en [foliate-js](https://github.com/johnfactotum/foliate-js) (MIT), incluido en `web/vendor/foliate` |
+| `apps/libros` | Biblioteca y lector (EPUB, PDF, MOBI, AZW3, FB2, FBZ, CBZ) con progreso sincronizado entre dispositivos, PWA sin conexión y búsqueda en bibliotecas públicas legales (Project Gutenberg, Wikisource e Internet Archive con licencia libre); lector basado en [foliate-js](https://github.com/johnfactotum/foliate-js) (MIT), incluido en `web/vendor/foliate` |
 | `cmd/updater` | Updater pull con vuelta atrás |
 | `cmd/netwatch` | Vigilante de red: reinicia la wifi del móvil si no llega al router |
 | `cmd/gateway` | Pasarela pública con login: `/<app>/…` → puerto de la app; sesión web o token `Bearer` |

@@ -34,6 +34,7 @@ const paths = {
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z',
   lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z',
+  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   user: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 }
 export function icon(name) {

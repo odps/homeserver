@@ -11,7 +11,12 @@ const view = $('#view')
 async function route() {
   const m = location.hash.match(/^#\/leer\/(\d+)/)
   $('#dialog').open && $('#dialog').close()
-  if (m) {
+  if (location.hash.startsWith('#/explorar')) {
+    const { closeReader } = await import('./reader.js')
+    closeReader()
+    const { showExplore } = await import('./explore.js')
+    await showExplore(view)
+  } else if (m) {
     const { showReader } = await import('./reader.js')
     await showReader(view, Number(m[1]))
   } else {

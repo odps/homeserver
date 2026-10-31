@@ -57,7 +57,8 @@ function render(view, downloaded) {
       h('div', { class: 'search' }, icon('search'),
         h('input', { type: 'search', placeholder: 'Título, autor, género…', value: state.q, 'aria-label': 'Buscar',
           oninput: debounce(e => { state.q = e.target.value.trim(); refresh(view) }, 300) })),
-      h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), 'Añadir'),
+      h('a', { class: 'btn', href: '#/explorar', title: 'Buscar en bibliotecas públicas' }, icon('globe'), h('span', { class: 'hide-sm' }, 'Explorar')),
+      h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), h('span', { class: 'hide-sm' }, 'Añadir')),
       userMenu(),
     ),
     installCard(view),
@@ -96,8 +97,10 @@ function emptyState(view) {
   if (state.q || state.status || state.scope) return h('div', { class: 'empty' }, 'Ningún libro coincide.')
   return h('div', { class: 'empty' },
     h('h2', {}, 'Tu biblioteca está vacía'),
-    h('p', {}, 'Añade tus libros (EPUB, PDF, MOBI, AZW3, FB2, CBZ) y léelos desde cualquier dispositivo.'),
-    h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), 'Añadir libros'))
+    h('p', {}, 'Añade tus libros (EPUB, PDF, MOBI, AZW3, FB2, CBZ) o busca clásicos en bibliotecas públicas, y léelos desde cualquier dispositivo.'),
+    h('div', { class: 'actions center' },
+      h('button', { class: 'btn primary', onclick: () => openUpload(view), disabled: state.offline }, icon('plus'), 'Añadir libros'),
+      h('a', { class: 'btn', href: '#/explorar' }, icon('globe'), 'Explorar bibliotecas públicas')))
 }
 
 export function cover(b, badge) {

@@ -122,6 +122,12 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
   border-top: 1px solid var(--border); color: var(--muted); font-size: .88rem; }
 .account a, .account button { color: var(--accent); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
 .account form { margin: 0; }
+.legal { margin: -.6rem 0 1rem; }
+.result .add { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .2rem; }
+.btn.small { padding: .3rem .7rem; font-size: .82rem; }
+.more { display: flex; justify-content: center; margin-top: 1.5rem; }
+.actions.center { justify-content: center; }
+.small { font-size: .78rem; }
 .empty { text-align: center; color: var(--muted); padding: 4rem 1rem; }
 .empty h2 { font-family: var(--serif); color: var(--text); font-weight: 600; }
 
@@ -208,6 +214,8 @@ dialog::backdrop { background: rgb(0 0 0 / .35); backdrop-filter: blur(2px); }
   .continue h2 { font-size: 1.05rem; }
   .continue .btn { display: none; }
   .avatar .label { display: none; }
+  .hide-sm { display: none; }
+  .top .btn { padding: .5rem .7rem; }
   .avatar { padding: .2rem; }
   .install { flex-wrap: wrap; }
   .continue .cover .ph { padding: .35rem; }

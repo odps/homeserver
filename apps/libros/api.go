@@ -22,10 +22,11 @@ import (
 )
 
 type api struct {
-	store  store
-	files  files
-	log    *slog.Logger
-	legacy sync.Once // asignación de los datos anteriores a las cuentas
+	store   store
+	files   files
+	catalog *catalog
+	log     *slog.Logger
+	legacy  sync.Once // asignación de los datos anteriores a las cuentas
 }
 
 func (a *api) routes(mux *http.ServeMux) {
@@ -39,6 +40,7 @@ func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/books/{id}/file", a.user(a.file))
 	mux.HandleFunc("GET /api/books/{id}/cover", a.user(a.cover))
 	mux.HandleFunc("PUT /api/books/{id}/progress", a.user(a.progress))
+	a.catalogRoutes(mux)
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, who app.Identity)
