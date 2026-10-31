@@ -10,3 +10,11 @@ dist/
 *.fb2
 *.fbz
 *.cbz
+
+# Binarios compilados en local
+*.exe
+/gateway
+/libros
+/hola
+/updater
+/netwatch
