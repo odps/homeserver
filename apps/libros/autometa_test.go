@@ -39,7 +39,9 @@ func TestConfident(t *testing.T) {
 		{"El príncipe", []string{"Maquiavelo"}, isbnInfo{Title: "El Principe: edición crítica", Authors: []string{"Nicolás Maquiavelo"}}, true},
 		{"Don Quijote", []string{"Cervantes"}, isbnInfo{Title: "Don Quijote de la Mancha", Authors: []string{"Avellaneda"}}, false},
 		{"Don Quijote", nil, isbnInfo{Title: "Don Quijote de la Mancha"}, false}, // sin autor, el título debe ser igual
-		{"Dune", nil, isbnInfo{Title: "Dune", Authors: []string{"Frank Herbert"}}, true},
+		{"Dune", nil, isbnInfo{Title: "Dune", Authors: []string{"Frank Herbert"}}, false},
+		{"Competitive Programming", nil, isbnInfo{Title: "Competitive Programming", Authors: []string{"Otra Persona"}}, false},
+		{"Designing Data-Intensive Applications", nil, isbnInfo{Title: "Designing Data-Intensive Applications", Authors: []string{"Martin Kleppmann"}}, true},
 		{"Cálculo", []string{"Spivak"}, isbnInfo{Title: "Cálculo infinitesimal y geometría", Authors: []string{"Spivak"}}, true},
 		{"Física", []string{"Tipler"}, isbnInfo{Title: "Química", Authors: []string{"Tipler"}}, false},
 	}

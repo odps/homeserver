@@ -209,14 +209,17 @@ func subsetOf(a, b map[string]bool) bool {
 
 // confident dice si un resultado es claramente el mismo libro: el título
 // coincide (uno contiene al otro, sin subtítulos) y, si el libro tiene
-// autores, comparten algún apellido. Sin autores, el título debe ser igual.
+// autores, comparten algún apellido. Sin autores, el título debe ser igual y
+// de al menos tres palabras.
 func confident(title string, authors []string, c isbnInfo) bool {
 	bt, ct := titleWords(title), titleWords(c.Title)
 	if len(bt) == 0 || len(ct) == 0 || !(subsetOf(bt, ct) || subsetOf(ct, bt)) {
 		return false
 	}
 	if len(authors) == 0 {
-		return subsetOf(bt, ct) && subsetOf(ct, bt)
+		// Sin autor, un título corto es demasiado ambiguo («Competitive
+		// Programming» lo tienen varios libros): hace falta uno largo e igual.
+		return len(bt) >= 3 && subsetOf(bt, ct) && subsetOf(ct, bt)
 	}
 	mine := map[string]bool{}
 	for _, w := range searchWords(strings.Join(authors, " ")) {
