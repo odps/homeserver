@@ -36,6 +36,7 @@ type Book struct {
 	AddedAt     time.Time  `json:"added_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	Status      string     `json:"status"` // de quien pregunta
+	Favorite    bool       `json:"favorite"`
 	FinishedAt  *time.Time `json:"finished_at"`
 	// Last es la posición más reciente de quien pregunta en cualquiera de sus
 	// dispositivos.
@@ -62,7 +63,7 @@ type store struct{ db *pgxpool.Pool }
 const bookCols = `b.id, b.sha256, b.format, b.file_name, b.size, b.title, b.authors, b.genres,
 	b.series, b.series_index, b.language, b.publisher, b.published, b.description, b.isbn, b.has_cover,
 	b.owner, b.visibility, b.source, b.added_at, b.updated_at,
-	coalesce(r.status, 'pendiente'), r.finished_at,
+	coalesce(r.status, 'pendiente'), coalesce(r.favorite, false), r.finished_at,
 	p.device_id, p.device_name, p.location, p.fraction, p.label, p.updated_at`
 
 // Estado y posición más reciente de la persona ($1).
@@ -82,7 +83,7 @@ func scanBook(row pgx.Row, who app.Identity) (Book, error) {
 	var at *time.Time
 	err := row.Scan(&b.ID, &b.SHA256, &b.Format, &b.FileName, &b.Size, &b.Title, &b.Authors, &b.Genres,
 		&b.Series, &b.SeriesIndex, &b.Language, &b.Publisher, &b.Published, &b.Description, &b.ISBN, &b.HasCover,
-		&b.Owner, &b.Visibility, &b.Source, &b.AddedAt, &b.UpdatedAt, &b.Status, &b.FinishedAt,
+		&b.Owner, &b.Visibility, &b.Source, &b.AddedAt, &b.UpdatedAt, &b.Status, &b.Favorite, &b.FinishedAt,
 		&devID, &devName, &loc, &frac, &label, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return b, errNotFound
@@ -232,6 +233,16 @@ func (s store) setStatus(ctx context.Context, who app.Identity, id int64, status
 // portada) como cambiado, para que los dispositivos pidan la portada nueva.
 func (s store) coverChanged(ctx context.Context, sha string) error {
 	_, err := s.db.Exec(ctx, `UPDATE books SET has_cover = true, updated_at = now() WHERE sha256 = $1`, sha)
+	return err
+}
+
+// setFavorite marca o desmarca un libro como favorito de la persona.
+func (s store) setFavorite(ctx context.Context, who app.Identity, id int64, fav bool) error {
+	if _, err := s.get(ctx, who, id); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(ctx, `INSERT INTO reading (book_id, username, status, favorite) VALUES ($1, $2, 'pendiente', $3)
+		ON CONFLICT (book_id, username) DO UPDATE SET favorite = excluded.favorite`, id, who.User, fav)
 	return err
 }
 

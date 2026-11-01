@@ -37,6 +37,20 @@ const paths = {
   globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   user: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   layers: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  home: 'M3 10.5 12 3l9 7.5M5 9v11h5v-6h4v6h5V9',
+  book: 'M4 19.5V5a2 2 0 0 1 2-2h14v15H6.5A2.5 2.5 0 0 0 4 20.5 2.5 2.5 0 0 0 6.5 23H20M8 7h8',
+  compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
+  heart: 'M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.5 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.5 0 5.6 3.5 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  filter: 'M4 6h16M7 12h10M10 18h4',
+  chevron: 'M9 6l6 6-6 6',
+  logout: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3',
+  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z',
+  external: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  play: 'M7 4v16l13-8z',
+  key: 'M15 7a4 4 0 1 1-3.5 6L5 19.5V22H2v-3l6.5-6.5A4 4 0 0 1 15 7zM16 8h.01',
+  device: 'M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2',
 }
 export function icon(name) {
   const ns = 'http://www.w3.org/2000/svg'
@@ -147,6 +161,58 @@ export async function shrinkCover(blob) {
 
 // URL de la portada de un libro; cambia cuando se edita, para no ver la vieja.
 export const coverURL = b => `api/books/${b.id}/cover?v=${Date.parse(b.updated_at) || 0}`
+
+// ambient pone en el elemento el color medio de la portada (--ambient), para
+// teñir el fondo de las fichas. Las portadas son del mismo origen: el canvas
+// las puede leer.
+const ambientCache = new Map()
+export function ambient(img, el) {
+  const apply = c => el.style.setProperty('--ambient', c)
+  if (ambientCache.has(img.src)) return apply(ambientCache.get(img.src))
+  const run = () => {
+    try {
+      const c = document.createElement('canvas')
+      c.width = c.height = 12
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      ctx.drawImage(img, 0, 0, 12, 12)
+      const d = ctx.getImageData(0, 0, 12, 12).data
+      let r = 0, g = 0, b = 0, n = 0
+      for (let i = 0; i < d.length; i += 4) {
+        // Se ignoran los píxeles casi blancos o casi negros (márgenes y texto).
+        const l = (d[i] + d[i + 1] + d[i + 2]) / 3
+        if (l < 25 || l > 235) continue
+        r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+      }
+      if (!n) return
+      const color = `rgb(${Math.round(r / n)} ${Math.round(g / n)} ${Math.round(b / n)})`
+      ambientCache.set(img.src, color)
+      apply(color)
+    } catch {}
+  }
+  if (img.complete && img.naturalWidth) run()
+  else img.addEventListener('load', run, { once: true })
+}
+
+// plural escribe «1 libro», «3 libros».
+export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+
+// menu crea un botón ⋯ con un menú de opciones ([icono, texto, acción, clase]).
+export function menu(items, label = 'Más opciones') {
+  const list = h('div', { class: 'menu', role: 'menu', hidden: true })
+  const wrap = h('div', { class: 'menu-wrap' },
+    h('button', { class: 'btn icon-only', 'aria-label': label, 'aria-haspopup': 'true', title: label,
+      onclick: e => { e.stopPropagation(); list.hidden = !list.hidden } }, icon('more')),
+    list)
+  for (const it of items.filter(Boolean)) {
+    if (it === '-') { list.append(h('hr')); continue }
+    const [ic, text, action, cls] = it
+    list.append(typeof action === 'string'
+      ? h('a', { href: action, class: cls ?? '', role: 'menuitem', download: cls === 'download' ? '' : null }, icon(ic), text)
+      : h('button', { type: 'button', class: cls ?? '', role: 'menuitem', onclick: () => { list.hidden = true; action() } }, icon(ic), text))
+  }
+  document.addEventListener('click', () => { list.hidden = true })
+  return wrap
+}
 
 // Color estable para las portadas generadas, a partir del título.
 export function hue(text) {

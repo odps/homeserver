@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,8 +52,22 @@ type seriesData struct {
 	Chapters    []chapterData
 }
 
+// seriesQuery es una búsqueda: texto, página, orden (popular, updated,
+// rating, title) y estado (ongoing, completed, hiatus, dropped).
+type seriesQuery struct {
+	Q      string
+	Page   int
+	Sort   string
+	Status string
+}
+
+var (
+	seriesSorts    = map[string]bool{"": true, "popular": true, "updated": true, "rating": true, "title": true}
+	seriesStatuses = map[string]bool{"": true, "ongoing": true, "completed": true, "hiatus": true, "dropped": true}
+)
+
 type comicSource interface {
-	search(ctx context.Context, q string, page int) ([]seriesItem, bool, error)
+	search(ctx context.Context, sq seriesQuery) ([]seriesItem, bool, error)
 	fetch(ctx context.Context, id string) (seriesData, error)
 	validID(id string) bool
 }
@@ -112,10 +127,20 @@ type asuraSeries struct {
 	} `json:"genres"`
 }
 
-func (a asura) search(ctx context.Context, q string, page int) ([]seriesItem, bool, error) {
-	v := url.Values{"page": {strconv.Itoa(page)}}
-	if q != "" {
-		v.Set("search", q)
+// asuraPage son los resultados por página de la API de Asura, que pagina
+// con offset (el parámetro page lo ignora).
+const asuraPage = 20
+
+func (a asura) search(ctx context.Context, sq seriesQuery) ([]seriesItem, bool, error) {
+	v := url.Values{"offset": {strconv.Itoa((sq.Page - 1) * asuraPage)}}
+	if sq.Q != "" {
+		v.Set("search", sq.Q)
+	}
+	if sq.Sort != "" {
+		v.Set("sort", sq.Sort)
+	}
+	if sq.Status != "" {
+		v.Set("status", sq.Status)
 	}
 	var res struct {
 		Data []asuraSeries `json:"data"`
@@ -225,6 +250,8 @@ type flameSeries struct {
 	Artist      stringOrList `json:"artist"`
 	Status      string       `json:"status"`
 	Cover       string       `json:"cover"`
+	Rank        flexString   `json:"popularityRank"`
+	LastEdit    flexString   `json:"last_edit"`
 }
 
 var (
@@ -307,13 +334,18 @@ func (f *flame) all(ctx context.Context) ([]flameSeries, error) {
 	return res.PageProps.Series, nil
 }
 
-func (f *flame) search(ctx context.Context, q string, page int) ([]seriesItem, bool, error) {
+func (f *flame) search(ctx context.Context, sq seriesQuery) ([]seriesItem, bool, error) {
 	list, err := f.all(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	q = strings.ToLower(q)
-	matches := []seriesItem{}
+	q := strings.ToLower(sq.Q)
+	type match struct {
+		item     seriesItem
+		rank     int
+		lastEdit int
+	}
+	found := []match{}
 	for _, s := range list {
 		id := string(s.ID)
 		if !f.validID(id) || s.Title == "" {
@@ -322,12 +354,35 @@ func (f *flame) search(ctx context.Context, q string, page int) ([]seriesItem, b
 		if q != "" && !strings.Contains(strings.ToLower(s.Title+" "+strings.Join(s.AltTitles, " ")), q) {
 			continue
 		}
+		if sq.Status != "" && !strings.EqualFold(s.Status, sq.Status) {
+			continue
+		}
 		cover := f.coverURL(id, s.Cover)
-		matches = append(matches, seriesItem{Source: "flame", ID: id, Title: s.Title, Status: s.Status, Kind: s.Type,
-			HasCover: cover != "", coverURL: cover})
+		rank, _ := strconv.Atoi(string(s.Rank))
+		if rank <= 0 {
+			rank = 1 << 30
+		}
+		edit, _ := strconv.Atoi(string(s.LastEdit))
+		found = append(found, match{seriesItem{Source: "flame", ID: id, Title: s.Title, Status: s.Status, Kind: s.Type,
+			HasCover: cover != "", coverURL: cover}, rank, edit})
+	}
+	// Flame no ordena por valoración: «valoradas» usa la popularidad.
+	switch sq.Sort {
+	case "updated":
+		sort.SliceStable(found, func(i, j int) bool { return found[i].lastEdit > found[j].lastEdit })
+	case "title":
+		sort.SliceStable(found, func(i, j int) bool {
+			return strings.ToLower(found[i].item.Title) < strings.ToLower(found[j].item.Title)
+		})
+	case "popular", "rating":
+		sort.SliceStable(found, func(i, j int) bool { return found[i].rank < found[j].rank })
+	}
+	matches := make([]seriesItem, len(found))
+	for i, m := range found {
+		matches[i] = m.item
 	}
 	const per = 24
-	from := (page - 1) * per
+	from := (sq.Page - 1) * per
 	if from >= len(matches) {
 		return []seriesItem{}, false, nil
 	}

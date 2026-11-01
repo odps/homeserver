@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Acceso a las apps con cuentas propias (sin 2FA) y sesiones largas. Es un
@@ -96,6 +99,8 @@ func (g *gateway) appRoutes(w http.ResponseWriter, r *http.Request) {
 		g.appAuth(http.HandlerFunc(g.accountPage)).ServeHTTP(w, r)
 	case rest == "_cuenta" && r.Method == http.MethodPost:
 		g.appAuth(http.HandlerFunc(g.accountPost)).ServeHTTP(w, r)
+	case rest == "_cuenta/nombre" && r.Method == http.MethodPost:
+		g.appAuth(http.HandlerFunc(g.accountName)).ServeHTTP(w, r)
 	case strings.HasPrefix(rest, "_"):
 		http.NotFound(w, r)
 	default:
@@ -229,6 +234,38 @@ func (g *gateway) renderAccount(w http.ResponseWriter, r *http.Request, status i
 		"App": app, "Title": g.appTitle(app), "Username": sess.User, "Name": u.Name, "CSRF": sess.CSRF,
 		"SessionID": sess.ID, "Sessions": mine, "Msg": msg, "Error": errMsg, "MinLen": minAppPassword,
 	})
+}
+
+// accountName cambia el nombre visible de la cuenta desde la propia app
+// (JSON). Lo protege la comprobación de origen de todas las peticiones que no
+// son GET; el usuario para entrar no cambia.
+func (g *gateway) accountName(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r)
+	if sess == nil {
+		http.Error(w, "solo con sesión de usuario", http.StatusForbidden)
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
+		http.Error(w, "datos no válidos", http.StatusBadRequest)
+		return
+	}
+	name := strings.Join(strings.Fields(strings.ToValidUTF8(in.Name, "")), " ")
+	if n := utf8.RuneCountInString(name); n < 1 || n > 60 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "el nombre debe tener entre 1 y 60 caracteres"})
+		return
+	}
+	if err := g.users.update(sess.User, func(u *appUser) error { u.Name = name; return nil }); err != nil {
+		http.Error(w, "no se pudo guardar", http.StatusInternalServerError)
+		return
+	}
+	g.audit.add("app_nombre", clientIP(r), map[string]string{"usuario": sess.User})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"name": name})
 }
 
 func (g *gateway) accountPost(w http.ResponseWriter, r *http.Request) {

@@ -179,7 +179,7 @@ function buildUI(root, fv, book) {
   const percent = h('span')
   const peek = h('div', { class: 'peek' })
   const top = h('div', { class: 'rbar top' },
-    h('button', { class: 'icon-btn', 'aria-label': 'Volver a la biblioteca', onclick: () => { location.hash = '#/' } }, icon('back')),
+    h('button', { class: 'icon-btn', 'aria-label': 'Volver a la biblioteca', onclick: () => { if (history.length > 1) history.back(); else location.hash = `#/libros/${book.id}` } }, icon('back')),
     h('div', { class: 'title' }, book.title),
     h('button', { class: 'icon-btn', 'aria-label': 'Índice', onclick: () => openTOC(root, fv) }, icon('toc')),
     h('button', { class: 'icon-btn', 'aria-label': 'Ajustes de lectura', onclick: () => openSettings(root, fv) }, icon('type')))

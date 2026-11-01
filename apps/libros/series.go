@@ -46,6 +46,7 @@ type Series struct {
 	CheckedAt    *time.Time `json:"checked_at"`
 	// De quien pregunta.
 	Followed bool     `json:"followed"`
+	Favorite bool     `json:"favorite"`
 	LastRead *float32 `json:"last_read"`
 	Unread   int      `json:"unread"`
 	Next     *Chapter `json:"next"` // primer capítulo sin leer
@@ -62,7 +63,7 @@ type Chapter struct {
 type seriesStore struct{ db *pgxpool.Pool }
 
 const seriesCols = `s.id, s.source, s.source_id, s.title, s.url, s.cover_url <> '', s.status, s.kind, s.authors, s.genres,
-	s.description, s.latest_number, s.latest_at, s.checked_at, f.username IS NOT NULL, f.last_read,
+	s.description, s.latest_number, s.latest_at, s.checked_at, f.username IS NOT NULL, coalesce(f.favorite, false), f.last_read,
 	(SELECT count(*) FROM comic_chapters c WHERE c.series_id = s.id AND f.username IS NOT NULL AND (f.last_read IS NULL OR c.number > f.last_read)),
 	n.number, n.title, n.url, n.published_at, n.early_until`
 
@@ -77,7 +78,7 @@ func scanSeries(row pgx.Row) (Series, error) {
 	var nTitle, nURL *string
 	var nPub, nEarly *time.Time
 	err := row.Scan(&s.ID, &s.Source, &s.SourceID, &s.Title, &s.URL, &s.HasCover, &s.Status, &s.Kind, &s.Authors, &s.Genres,
-		&s.Description, &s.LatestNumber, &s.LatestAt, &s.CheckedAt, &s.Followed, &s.LastRead, &s.Unread,
+		&s.Description, &s.LatestNumber, &s.LatestAt, &s.CheckedAt, &s.Followed, &s.Favorite, &s.LastRead, &s.Unread,
 		&nNum, &nTitle, &nURL, &nPub, &nEarly)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s, errNotFound
@@ -205,6 +206,14 @@ func (s seriesStore) unfollow(ctx context.Context, who app.Identity, id int64) e
 	return err
 }
 
+func (s seriesStore) setFavorite(ctx context.Context, who app.Identity, id int64, fav bool) error {
+	tag, err := s.db.Exec(ctx, `UPDATE comic_follows SET favorite = $3 WHERE username = $1 AND series_id = $2`, who.User, id, fav)
+	if err == nil && tag.RowsAffected() == 0 {
+		return bad("sigue la serie para marcarla como favorita")
+	}
+	return err
+}
+
 func (s seriesStore) setRead(ctx context.Context, who app.Identity, id int64, n *float32) error {
 	tag, err := s.db.Exec(ctx, `UPDATE comic_follows SET last_read = $3 WHERE username = $1 AND series_id = $2`, who.User, id, n)
 	if err == nil && tag.RowsAffected() == 0 {
@@ -301,16 +310,19 @@ func newSeriesService(db *pgxpool.Pool, dir string, urls seriesURLs, hosts []str
 }
 
 // search busca en una fuente o en todas (resultados alternados).
-func (sv *seriesService) search(ctx context.Context, who app.Identity, source, q string, page int) (map[string]any, error) {
+func (sv *seriesService) search(ctx context.Context, who app.Identity, source string, sq seriesQuery) (map[string]any, error) {
 	names := []string{source}
 	if source == "todas" {
 		names = []string{"asura", "flame"}
 	} else if sv.sources[source] == nil {
 		return nil, bad("fuente no válida")
 	}
-	q = clean(q, 100)
-	if page < 1 || page > 100 {
-		page = 1
+	sq.Q = clean(sq.Q, 100)
+	if sq.Page < 1 || sq.Page > 100 {
+		sq.Page = 1
+	}
+	if !seriesSorts[sq.Sort] || !seriesStatuses[sq.Status] {
+		return nil, bad("filtro no válido")
 	}
 	lists := make([][]seriesItem, len(names))
 	mores := make([]bool, len(names))
@@ -320,7 +332,7 @@ func (sv *seriesService) search(ctx context.Context, who app.Identity, source, q
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			lists[i], mores[i], errs[i] = sv.sources[n].search(ctx, q, page)
+			lists[i], mores[i], errs[i] = sv.sources[n].search(ctx, sq)
 		}()
 	}
 	wg.Wait()
@@ -431,6 +443,7 @@ func (a *api) seriesRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/series/{id}", a.user(a.seriesGet))
 	mux.HandleFunc("DELETE /api/series/{id}", a.user(a.seriesUnfollow))
 	mux.HandleFunc("PUT /api/series/{id}/leido", a.user(a.seriesRead))
+	mux.HandleFunc("PUT /api/series/{id}/favorito", a.user(a.seriesFavorite))
 	mux.HandleFunc("GET /api/series/{id}/portada", a.user(a.seriesCover))
 }
 
@@ -446,7 +459,7 @@ func (a *api) seriesList(w http.ResponseWriter, r *http.Request, who app.Identit
 func (a *api) seriesSearch(w http.ResponseWriter, r *http.Request, who app.Identity) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
-	res, err := a.series.search(r.Context(), who, q.Get("source"), q.Get("q"), page)
+	res, err := a.series.search(r.Context(), who, q.Get("source"), seriesQuery{Q: q.Get("q"), Page: page, Sort: q.Get("sort"), Status: q.Get("status")})
 	if err != nil {
 		a.upstreamFail(w, err)
 		return
@@ -558,6 +571,31 @@ func (a *api) seriesRead(w http.ResponseWriter, r *http.Request, who app.Identit
 		return
 	}
 	if err := a.series.store.setRead(r.Context(), who, id, in.Number); err != nil {
+		a.fail(w, err)
+		return
+	}
+	s, err := a.series.store.get(r.Context(), who, id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+func (a *api) seriesFavorite(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	id, err := seriesID(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	var in struct {
+		Favorite bool `json:"favorite"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
+		a.fail(w, bad("datos no válidos"))
+		return
+	}
+	if err := a.series.store.setFavorite(r.Context(), who, id, in.Favorite); err != nil {
 		a.fail(w, err)
 		return
 	}

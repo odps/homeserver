@@ -25,6 +25,18 @@ func fakeComics(t *testing.T) (*httptest.Server, *int) {
 	var base string
 	chapters := 3 // capítulos que publica Asura (los tests lo suben)
 	mux.HandleFunc("/api/series", func(w http.ResponseWriter, r *http.Request) {
+		// Asura pagina con offset (page lo ignora) y filtra por orden y estado.
+		if r.URL.Query().Get("page") != "" {
+			t.Errorf("Asura no usa page: %s", r.URL.RawQuery)
+		}
+		if r.URL.Query().Get("offset") == "20" {
+			w.Write([]byte(`{"data":[{"slug":"segunda-pagina","title":"Segunda"}],"meta":{"has_more":false}}`))
+			return
+		}
+		if r.URL.Query().Get("status") == "completed" && r.URL.Query().Get("sort") == "rating" {
+			w.Write([]byte(`{"data":[{"slug":"terminada","title":"Terminada","status":"completed"}],"meta":{"has_more":false}}`))
+			return
+		}
 		w.Write([]byte(`{"data":[{"slug":"killer-pietro","title":"Killer Pietro","cover":"` + base + `/c.png","status":"ongoing","type":"manhwa","chapter_count":3},
 			{"slug":"../evil","title":"Mal"}],"meta":{"has_more":true}}`))
 	})
@@ -178,6 +190,23 @@ func TestSeriesTracking(t *testing.T) {
 	if d.Series.Title != "Omniscient Reader's Viewpoint" || len(d.Chapters) != 2 || d.Chapters[0].Number != 1.5 || d.Chapters[0].Title != "Extra" ||
 		d.Chapters[1].URL != d.Series.URL+"/0c9db8012fbd1257" || len(d.Series.Authors) != 2 {
 		t.Fatalf("Flame: %+v", d)
+	}
+
+	// Paginación, filtros y favoritos.
+	if p := decode[struct{ Items []seriesItem }](t, h.do(t, "GET", "/api/series/buscar?source=asura&page=2", nil)); len(p.Items) != 1 || p.Items[0].ID != "segunda-pagina" {
+		t.Fatalf("página 2 de Asura: %+v", p)
+	}
+	if p := decode[struct{ Items []seriesItem }](t, h.do(t, "GET", "/api/series/buscar?source=asura&sort=rating&status=completed", nil)); len(p.Items) != 1 || p.Items[0].ID != "terminada" {
+		t.Fatalf("filtros de Asura: %+v", p)
+	}
+	if p := decode[struct{ Items []seriesItem }](t, h.do(t, "GET", "/api/series/buscar?source=flame&status=hiatus", nil)); len(p.Items) != 1 || p.Items[0].ID != "2" {
+		t.Fatalf("estado en Flame: %+v", p)
+	}
+	if resp := h.do(t, "GET", "/api/series/buscar?source=asura&sort=raro", nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("orden no válido: %d", resp.StatusCode)
+	}
+	if f := decode[Series](t, h.do(t, "PUT", "/api/series/"+id+"/favorito", map[string]bool{"favorite": true})); !f.Favorite {
+		t.Fatalf("serie favorita: %+v", f)
 	}
 
 	// Cada persona lleva lo suyo.

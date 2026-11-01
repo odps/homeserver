@@ -511,3 +511,41 @@ func TestUsers(t *testing.T) {
 		t.Fatal("acepta una contraseña corta")
 	}
 }
+
+func TestAccountName(t *testing.T) {
+	h := newHarness(t)
+	c := h.client()
+	h.appLogin(t, c, "ana", []string{"hola"}, "usuario")
+	post := func(origin, body string) int {
+		req, _ := http.NewRequest("POST", h.gw.URL+"/hola/_cuenta/nombre", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, _ := c.Do(req)
+		return resp.StatusCode
+	}
+	if st := post("https://malicioso.example", `{"name":"Hackeado"}`); st != http.StatusForbidden {
+		t.Fatalf("desde otro origen: %d", st)
+	}
+	if st := post(h.gw.URL, `{"name":"   "}`); st != http.StatusBadRequest {
+		t.Fatalf("nombre vacío: %d", st)
+	}
+	if st := post(h.gw.URL, `{"name":"  Ana   García "}`); st != http.StatusOK {
+		t.Fatalf("cambio válido: %d", st)
+	}
+	if u, _ := h.g.users.get("ana"); u.Name != "Ana García" {
+		t.Fatalf("nombre guardado: %q", u.Name)
+	}
+	// La app recibe el nombre nuevo en la siguiente petición.
+	resp, _ := c.Get(h.gw.URL + "/hola/algo")
+	if page := body(t, resp); !strings.Contains(page, "name:"+url.QueryEscape("Ana García")) {
+		t.Fatalf("la app no recibe el nombre nuevo: %s", page)
+	}
+	// Sin sesión de usuario (sin cookie) no hay nada que cambiar.
+	req, _ := http.NewRequest("POST", h.gw.URL+"/hola/_cuenta/nombre", strings.NewReader(`{"name":"X"}`))
+	req.Header.Set("Origin", h.gw.URL)
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("sin sesión: %d", resp.StatusCode)
+	}
+}

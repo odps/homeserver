@@ -3,6 +3,7 @@
 // sin conexión; un cambio hecho sin red se envía al volver y gana el más
 // reciente.
 import { api, me } from './util.js'
+import { fromServer } from './prefs.js'
 
 export const defaults = { theme: 'light', size: 100, spacing: 1.5, margin: 'normal', justify: true, flow: 'paginated', font: 'original' }
 
@@ -48,6 +49,7 @@ export async function syncSettings() {
   const l = local()
   try {
     const srv = await api('api/settings')
+    fromServer(srv.prefs)
     if (l?.dirty && (!srv.updated_at || new Date(l.updated_at) > new Date(srv.updated_at))) await push(l)
     else if (srv.updated_at) keep({ reader: srv.reader, updated_at: srv.updated_at, dirty: false })
     if (local()) localStorage.removeItem('libros.reader')

@@ -34,12 +34,14 @@ func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.user(a.me))
 	mux.HandleFunc("GET /api/settings", a.user(a.getSettings))
 	mux.HandleFunc("PUT /api/settings", a.user(a.putSettings))
+	mux.HandleFunc("PUT /api/prefs", a.user(a.putPrefs))
 	mux.HandleFunc("GET /api/books", a.user(a.list))
 	mux.HandleFunc("POST /api/books", a.user(a.upload))
 	mux.HandleFunc("GET /api/books/{id}", a.user(a.get))
 	mux.HandleFunc("PATCH /api/books/{id}", a.user(a.patch))
 	mux.HandleFunc("DELETE /api/books/{id}", a.user(a.remove))
 	mux.HandleFunc("PUT /api/books/{id}/status", a.user(a.status))
+	mux.HandleFunc("PUT /api/books/{id}/favorito", a.user(a.favorite))
 	mux.HandleFunc("GET /api/books/{id}/file", a.user(a.file))
 	mux.HandleFunc("GET /api/books/{id}/cover", a.user(a.cover))
 	mux.HandleFunc("PUT /api/books/{id}/cover", a.user(a.putCover))
@@ -389,6 +391,31 @@ func (a *api) status(w http.ResponseWriter, r *http.Request, who app.Identity) {
 		return
 	}
 	if err := a.store.setStatus(r.Context(), who, id, in.Status); err != nil {
+		a.fail(w, err)
+		return
+	}
+	b, err := a.store.get(r.Context(), who, id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
+}
+
+func (a *api) favorite(w http.ResponseWriter, r *http.Request, who app.Identity) {
+	id, err := bookID(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	var in struct {
+		Favorite bool `json:"favorite"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
+		a.fail(w, bad("datos no válidos"))
+		return
+	}
+	if err := a.store.setFavorite(r.Context(), who, id, in.Favorite); err != nil {
 		a.fail(w, err)
 		return
 	}

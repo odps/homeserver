@@ -57,6 +57,45 @@ func TestSettingsSync(t *testing.T) {
 	}
 }
 
+func TestFavoritesAndPrefs(t *testing.T) {
+	h := newHarness(t)
+	epub := zipBytes(t, map[string]string{"mimetype": "application/epub+zip", "META-INF/container.xml": "<c/>"})
+	_, out := h.upload(t, "f.epub", epub, map[string]any{"title": "Favorito", "visibility": "compartido"})
+	var b Book
+	json.Unmarshal(out["book"], &b)
+	id := itoa(b.ID)
+	if f := decode[Book](t, h.do(t, "PUT", "/api/books/"+id+"/favorito", map[string]bool{"favorite": true})); !f.Favorite || f.Status != "pendiente" {
+		t.Fatalf("favorito: %+v", f)
+	}
+	// Cambiar el estado no quita el favorito, y es de cada persona.
+	if s := decode[Book](t, h.do(t, "PUT", "/api/books/"+id+"/status", map[string]string{"status": "leido"})); !s.Favorite {
+		t.Fatalf("el estado borró el favorito: %+v", s)
+	}
+	h.as("luis", "usuario")
+	if g := decode[struct{ Book Book }](t, h.do(t, "GET", "/api/books/"+id, nil)); g.Book.Favorite {
+		t.Fatal("luis ve el favorito de ana")
+	}
+	h.as("ana", "admin")
+
+	d := decode[settingsDoc](t, h.do(t, "GET", "/api/settings", nil))
+	if d.Prefs != defaultPrefs {
+		t.Fatalf("preferencias iniciales: %+v", d.Prefs)
+	}
+	p := userPrefs{SearchLang: "en", ComicSource: "flame", Visibility: "compartido", Theme: "dark"}
+	if d := decode[settingsDoc](t, h.do(t, "PUT", "/api/prefs", p)); d.Prefs != p || d.UpdatedAt != nil {
+		t.Fatalf("guardar preferencias: %+v", d)
+	}
+	// Guardar las preferencias no impide que un dispositivo fije luego los ajustes del lector.
+	r := defaultReader
+	r.Theme = "sepia"
+	if d := decode[settingsDoc](t, h.do(t, "PUT", "/api/settings", map[string]any{"reader": r, "updated_at": time.Now().Add(-48 * time.Hour)})); d.Reader.Theme != "sepia" || d.Prefs != p {
+		t.Fatalf("ajustes tras preferencias: %+v", d)
+	}
+	if resp := h.do(t, "PUT", "/api/prefs", userPrefs{SearchLang: "xx", ComicSource: "todas", Visibility: "privado", Theme: "system"}); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("preferencias no válidas: %d", resp.StatusCode)
+	}
+}
+
 func TestISBNAndCover(t *testing.T) {
 	h := newHarness(t)
 	h.api.catalog = testCatalog(fakeSources(t, nil))
