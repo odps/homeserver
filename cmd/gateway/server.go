@@ -118,6 +118,7 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/tokens", g.session(g.csrf(http.HandlerFunc(g.createToken))))
 	mux.Handle("POST /panel/tokens/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeToken))))
 	mux.Handle("POST /panel/users", g.session(g.csrf(http.HandlerFunc(g.userAction))))
+	mux.Handle("POST /panel/asistente", g.session(g.csrf(http.HandlerFunc(g.assistantAction))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
 	mux.HandleFunc("/{app}/", g.appRoutes)
 	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))

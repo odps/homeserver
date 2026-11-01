@@ -9,7 +9,9 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -547,5 +549,78 @@ func TestAccountName(t *testing.T) {
 	req.Header.Set("Origin", h.gw.URL)
 	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("sin sesión: %d", resp.StatusCode)
+	}
+}
+
+func TestAssistantConfig(t *testing.T) {
+	h := newHarness(t)
+	c := h.client()
+	h.login(t, c)
+	s := h.g.sessions.list(time.Now())[0]
+	h.g.users.create("ana", "Ana", []string{"hola"}, "usuario")
+	post := func(form url.Values) *http.Response {
+		form.Set("csrf", s.CSRF)
+		req, _ := http.NewRequest("POST", h.gw.URL+"/panel/asistente", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", h.gw.URL)
+		resp, _ := c.Do(req)
+		return resp
+	}
+	path := h.g.assistantPath("claves.env")
+	tgToken := "123456789:" + strings.Repeat("A", 35)
+	valid := url.Values{"action": {"save"}, "telegram_token": {tgToken}, "telegram_user": {"987654321"}, "provider": {"groq"},
+		"llm_key": {"gsk_clave-de-prueba-123"}, "daily_limit": {"200"}, "apps_user": {"ana"}}
+	if resp := post(valid); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("guardar: %d %s", resp.StatusCode, body(t, resp))
+	}
+	m := readEnvFile(path)
+	if m["TELEGRAM_TOKEN"] != tgToken || m["LLM_BASE_URL"] != "https://api.groq.com/openai/v1" || m["TELEGRAM_USER_ID"] != "987654321" ||
+		!strings.HasPrefix(m["APPS_TOKEN"], "hs_") || m["APPS_USER"] != "ana" {
+		t.Fatalf("claves guardadas: %v", m)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm()&0o077 != 0 && runtime.GOOS != "windows" {
+		t.Fatalf("permisos del fichero de claves: %v", st.Mode())
+	}
+	// El token de las apps actúa en nombre de ana, solo en sus apps.
+	if user, e, ok := h.g.tokens.check(m["APPS_TOKEN"], "hola", time.Now()); !ok || e.User != "ana" || user == "" {
+		t.Fatalf("token del asistente: %v %+v", ok, e)
+	}
+	// El panel muestra el estado que publica el asistente.
+	os.WriteFile(h.g.assistantPath("estado.json"), []byte(`{"updated_at":"`+time.Now().UTC().Format(time.RFC3339)+`","bot":"mibot","model":"openai/gpt-oss-120b",
+		"models":["openai/gpt-oss-120b"],"tools":["libros_leyendo","notas_guardar"],"problems":["Falta algo"],"today":3,"limit":200}`), 0o600)
+	// Los secretos no se muestran en el panel; un formulario sin ellos no los borra.
+	page := body(t, func() *http.Response { r, _ := c.Get(h.gw.URL + "/panel/frag/asistente"); return r }())
+	for _, want := range []string{"@mibot", "openai/gpt-oss-120b", "Hoy 3 de 200", "Falta algo", "libros_leyendo"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("el panel no muestra %q", want)
+		}
+	}
+	if strings.Contains(page, tgToken) || strings.Contains(page, "gsk_clave") || strings.Contains(page, m["APPS_TOKEN"]) || !strings.Contains(page, "…AAAA") {
+		t.Fatal("el panel muestra un secreto o no lo enmascara")
+	}
+	keep := url.Values{"action": {"save"}, "telegram_user": {"987654321"}, "provider": {"gemini"}, "daily_limit": {"50"}, "apps_user": {"ana"}}
+	post(keep)
+	m2 := readEnvFile(path)
+	if m2["TELEGRAM_TOKEN"] != tgToken || m2["LLM_API_KEY"] != "gsk_clave-de-prueba-123" || m2["APPS_TOKEN"] != m["APPS_TOKEN"] || !strings.Contains(m2["LLM_BASE_URL"], "generativelanguage") {
+		t.Fatalf("guardar sin secretos: %v", m2)
+	}
+	for _, bad := range []url.Values{
+		{"action": {"save"}, "telegram_token": {"no-es-un-token"}, "provider": {"groq"}, "daily_limit": {"200"}},
+		{"action": {"save"}, "provider": {"custom"}, "llm_base_url": {"http://interno:8080"}, "daily_limit": {"200"}},
+		{"action": {"save"}, "provider": {"groq"}, "telegram_user": {"abc"}, "daily_limit": {"200"}},
+		{"action": {"save"}, "provider": {"groq"}, "llm_key": {"con espacio dentro"}, "daily_limit": {"200"}},
+		{"action": {"save"}, "provider": {"groq"}, "daily_limit": {"200"}, "apps_user": {"nadie"}},
+	} {
+		if resp := post(bad); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("formulario no válido aceptado %v: %d", bad, resp.StatusCode)
+		}
+	}
+	// Borrar: fichero fuera y token revocado.
+	post(url.Values{"action": {"clear"}})
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("no se borró el fichero de claves")
+	}
+	if _, _, ok := h.g.tokens.check(m["APPS_TOKEN"], "hola", time.Now()); ok {
+		t.Fatal("el token del asistente sigue valiendo")
 	}
 }

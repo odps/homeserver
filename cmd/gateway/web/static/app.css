@@ -112,6 +112,7 @@ meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--bad); }
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
 .dot.off { background: var(--border); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
 .badge { font-size: .75rem; padding: .1rem .5rem; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
 .tag { font-size: .72rem; padding: .1rem .45rem; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
 .tag.login { color: var(--ok); }

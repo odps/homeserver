@@ -15,7 +15,7 @@
 <header class="topbar">
   <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
   <nav aria-label="Secciones">
-    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#security">Seguridad</a>
+    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#security">Seguridad</a>
   </nav>
   <form method="post" action="/logout"><button class="ghost">Salir</button></form>
 </header>
@@ -39,6 +39,7 @@
   <section id="phone" class="panel" data-refresh="/panel/frag/phone" data-interval="30">{{template "sec-phone" .}}</section>
   <section id="deploys" class="panel" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
   <section id="users" class="panel" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
+  <section id="asistente" class="panel" data-refresh="/panel/frag/asistente" data-interval="60">{{template "sec-asistente" .}}</section>
   <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
 </main>
 <footer class="container foot">homeserver {{.Version}}</footer>
@@ -239,6 +240,65 @@
 </ul>
 {{end}}
 
+{{define "sec-asistente"}}
+{{$a := .Assistant}}
+<h2>Asistente</h2>
+<p class="muted small">Bot de Telegram que consulta tus apps, busca en internet y guarda notas. Solo responde a tu ID de Telegram. Las claves se guardan en el móvil y no se vuelven a mostrar: solo sus 4 últimos caracteres.</p>
+{{if not $a.Installed}}<p class="flash">La app <code>asistente</code> aún no está desplegada; puedes dejar la configuración preparada.</p>{{end}}
+{{with $a.Status}}
+<ul class="list">
+  <li><span class="dot {{if or $a.Stale .Problems}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow"><strong>{{if .Bot}}@{{.Bot}}{{else}}Bot sin conectar{{end}}</strong>{{with .Model}} · <span class="mono small">{{.}}</span>{{end}}<br>
+    <span class="muted small">{{if $a.Stale}}Sin noticias del asistente desde {{date .UpdatedAt}}: ¿está parado?{{else}}Hoy {{.Today}} de {{.Limit}} peticiones al modelo{{if not .LastChat.IsZero}} · último mensaje {{date .LastChat}}{{end}}{{end}}</span></span></li>
+  {{range .Problems}}<li><span class="dot warn" aria-hidden="true"></span><span class="grow small">{{.}}</span></li>{{end}}
+  {{with .Tools}}<li><span class="grow muted small">Herramientas: {{join . ", "}}</span></li>{{end}}
+</ul>
+{{end}}
+<details{{if not $a.Masked.TELEGRAM_TOKEN}} open{{end}}>
+  <summary>Configurar</summary>
+  <form method="post" action="/panel/asistente" class="stack" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
+    <fieldset><legend>Telegram</legend>
+      <label>Token del bot (de @BotFather){{with $a.Masked.TELEGRAM_TOKEN}} · guardado {{.}}{{end}}
+        <input name="telegram_token" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.TELEGRAM_TOKEN}}Déjalo vacío para no cambiarlo{{else}}123456:ABC…{{end}}"></label>
+      <label>Tu ID de Telegram (el bot te lo dice si le escribes)
+        <input name="telegram_user" inputmode="numeric" pattern="[0-9]{3,15}" value="{{$a.Values.TELEGRAM_USER_ID}}" placeholder="123456789"></label>
+    </fieldset>
+    <fieldset><legend>Modelo de IA</legend>
+      <label>Proveedor
+        <select name="provider">
+          {{range $a.Providers}}<option value="{{.}}"{{if eq . $a.Values.LLM_PROVIDER}} selected{{end}}>{{if eq . "groq"}}Groq (gratis, recomendado){{else if eq . "gemini"}}Google Gemini (capa gratuita usa tus datos){{else if eq . "openrouter"}}OpenRouter{{else}}Otro compatible con OpenAI{{end}}</option>{{end}}
+        </select></label>
+      <label>Dirección (solo «Otro»)<input name="llm_base_url" type="url" value="{{if eq $a.Values.LLM_PROVIDER "custom"}}{{$a.Values.LLM_BASE_URL}}{{end}}" placeholder="https://…/v1"></label>
+      <label>Modelo (vacío: el asistente elige uno adecuado)
+        <input name="llm_model" value="{{$a.Values.LLM_MODEL}}" list="asistente-modelos" placeholder="automático">
+        {{with $a.Status}}<datalist id="asistente-modelos">{{range .Models}}<option value="{{.}}">{{end}}</datalist>{{end}}</label>
+      <label>Clave del proveedor{{with $a.Masked.LLM_API_KEY}} · guardada {{.}}{{end}}
+        <input name="llm_key" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.LLM_API_KEY}}Déjala vacía para no cambiarla{{else}}gsk_…{{end}}"></label>
+      <label>Límite de peticiones al día<input name="daily_limit" type="number" min="10" max="5000" value="{{$a.Values.DAILY_LIMIT}}"></label>
+    </fieldset>
+    <fieldset><legend>Búsqueda web</legend>
+      <label>Clave de Brave Search (opcional; sin ella usa DuckDuckGo){{with $a.Masked.BRAVE_API_KEY}} · guardada {{.}}{{end}}
+        <input name="brave_key" type="password" autocomplete="new-password" placeholder="opcional"></label>
+      {{if $a.Masked.BRAVE_API_KEY}}<label class="check"><input type="checkbox" name="clear_brave_key" value="1"> Quitar la clave de Brave</label>{{end}}
+    </fieldset>
+    <fieldset><legend>Apps</legend>
+      <label>Usar las apps como
+        <select name="apps_user"><option value="">Nadie (sin acceso a las apps)</option>
+          {{range .Users}}{{if not .Disabled}}<option value="{{.Username}}"{{if eq .Username $a.Values.APPS_USER}} selected{{end}}>{{.Name}} ({{.Username}})</option>{{end}}{{end}}
+        </select></label>
+      <p class="muted small">Se crea un token «asistente» en nombre de esa cuenta, solo para sus apps; lo puedes revocar en Seguridad.</p>
+    </fieldset>
+    <button class="primary">Guardar</button>
+  </form>
+  {{if or $a.Masked.TELEGRAM_TOKEN $a.Masked.LLM_API_KEY}}
+  <form method="post" action="/panel/asistente" data-confirm="¿Borrar todas las claves del asistente y revocar su token?">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="clear">
+    <button class="ghost small">Borrar todas las claves</button>
+  </form>
+  {{end}}
+</details>
+{{end}}
 {{define "sec-users"}}
 <h2>Usuarios de las apps</h2>
 <p class="muted small">Entran en las apps con usuario y contraseña (sin 2FA) y la sesión dura mientras usen la app (90 días sin uso). No tienen acceso a este panel.</p>

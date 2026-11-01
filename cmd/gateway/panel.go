@@ -43,6 +43,7 @@ type panelData struct {
 	AppSess   []session // sesiones abiertas de las cuentas de apps
 	NewSecret string    // contraseña temporal recién creada (se muestra una vez)
 	SecretFor string
+	Assistant assistantView
 }
 
 // sections dice qué datos necesita cada fragmento, para no recoger de más.
@@ -67,6 +68,10 @@ var sections = map[string]func(g *gateway, r *http.Request, d *panelData){
 		}
 		sort.Slice(d.Tokens, func(i, j int) bool { return d.Tokens[i].Name < d.Tokens[j].Name })
 		d.AppNames = g.appNames()
+		d.Users, _ = g.users.list()
+	},
+	"asistente": func(g *gateway, r *http.Request, d *panelData) {
+		d.Assistant = g.assistantView()
 		d.Users, _ = g.users.list()
 	},
 	"users": func(g *gateway, r *http.Request, d *panelData) {
@@ -119,6 +124,7 @@ var flashes = map[string]string{
 	"usuario":    "Usuario actualizado.",
 	"borrado":    "Usuario borrado.",
 	"appsesion":  "Sesión cerrada.",
+	"asistente":  "Configuración del asistente guardada.",
 	"error":      "No se pudo completar la acción; mira la auditoría.",
 }
 
