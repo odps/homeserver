@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -71,8 +72,54 @@ type booksOut struct {
 }
 
 type searchIn struct {
-	Texto  string `json:"texto,omitempty" jsonschema:"título, autor, género o serie (vacío: todos)"`
-	Estado string `json:"estado,omitempty" jsonschema:"pendiente, leyendo o leido"`
+	Texto  string   `json:"texto,omitempty" jsonschema:"palabras del título, autor, género o serie; sin acentos ni mayúsculas que importen (vacío: todos)"`
+	Varios []string `json:"varios,omitempty" jsonschema:"varias búsquedas a la vez, una por libro (p. ej. apellidos de autores); sustituye a texto"`
+	Estado string   `json:"estado,omitempty" jsonschema:"pendiente, leyendo o leido"`
+}
+
+type searchGroup struct {
+	Texto  string        `json:"texto"`
+	Libros []bookSummary `json:"libros"`
+}
+
+type searchOut struct {
+	Libros      []bookSummary `json:"libros,omitempty"`
+	PorBusqueda []searchGroup `json:"por_busqueda,omitempty"`
+	Nota        string        `json:"nota,omitempty"`
+}
+
+const notFoundHint = "Sin resultados. Prueba con el apellido del autor o con una palabra del título en su idioma original. Si quiere conseguirlo, búscalo en las bibliotecas libres con libros_catalogo_buscar."
+
+type catalogSearchIn struct {
+	Texto  string `json:"texto" jsonschema:"título y/o autor (mejor en el idioma original o en inglés)"`
+	Idioma string `json:"idioma,omitempty" jsonschema:"es, en, fr, de, it, pt o ca (vacío: cualquiera)"`
+}
+
+type catalogHit struct {
+	Fuente   string   `json:"fuente"`
+	ID       string   `json:"id"`
+	Title    string   `json:"titulo"`
+	Authors  []string `json:"autores"`
+	Language string   `json:"idioma,omitempty"`
+	Year     string   `json:"año,omitempty"`
+	BookID   int64    `json:"ya_en_biblioteca,omitempty"`
+}
+
+type catalogOut struct {
+	Resultados   []catalogHit `json:"resultados"`
+	SinRespuesta []string     `json:"fuentes_sin_respuesta,omitempty"`
+	Nota         string       `json:"nota,omitempty"`
+}
+
+type importIn struct {
+	Fuente      string `json:"fuente" jsonschema:"gutenberg, wikisource o archive (de libros_catalogo_buscar)"`
+	ID          string `json:"id" jsonschema:"id del resultado de libros_catalogo_buscar"`
+	Visibilidad string `json:"visibilidad,omitempty" jsonschema:"privado (por defecto) o compartido"`
+}
+
+type importOut struct {
+	Libro     bookSummary `json:"libro"`
+	YaLoTenia bool        `json:"ya_lo_tenia"`
 }
 
 type idIn struct {
@@ -84,7 +131,8 @@ type statusIn struct {
 	Estado string `json:"estado" jsonschema:"pendiente, leyendo o leido"`
 }
 
-func addTools(server *mcp.Server, s store, ss seriesStore) {
+func addTools(server *mcp.Server, a *api, ss seriesStore) {
+	s := a.store
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_leyendo", Description: "Libros que se están leyendo, con el porcentaje, el último dispositivo y cuándo"},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, booksOut, error) {
 			who, err := identity(req)
@@ -94,17 +142,87 @@ func addTools(server *mcp.Server, s store, ss seriesStore) {
 			books, err := s.list(ctx, who, listQuery{Status: "leyendo", Sort: "recent", Limit: 20})
 			return nil, toOut(books, false), err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "libros_buscar", Description: "Busca en la biblioteca por texto y/o estado"},
-		func(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, booksOut, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_buscar", Description: "Busca en la biblioteca de la persona por palabras (todas deben aparecer en título, autor, género o serie) y/o estado. Con «varios» comprueba varios libros en una sola llamada."},
+		func(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, searchOut, error) {
 			who, err := identity(req)
 			if err != nil {
-				return nil, booksOut{}, err
+				return nil, searchOut{}, err
 			}
 			if in.Estado != "" && !statuses[in.Estado] {
-				return nil, booksOut{}, errors.New("estado no válido: pendiente, leyendo o leido")
+				return nil, searchOut{}, errors.New("estado no válido: pendiente, leyendo o leido")
+			}
+			if len(in.Varios) > 0 {
+				if len(in.Varios) > 15 {
+					in.Varios = in.Varios[:15]
+				}
+				var out searchOut
+				found := false
+				for _, t := range in.Varios {
+					books, err := s.list(ctx, who, listQuery{Text: t, Status: in.Estado, Sort: "recent", Limit: 5})
+					if err != nil {
+						return nil, searchOut{}, err
+					}
+					g := searchGroup{Texto: t, Libros: toOut(books, false).Libros}
+					found = found || len(books) > 0
+					out.PorBusqueda = append(out.PorBusqueda, g)
+				}
+				if !found {
+					out.Nota = notFoundHint
+				}
+				return nil, out, nil
 			}
 			books, err := s.list(ctx, who, listQuery{Text: in.Texto, Status: in.Estado, Sort: "recent", Limit: 50})
-			return nil, toOut(books, false), err
+			out := searchOut{Libros: toOut(books, false).Libros}
+			if err == nil && len(books) == 0 {
+				out.Nota = notFoundHint
+			}
+			return nil, out, err
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_catalogo_buscar", Description: "Busca libros gratuitos y legales (dominio público o licencia libre) en Project Gutenberg, Wikisource e Internet Archive. Es la única forma de conseguir un libro: si no aparece aquí, no está disponible gratis legalmente."},
+		func(ctx context.Context, req *mcp.CallToolRequest, in catalogSearchIn) (*mcp.CallToolResult, catalogOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, catalogOut{}, err
+			}
+			if strings.TrimSpace(in.Texto) == "" {
+				return nil, catalogOut{}, errors.New("falta el texto a buscar")
+			}
+			p, err := a.catalog.search(ctx, "todas", in.Texto, in.Idioma, 1)
+			if err != nil {
+				return nil, catalogOut{}, err
+			}
+			keys := make([]string, len(p.Items))
+			for i, it := range p.Items {
+				keys[i] = it.Source + ":" + it.ID
+			}
+			have, err := s.idsBySource(ctx, who, keys)
+			if err != nil {
+				return nil, catalogOut{}, err
+			}
+			out := catalogOut{Resultados: []catalogHit{}, SinRespuesta: p.Failed}
+			for i, it := range p.Items {
+				if i == 10 {
+					break
+				}
+				out.Resultados = append(out.Resultados, catalogHit{Fuente: it.Source, ID: it.ID, Title: it.Title, Authors: it.Authors,
+					Language: it.Language, Year: it.Year, BookID: have[keys[i]]})
+			}
+			if len(out.Resultados) == 0 {
+				out.Nota = "No está en las bibliotecas libres: no se puede conseguir gratis de forma legal. Prueba con el título original o el apellido del autor antes de darlo por perdido."
+			}
+			return nil, out, nil
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_anadir", Description: "Descarga a la biblioteca de la persona un libro encontrado con libros_catalogo_buscar"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in importIn) (*mcp.CallToolResult, importOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, importOut{}, err
+			}
+			b, dup, err := a.importBook(ctx, who, in.Fuente, in.ID, in.Visibilidad)
+			if err != nil {
+				return nil, importOut{}, err
+			}
+			return nil, importOut{Libro: summarize(b, false), YaLoTenia: dup}, nil
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "libros_detalle", Description: "Metadatos y descripción de un libro"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, bookSummary, error) {

@@ -88,13 +88,10 @@ func (t telegram) updates(ctx context.Context, offset int64, wait time.Duration)
 
 // send manda un texto con el formato HTML de Telegram, en trozos si es largo.
 // Si Telegram rechaza el formato, lo manda como texto plano.
-func (t telegram) send(ctx context.Context, chat int64, markdown string) error {
-	for _, part := range splitMessage(markdown, 3500) {
-		err := t.call(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": toTelegramHTML(part), "parse_mode": "HTML",
+func (t telegram) send(ctx context.Context, chat int64, text string) error {
+	for _, part := range splitMessage(plainText(text), 3500) {
+		err := t.call(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": part,
 			"link_preview_options": map[string]bool{"is_disabled": true}}, nil)
-		if err != nil && !errors.Is(err, errUnauthorized) {
-			err = t.call(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": part}, nil)
-		}
 		if err != nil {
 			return err
 		}

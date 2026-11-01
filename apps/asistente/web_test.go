@@ -55,12 +55,12 @@ func TestSearchAndRead(t *testing.T) {
 }
 
 func TestTelegramFormat(t *testing.T) {
-	in := "# Título\n**negrita** y *cursiva* con <script> & [enlace](https://a.es/x?b=1&c=2)\n- uno\n```\ncódigo <b>\n```"
-	got := toTelegramHTML(in)
-	for _, want := range []string{"<b>Título</b>", "<b>negrita</b>", "<i>cursiva</i>", "&lt;script&gt; &amp;", `<a href="https://a.es/x?b=1&amp;c=2">enlace</a>`, "• uno", "<pre>código &lt;b&gt;</pre>"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("falta %q en %q", want, got)
-		}
+	// Si al modelo se le escapa Markdown, llega como texto plano.
+	in := "# Título\n**negrita** y *cursiva* con <script> & [[fuente]](https://a.es/x?b=1&c=2)\n- uno\n> cita\n\n| Libro | Autor |\n|---|---|\n| On War | Clausewitz |\n| El príncipe | Maquiavelo |\n```\ncódigo\n```"
+	got := plainText(in)
+	want := "Título\nnegrita y cursiva con <script> & fuente (https://a.es/x?b=1&c=2)\n• uno\ncita\n\n• On War — Clausewitz\n• El príncipe — Maquiavelo\ncódigo"
+	if got != want {
+		t.Errorf("texto plano:\n%s\nesperado:\n%s", got, want)
 	}
 	parts := splitMessage(strings.Repeat("palabra ", 1000)+"\n\n"+strings.Repeat("otra ", 500), 3500)
 	for _, p := range parts {

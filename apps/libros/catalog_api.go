@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"html"
@@ -75,7 +76,6 @@ func (a *api) catalogCover(w http.ResponseWriter, r *http.Request, _ app.Identit
 // catalogImport descarga un libro de una fuente pública directamente a la
 // biblioteca de la persona (no pasa por su dispositivo).
 func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Identity) {
-	ctx := r.Context()
 	var in struct {
 		Source     string `json:"source"`
 		ID         string `json:"id"`
@@ -85,21 +85,33 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 		a.fail(w, bad("datos no válidos"))
 		return
 	}
-	dl, err := a.catalog.resolve(ctx, in.Source, in.ID)
+	b, duplicate, err := a.importBook(r.Context(), who, in.Source, in.ID, in.Visibility)
 	if err != nil {
 		a.catalogFail(w, err)
 		return
 	}
+	status := http.StatusCreated
+	if duplicate {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{"book": b, "duplicate": duplicate})
+}
+
+// importBook trae un libro del catálogo a la biblioteca (también lo usa la
+// tool MCP). Si ya estaba, devuelve el que había.
+func (a *api) importBook(ctx context.Context, who app.Identity, source, id, visibility string) (Book, bool, error) {
+	dl, err := a.catalog.resolve(ctx, source, id)
+	if err != nil {
+		return Book{}, false, err
+	}
 	resp, err := a.catalog.get(ctx, dl.url)
 	if err != nil {
-		a.catalogFail(w, err)
-		return
+		return Book{}, false, err
 	}
 	up, err := a.files.receive(resp.Body, maxBookBytes)
 	resp.Body.Close()
 	if err != nil {
-		a.catalogFail(w, bad("%s", err))
-		return
+		return Book{}, false, bad("%s", err)
 	}
 	defer func() {
 		if up != nil {
@@ -107,22 +119,18 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 		}
 	}()
 	if existing, err := a.store.findCopy(ctx, who, up.sha256); err == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"book": existing, "duplicate": true})
-		return
+		return existing, true, nil
 	} else if !errors.Is(err, errNotFound) {
-		a.fail(w, err)
-		return
+		return Book{}, false, err
 	}
 	format, err := detectFormat(up, dl.fileName)
 	if err != nil {
-		a.fail(w, bad("la fuente no ha devuelto un libro válido: %s", err))
-		return
+		return Book{}, false, bad("la fuente no ha devuelto un libro válido: %s", err)
 	}
-	visibility := in.Visibility
 	if !visibilities[visibility] {
 		visibility = "privado"
 	}
-	src := in.Source + ":" + in.ID
+	src := source + ":" + id
 	b := Book{SHA256: up.sha256, Format: format, FileName: clean(dl.fileName, 300), Size: up.size, Owner: who.User, Visibility: visibility, Source: &src}
 
 	// Metadatos: los de la fuente y, donde falten, los del propio EPUB.
@@ -135,7 +143,7 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 	if len(meta.Authors) == 0 {
 		meta.Authors = em.Authors
 	}
-	if meta.Title == "" || in.Source == "wikisource" && em.Title != "" {
+	if meta.Title == "" || source == "wikisource" && em.Title != "" {
 		meta.Title = em.Title
 	}
 	if meta.Language == "" {
@@ -152,8 +160,7 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 		b.Title = "Sin título"
 	}
 	if err := a.files.commit(up, b); err != nil {
-		a.fail(w, err)
-		return
+		return Book{}, false, err
 	}
 	up = nil
 
@@ -167,19 +174,17 @@ func (a *api) catalogImport(w http.ResponseWriter, r *http.Request, who app.Iden
 	} else if a.files.hasCover(b) {
 		b.HasCover = true
 	}
-	id, err := a.store.insert(ctx, b)
+	newID, err := a.store.insert(ctx, b)
 	if err != nil {
 		a.removeFileIfUnused(ctx, b)
-		a.fail(w, err)
-		return
+		return Book{}, false, err
 	}
-	saved, err := a.store.get(ctx, who, id)
+	saved, err := a.store.get(ctx, who, newID)
 	if err != nil {
-		a.fail(w, err)
-		return
+		return Book{}, false, err
 	}
-	a.log.Info("libro importado", "id", id, "usuario", who.User, "fuente", src, "titulo", b.Title, "bytes", b.Size)
-	writeJSON(w, http.StatusCreated, map[string]any{"book": saved, "duplicate": false})
+	a.log.Info("libro importado", "id", newID, "usuario", who.User, "fuente", src, "titulo", b.Title, "bytes", b.Size)
+	return saved, false, nil
 }
 
 // stripTags quita etiquetas HTML sencillas de las descripciones de los EPUB.

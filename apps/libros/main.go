@@ -38,6 +38,6 @@ func setup(env *app.Env) error {
 	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false), series: series}
 	a.routes(env.Mux)
 	serveWeb(env.Mux)
-	addTools(env.MCP, a.store, series.store)
+	addTools(env.MCP, a, series.store)
 	return nil
 }

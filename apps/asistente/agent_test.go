@@ -189,7 +189,7 @@ func TestAgentConversation(t *testing.T) {
 	}
 	// La conversación se recuerda (sistema + 2 turnos por pregunta + la nueva) y /nuevo la olvida.
 	a.handle(ctx, tg, c, msg(42, "hola"))
-	if !strings.Contains(tgf.last(), "Recuerdo 6 mensajes") || !strings.Contains(tgf.last(), "<b>Hola</b>") {
+	if !strings.Contains(tgf.last(), "Recuerdo 6 mensajes") || !strings.HasPrefix(tgf.last(), "Hola, ") {
 		t.Fatalf("historial o formato: %q", tgf.last())
 	}
 	a.handle(ctx, tg, c, msg(42, "/nuevo"))

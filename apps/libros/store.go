@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -104,6 +106,36 @@ func canEdit(b Book, who app.Identity) bool {
 	return b.Owner == who.User || (who.IsAdmin() && (b.Visibility == "compartido" || b.Owner == ""))
 }
 
+// La búsqueda de texto no distingue mayúsculas ni acentos y exige todas las
+// palabras, en cualquier orden y en cualquiera de los campos: «principe
+// maquiavelo» encuentra «El príncipe» de Nicolás Maquiavelo.
+const (
+	// Con locale C, lower() de PostgreSQL solo cambia las letras ASCII: las
+	// mayúsculas acentuadas también van en la tabla.
+	accented   = "áàâäãåéèêëíìîïóòôöõúùûüñçÁÀÂÄÃÅÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÑÇ"
+	unaccented = "aaaaaaeeeeiiiiooooouuuuncaaaaaaeeeeiiiiooooouuuunc"
+	searchable = `translate(lower(b.title || ' ' || array_to_string(b.authors, ' ') || ' ' || array_to_string(b.genres, ' ') || ' ' || coalesce(b.series, '')), '` + accented + `', '` + unaccented + `')`
+)
+
+var unaccent = func() *strings.Replacer {
+	from, to := []rune(accented), []rune(unaccented)
+	var pairs []string
+	for i := range from {
+		pairs = append(pairs, string(from[i]), string(to[i]))
+	}
+	return strings.NewReplacer(pairs...)
+}()
+
+func searchWords(text string) []string {
+	words := []string{}
+	for _, w := range strings.FieldsFunc(unaccent.Replace(strings.ToLower(text)), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		words = append(words, w)
+	}
+	return words
+}
+
 type listQuery struct {
 	Text   string
 	Status string
@@ -126,11 +158,10 @@ func (s store) list(ctx context.Context, who app.Identity, q listQuery) ([]Book,
 	}
 	rows, err := s.db.Query(ctx, `SELECT `+bookCols+` FROM books b `+personal+`
 		WHERE `+visible+`
-		  AND ($2 = '' OR b.title ILIKE '%' || $2 || '%' OR array_to_string(b.authors, ' ') ILIKE '%' || $2 || '%'
-		       OR array_to_string(b.genres, ' ') ILIKE '%' || $2 || '%' OR coalesce(b.series, '') ILIKE '%' || $2 || '%')
+		  AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) w WHERE strpos(`+searchable+`, w) = 0)
 		  AND ($3 = '' OR coalesce(r.status, 'pendiente') = $3)
 		  AND ($4 = '' OR ($4 = 'mine' AND b.owner = $1) OR ($4 = 'shared' AND b.visibility = 'compartido'))
-		ORDER BY `+order+` LIMIT $5`, who.User, q.Text, q.Status, q.Scope, q.Limit)
+		ORDER BY `+order+` LIMIT $5`, who.User, searchWords(q.Text), q.Status, q.Scope, q.Limit)
 	if err != nil {
 		return nil, err
 	}

@@ -60,10 +60,12 @@ func (l llm) text(m chatMessage) string {
 	return s
 }
 
-func (l llm) chat(ctx context.Context, msgs []chatMessage, tools []toolDef) (chatMessage, llmUsage, error) {
+// chat pide la siguiente respuesta. choice es «auto» o «none» (contestar ya,
+// sin más herramientas).
+func (l llm) chat(ctx context.Context, msgs []chatMessage, tools []toolDef, choice string) (chatMessage, llmUsage, error) {
 	req := map[string]any{"model": l.model, "messages": msgs, "max_tokens": 2048, "temperature": 0.3}
 	if len(tools) > 0 {
-		req["tools"], req["tool_choice"] = tools, "auto"
+		req["tools"], req["tool_choice"] = tools, choice
 	}
 	var out struct {
 		Choices []struct {
