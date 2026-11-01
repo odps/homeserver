@@ -305,7 +305,7 @@ func (a *api) upload(w http.ResponseWriter, r *http.Request, who app.Identity) {
 		return
 	}
 	up = nil
-	if cover != nil && a.files.saveCover(b, bytes.NewReader(cover)) == nil {
+	if cover != nil && !blankCover(cover) && a.files.saveCover(b, bytes.NewReader(cover)) == nil {
 		b.HasCover = true
 	} else if a.files.hasCover(b) {
 		b.HasCover = true // otra persona ya subió este fichero con portada

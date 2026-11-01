@@ -398,3 +398,27 @@ func (s store) markMetaChecked(ctx context.Context, id int64) error {
 	_, err := s.db.Exec(ctx, `UPDATE books SET meta_checked_at = now() WHERE id = $1`, id)
 	return err
 }
+
+// coveredBooks devuelve id → sha256 de los libros con portada.
+func (s store) coveredBooks(ctx context.Context) (map[int64]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT id, sha256 FROM books WHERE has_cover`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var sha string
+		if err := rows.Scan(&id, &sha); err != nil {
+			return nil, err
+		}
+		out[id] = sha
+	}
+	return out, rows.Err()
+}
+
+func (s store) resetMetaChecked(ctx context.Context, id int64) error {
+	_, err := s.db.Exec(ctx, `UPDATE books SET meta_checked_at = NULL WHERE id = $1`, id)
+	return err
+}

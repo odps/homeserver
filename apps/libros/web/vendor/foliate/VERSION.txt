@@ -1,4 +1,8 @@
 foliate-js (MIT) — https://github.com/johnfactotum/foliate-js
 commit 78914aef4466eb960965702401634c2cb348e9b1 (2026-05-01)
 Incluye pdf.js (Apache-2.0), zip.js (BSD-3-Clause) y fflate (MIT).
+vendor/pdfjs/wasm/: los decodificadores WebAssembly de pdfjs-dist 5.5.207 (npm,
+integridad sha512 comprobada): OpenJPEG (BSD-2), JBIG2 de PDFium (BSD-3) y qcms
+(MIT), con sus licencias. Sin ellos, las imágenes JPEG 2000 y JBIG2 de los PDF
+(portadas y páginas escaneadas) salen en blanco.
 Sin reader.js, ficheros .map ni configuración de desarrollo.

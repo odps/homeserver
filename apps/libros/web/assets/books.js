@@ -331,30 +331,25 @@ function openEdit(book) {
   }
   const found = h('div', { class: 'found', hidden: true })
   const isbnInput = h('input', { type: 'text', name: 'isbn', inputmode: 'numeric', value: book.isbn ?? '', placeholder: '978…' })
-  const lookup = async e => {
-    const btn = e.currentTarget
-    const v = isbnInput.value.trim()
-    if (!v) return toast('Escribe el ISBN')
-    btn.disabled = true
-    try {
-      const info = await api(`api/isbn/${encodeURIComponent(v)}`)
-      isbnInput.value = info.isbn
-      showFound(info, `isbn=${encodeURIComponent(info.isbn)}`)
-    } catch (err) { toast(err.message) }
-    btn.disabled = false
-  }
-  // Búsqueda por título y autor: varios resultados para elegir.
+  // Busca con lo que haya en el formulario: por ISBN (si lo hay) y por título
+  // y autor a la vez, y enseña todos los resultados para elegir.
   const searchWeb = async e => {
     const btn = e.currentTarget
     const title = form.elements.title.value.trim()
-    if (!title) return toast('Escribe el título')
     const author = form.elements.authors.value.split(',')[0].trim()
+    const isbn = isbnInput.value.trim()
+    if (!title && !isbn) return toast('Escribe el título o el ISBN')
     btn.disabled = true
     found.hidden = false
     found.replaceChildren(h('p', { class: 'meta' }, 'Buscando…'))
     try {
-      const { items } = await api(`api/meta/buscar?${new URLSearchParams({ title, author })}`)
-      if (!items.length) found.replaceChildren(h('p', { class: 'meta' }, 'Sin resultados. Prueba con el título original o sin el autor.'),
+      const [byISBN, byTitle] = await Promise.allSettled([
+        isbn ? api(`api/isbn/${encodeURIComponent(isbn)}`) : Promise.resolve(null),
+        title ? api(`api/meta/buscar?${new URLSearchParams({ title, author })}`) : Promise.resolve({ items: [] }),
+      ])
+      if (byISBN.status === 'rejected' && byTitle.status === 'rejected') throw byTitle.reason
+      const items = [...(byISBN.value ? [byISBN.value] : []), ...(byTitle.value?.items ?? [])]
+      if (!items.length) found.replaceChildren(h('p', { class: 'meta' }, 'Sin resultados. Prueba con el título original, sin el autor o con el ISBN.'),
         h('button', { type: 'button', class: 'btn small', onclick: () => { found.hidden = true } }, 'Cerrar'))
       else found.replaceChildren(h('strong', {}, 'Elige el que corresponde'),
         h('ul', { class: 'results' }, ...items.map(it => h('li', {},
@@ -425,10 +420,9 @@ function openEdit(book) {
       coverInput),
     h('label', { class: 'full' }, 'Título', f('title')),
     h('label', { class: 'full' }, 'Autores (separados por comas)', f('authors')),
-    h('div', { class: 'full' }, h('button', { type: 'button', class: 'btn small', onclick: searchWeb }, icon('search'), 'Buscar datos en internet por título y autor')),
-    h('label', { class: 'full' }, 'ISBN',
-      h('div', { class: 'inline' }, isbnInput,
-        h('button', { type: 'button', class: 'btn small', onclick: lookup }, icon('search'), 'Buscar por ISBN'))),
+    h('label', { class: 'full' }, 'ISBN (opcional)', isbnInput),
+    h('div', { class: 'full' }, h('button', { type: 'button', class: 'btn small', onclick: searchWeb }, icon('search'), 'Buscar datos en internet'),
+      h('p', { class: 'meta' }, 'Con el título, el autor y el ISBN que haya escritos; eliges el resultado que corresponde.')),
     found,
     h('label', { class: 'full' }, 'Géneros (separados por comas)', f('genres')),
     h('label', {}, 'Serie', f('series')),

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"homeserver/platform/app"
 )
@@ -78,9 +79,78 @@ func lang2(code string) string {
 	return ""
 }
 
+// searchAuthor deja el autor como lo esperan los buscadores: sin fechas y
+// en orden natural («Navarro, Joe, 1953-» → «Joe Navarro»).
+func searchAuthor(a string) string {
+	a = strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return -1
+		}
+		return r
+	}, a)
+	parts := strings.Split(a, ",")
+	var keep []string
+	for _, p := range parts {
+		if p = strings.Trim(strings.TrimSpace(p), "-–. "); p != "" {
+			keep = append(keep, p)
+		}
+	}
+	switch {
+	case len(keep) == 0:
+		return ""
+	case len(keep) >= 2 && unicode.IsUpper([]rune(keep[1])[0]): // «Apellido, Nombre»
+		return clean(keep[1]+" "+keep[0], 120)
+	default: // «Sunzi, active 6th century B.C.»: lo de detrás no es un nombre
+		return clean(keep[0], 120)
+	}
+}
+
+// blankCover: una portada casi de un solo color (las páginas que el navegador
+// no supo dibujar salen en blanco). Se trata como si no hubiera portada.
+func blankCover(data []byte) bool {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	b := img.Bounds()
+	if b.Dx() == 0 || b.Dy() == 0 {
+		return true
+	}
+	var lo, hi [3]uint32
+	lo = [3]uint32{1 << 16, 1 << 16, 1 << 16}
+	for y := 0; y < 30; y++ {
+		for x := 0; x < 20; x++ {
+			r, g, bl, _ := img.At(b.Min.X+x*b.Dx()/20, b.Min.Y+y*b.Dy()/30).RGBA()
+			for i, v := range []uint32{r, g, bl} {
+				lo[i], hi[i] = min(lo[i], v), max(hi[i], v)
+			}
+		}
+	}
+	for i := range lo {
+		if hi[i]-lo[i] > 16*257 { // más de 16 niveles de diferencia en algún canal
+			return false
+		}
+	}
+	return true
+}
+
+// markBlankCovers vuelve a poner en la cola los libros con la portada en
+// blanco, para buscarles una.
+func (a *api) markBlankCovers(ctx context.Context) {
+	ids, err := a.store.coveredBooks(ctx)
+	if err != nil {
+		return
+	}
+	for id, sha := range ids {
+		if data, err := os.ReadFile(a.files.coverPath(Book{SHA256: sha})); err == nil && blankCover(data) {
+			a.store.resetMetaChecked(ctx, id)
+		}
+	}
+}
+
 // searchMeta busca por título (y autor, si hay) en las dos fuentes a la vez.
 func (c *catalog) searchMeta(ctx context.Context, title, author string) ([]metaCandidate, error) {
-	title, author = clean(title, 200), clean(author, 120)
+	title, author = clean(title, 200), searchAuthor(author)
 	if title == "" {
 		return nil, bad("falta el título")
 	}
@@ -436,6 +506,11 @@ func (a *api) autofill(ctx context.Context, g metaGap) error {
 	if err != nil || !saved {
 		return err // !saved: alguien lo editó mientras se buscaba; manda lo suyo
 	}
+	if g.HasCover {
+		if cur, err := os.ReadFile(a.files.coverPath(Book{SHA256: g.SHA256})); err == nil && blankCover(cur) {
+			g.HasCover = false // en blanco: como si no tuviera
+		}
+	}
 	if info.coverURL != "" && (!g.HasCover || upgrade) {
 		// Las «sin portada» de las fuentes son imágenes diminutas.
 		if data, _, err := a.catalog.fetchImage(ctx, info.coverURL); err == nil && len(data) > 1000 {
@@ -471,6 +546,7 @@ func (a *api) queueMeta(id int64) {
 func (a *api) metaWorker(ctx context.Context) {
 	tick := time.NewTimer(time.Minute)
 	defer tick.Stop()
+	checkedBlank := false // las portadas en blanco se buscan una vez al arrancar
 	run := func(g metaGap) {
 		cctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
@@ -487,6 +563,10 @@ func (a *api) metaWorker(ctx context.Context) {
 				run(g)
 			}
 		case <-tick.C:
+			if !checkedBlank {
+				a.markBlankCovers(ctx)
+				checkedBlank = true
+			}
 			gaps, err := a.store.needingMeta(ctx, 20)
 			if err != nil {
 				a.log.Warn("libros sin datos", "err", err)

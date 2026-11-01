@@ -246,7 +246,12 @@ func (a *api) isbnLookup(w http.ResponseWriter, r *http.Request, who app.Identit
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, info)
+	// Con referencia a la portada, como los resultados por título.
+	out := metaCandidate{isbnInfo: info, Source: "isbn"}
+	if info.coverURL != "" {
+		out.Ref = a.catalog.rememberCover(info.coverURL)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // putCover cambia la portada: una imagen en el cuerpo, o ?isbn= para usar la

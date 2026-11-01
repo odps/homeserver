@@ -129,3 +129,28 @@ func TestAutofill(t *testing.T) {
 		t.Fatalf("referencia inventada: %d", resp.StatusCode)
 	}
 }
+
+func TestBlankCoverAndAuthor(t *testing.T) {
+	white := image.NewRGBA(image.Rect(0, 0, 400, 600))
+	for i := range white.Pix {
+		white.Pix[i] = 255
+	}
+	white.Set(10, 10, color.RGBA{250, 250, 250, 255}) // ruido de compresión
+	var b bytes.Buffer
+	jpeg.Encode(&b, white, nil)
+	if !blankCover(b.Bytes()) {
+		t.Error("una portada en blanco no se detecta")
+	}
+	if blankCover(bigCover(t)) {
+		t.Error("una portada con dibujo se toma por blanca")
+	}
+	if blankCover([]byte("no es una imagen")) {
+		t.Error("lo que no se puede leer no cuenta como en blanco")
+	}
+	for in, want := range map[string]string{"Navarro, Joe, 1953-": "Joe Navarro", "Hartley, Gregory": "Gregory Hartley",
+		"Carl Gustav Jung": "Carl Gustav Jung", "Sunzi, active 6th century B.C.": "Sunzi", "": ""} {
+		if got := searchAuthor(in); got != want {
+			t.Errorf("searchAuthor(%q) = %q, quería %q", in, got, want)
+		}
+	}
+}

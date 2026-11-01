@@ -123,6 +123,8 @@ export const makePDF = async file => {
         range: transport,
         cMapUrl: pdfjsPath('cmaps/'),
         standardFontDataUrl: pdfjsPath('standard_fonts/'),
+        // Decodificadores de imágenes JPEG 2000, JBIG2 y perfiles de color (WebAssembly).
+        wasmUrl: pdfjsPath('wasm/'),
         isEvalSupported: false,
     }).promise
 
