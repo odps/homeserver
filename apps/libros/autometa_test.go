@@ -147,6 +147,12 @@ func TestBlankCoverAndAuthor(t *testing.T) {
 	if blankCover([]byte("no es una imagen")) {
 		t.Error("lo que no se puede leer no cuenta como en blanco")
 	}
+	for in, want := range map[string]string{"What every BODY is saying : an ex-FBI agent's guide": "What every BODY is saying",
+		"Dune: edición especial": "Dune: edición especial", "Cálculo (volumen 1)": "Cálculo (volumen 1)", "Guía práctica (2.ª ed.)": "Guía práctica"} {
+		if got := mainTitle(in); got != want {
+			t.Errorf("mainTitle(%q) = %q, quería %q", in, got, want)
+		}
+	}
 	for in, want := range map[string]string{"Navarro, Joe, 1953-": "Joe Navarro", "Hartley, Gregory": "Gregory Hartley",
 		"Carl Gustav Jung": "Carl Gustav Jung", "Sunzi, active 6th century B.C.": "Sunzi", "": ""} {
 		if got := searchAuthor(in); got != want {

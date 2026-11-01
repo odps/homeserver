@@ -79,6 +79,18 @@ func lang2(code string) string {
 	return ""
 }
 
+// mainTitle quita el subtítulo para buscar: con «What every BODY is saying :
+// an ex-FBI agent's guide…» los buscadores no encuentran nada; con «What
+// every BODY is saying», sí. Si lo que queda es muy corto, se deja entero.
+func mainTitle(t string) string {
+	if i := strings.IndexAny(t, ":;([—"); i > 0 {
+		if main := strings.TrimSpace(t[:i]); len(strings.Fields(main)) >= 2 {
+			return main
+		}
+	}
+	return t
+}
+
 // searchAuthor deja el autor como lo esperan los buscadores: sin fechas y
 // en orden natural («Navarro, Joe, 1953-» → «Joe Navarro»).
 func searchAuthor(a string) string {
@@ -150,7 +162,7 @@ func (a *api) markBlankCovers(ctx context.Context) {
 
 // searchMeta busca por título (y autor, si hay) en las dos fuentes a la vez.
 func (c *catalog) searchMeta(ctx context.Context, title, author string) ([]metaCandidate, error) {
-	title, author = clean(title, 200), searchAuthor(author)
+	title, author = mainTitle(clean(title, 200)), searchAuthor(author)
 	if title == "" {
 		return nil, bad("falta el título")
 	}
