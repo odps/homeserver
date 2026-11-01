@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -32,6 +33,11 @@ type alertsConfig struct {
 	User      string `json:"user"`       // cuenta de las apps cuyos cómics se vigilan
 	PublicURL string `json:"public_url"` // para enlazar a las apps desde el aviso
 
+	News struct {
+		On         bool   `json:"on"`
+		At         string `json:"at"`          // hora (Madrid) del mensaje
+		PerSection int    `json:"per_section"` // titulares por sección
+	} `json:"news"`
 	Chapters struct {
 		On        bool   `json:"on"`
 		Favorites bool   `json:"favorites"` // solo series favoritas
@@ -76,6 +82,7 @@ func defaultAlerts() alertsConfig {
 	c.Enabled = true
 	c.QuietFrom, c.QuietTo = "23:00", "08:00"
 	c.Chapters.On, c.Chapters.DailyAt = true, "20:00"
+	c.News.On, c.News.At, c.News.PerSection = true, "07:30", 3
 	c.Deploys.Failed = true
 	c.Network.On, c.Network.MinMinutes = true, 3
 	c.Battery.On, c.Battery.Low, c.Battery.High, c.Battery.Unplugged = true, 25, 90, true
@@ -103,8 +110,9 @@ type alertsState struct {
 	Chapters  map[string]float32   `json:"chapters"` // serie → último capítulo avisado
 	Pending   []string             `json:"pending"`  // capítulos para el resumen diario
 	DailySent string               `json:"daily_sent"`
-	Log       []sentAlert          `json:"log"`    // últimos avisos, para el panel
-	Outbox    []sentAlert          `json:"outbox"` // avisos que no se pudieron enviar
+	NewsSent  string               `json:"news_sent"` // día del último digest de noticias enviado
+	Log       []sentAlert          `json:"log"`       // últimos avisos, para el panel
+	Outbox    []sentAlert          `json:"outbox"`    // avisos que no se pudieron enviar
 }
 
 type alerter struct {
@@ -218,6 +226,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 		g.alertPhone(ctx, c, &s, add)
 		g.alertApps(ctx, c, &s, now, add)
 		g.alertBackups(c, &s, now, add)
+		g.alertNews(ctx, c, &s, now, add)
 		if now.Sub(a.chaptersAt) >= 10*time.Minute {
 			a.chaptersAt = now
 			g.alertChapters(ctx, c, &s, add)
@@ -377,6 +386,49 @@ func (g *gateway) alertBackups(c alertsConfig, s *alertsState, now time.Time, ad
 	s.cond("copias_pc", on && c.Backups.PCDays > 0, late, !late,
 		fmt.Sprintf("El PC lleva más de %d %s sin recoger las copias de seguridad (última vez: %s). Enciéndelo con Tailscale activo.", c.Backups.PCDays, plural(c.Backups.PCDays, "día", "días"), last),
 		"El PC ha vuelto a recoger las copias de seguridad.", add)
+}
+
+// alertNews manda una vez al día, a su hora, los titulares del digest de
+// noticias de la cuenta elegida (si tiene la app). Si la app aún no lo tiene
+// listo, se reintenta cada minuto hasta mediodía.
+func (g *gateway) alertNews(ctx context.Context, c alertsConfig, s *alertsState, now time.Time, add func(kind, text string)) {
+	local := now.In(madrid)
+	day, hm := local.Format("2006-01-02"), local.Format("15:04")
+	if !c.News.On || c.User == "" || s.NewsSent == day || hm < c.News.At || hm >= "12:00" {
+		return
+	}
+	app, ok := g.apps["noticias"]
+	u, okUser := g.users.get(c.User)
+	if !ok || !okUser || !u.allows("noticias") {
+		return
+	}
+	per := c.News.PerSection
+	if per <= 0 {
+		per = 3
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/api/digest/texto?por_seccion=%d", app.Port, per), nil)
+	setAuthHeaders(req, c.User, u.Name, u.Role)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	text := strings.TrimSpace(string(b))
+	if resp.StatusCode != http.StatusOK || text == "" {
+		return
+	}
+	s.NewsSent = day
+	// Telegram admite unos 4000 caracteres por mensaje: el resto, en la app.
+	if r := []rune(text); len(r) > 3600 {
+		text = strings.TrimSpace(string(r[:3600])) + "\n…"
+	}
+	if c.PublicURL != "" {
+		text += "\n\nEl digest completo: " + c.PublicURL + "/noticias/"
+	}
+	add("noticias", "Buenos días. Tus noticias de hoy:\n\n"+text)
 }
 
 // alertApps avisa de una app que lleva un rato sin responder, y cuando vuelve.

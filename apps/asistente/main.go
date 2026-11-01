@@ -44,5 +44,6 @@ func setup(env *app.Env) error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write([]byte("Asistente del homeserver: se usa desde Telegram y se configura en el panel.\n"))
 	})
+	env.Mux.HandleFunc("POST /interno/resumir", a.internalSummary)
 	return nil
 }

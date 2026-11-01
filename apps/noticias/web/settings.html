@@ -1,0 +1,55 @@
+{{define "settings.html"}}{{template "head" .}}
+<section class="intro"><h1>Ajustes</h1><p class="meta">Tu digest: lo más importante del día y una sección por cada interés.</p></section>
+
+<section class="card">
+  <h2>Intereses</h2>
+  <p class="meta">Cada interés es una sección. Se llena con lo que publiquen los medios sobre las palabras que pongas (búsqueda de Google News) y con los feeds RSS que le añadas.</p>
+  {{range .Topics}}
+  <details class="topic">
+    <summary><strong>{{.Name}}</strong> <span class="meta">{{if .Query}}«{{.Query}}»{{else}}solo feeds{{end}}{{with .Feeds}} · {{len .}} feed{{if gt (len .) 1}}s{{end}}{{end}}</span></summary>
+    <form method="post" action="{{$.Base}}/temas/{{.ID}}" class="stack">
+      <label>Nombre<input name="name" value="{{.Name}}" maxlength="60" required></label>
+      <label>Buscar en las noticias (vacío: solo sus feeds)<input name="query" value="{{.Query}}" maxlength="120" placeholder="p. ej. inteligencia artificial"></label>
+      <div class="row"><button name="action" value="save">Guardar</button><button name="action" value="delete" class="ghost">Borrar interés</button></div>
+    </form>
+    <ul class="feeds">
+      {{range .Feeds}}{{$st := index $.Feeds .URL}}
+      <li><span class="url">{{with $st.Title}}{{.}}{{else}}Feed{{end}}</span><span class="meta small">{{.URL}}{{with $st.Error}} · <em>falla: {{.}}</em>{{end}}</span>
+        <form method="post" action="{{$.Base}}/feeds/{{.ID}}/borrar" class="inline"><button class="link">Quitar</button></form></li>
+      {{end}}
+    </ul>
+    <form method="post" action="{{$.Base}}/temas/{{.ID}}/feeds" class="row">
+      <input name="url" type="url" placeholder="https://… (RSS o Atom)" required aria-label="Dirección del feed">
+      <button>Añadir feed</button>
+    </form>
+  </details>
+  {{else}}<p class="meta">Aún no tienes intereses.</p>{{end}}
+  <form method="post" action="{{.Base}}/temas" class="stack add">
+    <h3>Nuevo interés</h3>
+    <div class="row">
+      <input name="name" maxlength="60" required placeholder="Nombre (p. ej. Tecnología)" aria-label="Nombre del interés">
+      <input name="query" maxlength="120" placeholder="Palabras a buscar (p. ej. Apple OR Android)" aria-label="Palabras a buscar">
+    </div>
+    <button>Añadir</button>
+  </form>
+</section>
+
+<form method="post" action="{{.Base}}/ajustes" class="card stack">
+  <h2>Digest</h2>
+  <div class="row">
+    <label>Hora a la que se prepara<input name="digest_at" type="time" value="{{.Prefs.DigestAt}}" required></label>
+    <label>Noticias en «Lo más importante»<input name="top_count" type="number" min="3" max="30" value="{{.Prefs.TopCount}}"></label>
+    <label>Noticias por interés<input name="topic_count" type="number" min="1" max="15" value="{{.Prefs.TopicCount}}"></label>
+  </div>
+  <label class="check"><input type="checkbox" name="ai_summary" value="1"{{if .Prefs.AISummary}} checked{{end}}> Resumen del día escrito por el asistente (IA)</label>
+  <p class="meta">Para recibir los titulares por Telegram, actívalo en el panel del servidor, sección Avisos.</p>
+  <h3>Medios generales</h3>
+  <ul class="sources">
+    {{range .General}}
+    <li><label class="check"><input type="checkbox" name="src_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}> {{.Name}}</label>
+      <span class="meta small">{{with .State.Error}}falla: {{.}}{{else}}{{with .State.OKAt}}leído {{ago .}}{{end}}{{end}}</span></li>
+    {{end}}
+  </ul>
+  <button class="primary">Guardar</button>
+</form>
+{{template "foot" .}}{{end}}

@@ -88,6 +88,8 @@ func applyAlertsForm(c *alertsConfig, r *http.Request) error {
 	c.User = strings.TrimSpace(r.FormValue("user"))
 	c.Chapters.On, c.Chapters.Favorites, c.Chapters.Daily = on("chapters"), on("chapters_favorites"), r.FormValue("chapters_mode") == "daily"
 	c.Chapters.DailyAt = getClock("chapters_at", "Hora del resumen", false)
+	c.News.On, c.News.At = on("news"), getClock("news_at", "Hora de las noticias", false)
+	c.News.PerSection = int(get("news_per_section", "Titulares por sección", 1, 10))
 	c.Deploys.Failed, c.Deploys.OK = on("deploys_failed"), on("deploys_ok")
 	c.Network.On, c.Network.MinMinutes = on("network"), int(get("network_minutes", "Minutos sin red", 0, 600))
 	c.Battery.On, c.Battery.Unplugged = on("battery"), on("battery_unplugged")

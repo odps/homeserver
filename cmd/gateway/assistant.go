@@ -246,6 +246,36 @@ func applyAssistantForm(m map[string]string, f url.Values) ([]string, error) {
 	return changed, nil
 }
 
+// syncAssistantToken rehace el token del asistente si las apps de su cuenta
+// han cambiado (p. ej. al darle una app nueva en «Usuarios»).
+func (g *gateway) syncAssistantToken() {
+	path := g.assistantPath("claves.env")
+	m := readEnvFile(path)
+	user := m["APPS_USER"]
+	u, ok := g.users.get(user)
+	if user == "" || !ok {
+		return
+	}
+	var apps []string
+	for _, a := range u.Apps {
+		if a != assistantApp {
+			apps = append(apps, a)
+		}
+	}
+	if strings.Join(apps, ",") == m["APPS"] {
+		return
+	}
+	m["APPS_USER"] = "" // fuerza a crearlo de nuevo
+	var changed []string
+	if err := g.assistantAppsToken(m, user, &changed); err != nil {
+		g.log.Warn("token del asistente", "err", err)
+		return
+	}
+	if err := writeEnvFile(path, m); err != nil {
+		g.log.Warn("claves del asistente", "err", err)
+	}
+}
+
 // assistantAppsToken crea (o cambia) el token con el que el asistente usa las
 // apps en nombre de la cuenta elegida: solo las apps que esa cuenta tiene.
 func (g *gateway) assistantAppsToken(m map[string]string, user string, changed *[]string) error {

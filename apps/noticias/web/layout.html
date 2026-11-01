@@ -1,0 +1,30 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{block "title" .}}Noticias{{end}}</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="{{.Base}}/">Noticias</a>
+  <nav>
+    <a href="{{.Base}}/"{{if eq .Tab "hoy"}} aria-current="page"{{end}}>Hoy</a>
+    <a href="{{.Base}}/dias"{{if eq .Tab "dias"}} aria-current="page"{{end}}>Días</a>
+    <a href="{{.Base}}/ajustes"{{if eq .Tab "ajustes"}} aria-current="page"{{end}}>Ajustes</a>
+  </nav>
+</header>
+<main>
+{{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="flash error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot">Los titulares enlazan a cada medio · {{.Version}}</footer>
+</body>
+</html>
+{{end}}

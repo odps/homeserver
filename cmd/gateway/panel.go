@@ -282,6 +282,9 @@ func (g *gateway) userAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.audit.add("usuario_"+strings.ReplaceAll(action, "-", "_"), ip, map[string]string{"usuario": username})
+	if action == "update" {
+		g.syncAssistantToken() // si es la cuenta del asistente, que vea sus apps nuevas
+	}
 	if secret == "" {
 		flash := map[string]string{"delete": "borrado", "revoke-session": "appsesion"}[action]
 		if flash == "" {

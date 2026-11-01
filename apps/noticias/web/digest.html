@@ -1,0 +1,28 @@
+{{define "digest.html"}}{{template "head" .}}
+{{$d := .Digest}}
+<section class="intro">
+  <p class="kicker">{{if .Today}}Buenos días{{with .Name}}, {{.}}{{end}}{{else}}Digest{{end}}</p>
+  <h1>{{if $d.Day}}{{longDay $d.Day}}{{else}}Hoy{{end}}</h1>
+  {{if not $d.Created.IsZero}}<p class="meta">Preparado {{ago $d.Created}}{{if .Today}} ·
+    <form class="inline" method="post" action="{{.Base}}/rehacer"><button class="link">Actualizar con lo último</button></form>{{end}}</p>{{end}}
+</section>
+{{with $d.Summary}}<section class="summary"><h2>En resumen</h2><p>{{.}}</p></section>{{end}}
+{{range $d.Sections}}
+<section class="section">
+  <h2>{{.Title}}</h2>
+  <ol class="news">
+    {{range .Items}}
+    <li>
+      <a class="headline" href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+      <p class="meta">{{.Source}}{{with .Others}} <span title="{{join . ", "}}">{{plus (len .)}}</span>{{end}} · {{ago .Time}}</p>
+      {{with .Summary}}<p class="extract">{{.}}</p>{{end}}
+    </li>
+    {{end}}
+  </ol>
+</section>
+{{else}}
+<section class="empty">
+  <p>Todavía no hay noticias{{if .Today}}: se están recogiendo los medios. Vuelve en un par de minutos o añade tus intereses en <a href="{{.Base}}/ajustes">Ajustes</a>{{end}}.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

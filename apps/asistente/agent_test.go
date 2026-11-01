@@ -249,3 +249,28 @@ func TestConfigFile(t *testing.T) {
 		t.Fatal("falta la clave del modelo y no se avisa")
 	}
 }
+
+func TestInternalSummary(t *testing.T) {
+	a, _, _ := newTestAgent(t)
+	a.refresh(context.Background(), true)
+	call := func(remote, prefix string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/interno/resumir", strings.NewReader(`{"prompt":"Resume: hola"}`))
+		req.RemoteAddr = remote
+		if prefix != "" {
+			req.Header.Set("X-Forwarded-Prefix", prefix)
+		}
+		rec := httptest.NewRecorder()
+		a.internalSummary(rec, req)
+		return rec
+	}
+	rec := call("127.0.0.1:5555", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"texto":"Hola, ¿qué tal?`) {
+		t.Fatalf("resumen: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("127.0.0.1:5555", "/asistente"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a través de la pasarela: %d", rec.Code)
+	}
+	if rec := call("192.168.1.20:5555", ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("desde fuera: %d", rec.Code)
+	}
+}

@@ -239,7 +239,7 @@ func TestAlertsPanel(t *testing.T) {
 	form := url.Values{"action": {"save"}, "enabled": {"1"}, "quiet_from": {"22:30"}, "quiet_to": {"07:00"}, "user": {"ana"},
 		"chapters": {"1"}, "chapters_mode": {"daily"}, "chapters_at": {"21:00"}, "apps": {"1"}, "apps_minutes": {"10"},
 		"network_minutes": {"5"}, "battery": {"1"}, "battery_low": {"30"}, "battery_high": {"0"}, "temp_battery": {"44"},
-		"temp_cpu": {"75,5"}, "disk_gb": {"1.5"}, "backups_pc_days": {"0"}}
+		"temp_cpu": {"75,5"}, "disk_gb": {"1.5"}, "backups_pc_days": {"0"}, "news_at": {"08:15"}, "news_per_section": {"4"}}
 	if resp := post(form); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("guardar: %d %s", resp.StatusCode, body(t, resp))
 	}
@@ -253,9 +253,9 @@ func TestAlertsPanel(t *testing.T) {
 		t.Fatalf("sección de avisos: %s", page)
 	}
 	for _, bad := range []url.Values{
-		{"action": {"save"}, "quiet_from": {"25:00"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
-		{"action": {"save"}, "chapters_at": {"20:00"}, "apps_minutes": {"0"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
-		{"action": {"save"}, "user": {"nadie"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
+		{"action": {"save"}, "quiet_from": {"25:00"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}, "news_at": {"07:30"}, "news_per_section": {"3"}},
+		{"action": {"save"}, "chapters_at": {"20:00"}, "apps_minutes": {"0"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}, "news_at": {"07:30"}, "news_per_section": {"3"}},
+		{"action": {"save"}, "user": {"nadie"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}, "news_at": {"07:30"}, "news_per_section": {"3"}},
 	} {
 		if resp := post(bad); resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("acepta %v: %d", bad, resp.StatusCode)
@@ -307,5 +307,78 @@ func TestAlertsRetry(t *testing.T) {
 	}
 	if r := g.alerts.recentAlerts(1); r[0].Error != "" {
 		t.Fatalf("tras reintentarlo sigue marcado como fallido: %+v", r)
+	}
+}
+
+func TestNewsAlert(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	bot := &fakeBot{}
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m tgMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		bot.mu.Lock()
+		bot.sent = append(bot.sent, m)
+		bot.mu.Unlock()
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+	g.alerts.telegramAPI = tg.URL
+	writeEnvFile(g.assistantPath("claves.env"), map[string]string{"TELEGRAM_TOKEN": "123:abc", "TELEGRAM_USER_ID": "42"})
+	g.alerts.phone = func(context.Context) phoneStatus { return phoneStatus{} }
+	news := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/digest/texto" || r.Header.Get("X-Auth-User") != "ana" || r.URL.Query().Get("por_seccion") != "3" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte("Lo más importante\n• Titular (El País y 2 más)\n  https://elpais.com/x"))
+	}))
+	defer news.Close()
+	g.apps = map[string]appSpec{"noticias": {Name: "noticias", Port: portOf(t, news)}}
+	g.users.create("ana", "Ana", []string{"noticias"}, "usuario")
+	c := defaultAlerts()
+	c.User, c.PublicURL, c.QuietFrom, c.QuietTo = "ana", "https://srv.example", "", ""
+	c.Apps.On = false
+	g.alerts.saveConfig(c)
+	ctx := context.Background()
+	day := time.Date(2026, 11, 2, 0, 0, 0, 0, madrid)
+	g.checkAlerts(ctx, day.Add(7*time.Hour)) // 07:00: aún no
+	if got := bot.take(); len(got) != 0 {
+		t.Fatalf("antes de su hora: %+v", got)
+	}
+	g.checkAlerts(ctx, day.Add(7*time.Hour+35*time.Minute))
+	got := bot.take()
+	if len(got) != 1 || !strings.Contains(got[0].Text, "Tus noticias de hoy") || !strings.Contains(got[0].Text, "• Titular (El País y 2 más)") ||
+		!strings.Contains(got[0].Text, "https://srv.example/noticias/") {
+		t.Fatalf("noticias: %+v", got)
+	}
+	g.checkAlerts(ctx, day.Add(8*time.Hour))
+	if got := bot.take(); len(got) != 0 {
+		t.Fatalf("se repite el mismo día: %+v", got)
+	}
+}
+
+func TestSyncAssistantToken(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	g.users.create("ana", "Ana", []string{"libros", "asistente"}, "usuario")
+	m := map[string]string{}
+	var changed []string
+	if err := g.assistantAppsToken(m, "ana", &changed); err != nil || m["APPS"] != "libros" {
+		t.Fatalf("token: %v %v", err, m)
+	}
+	writeEnvFile(g.assistantPath("claves.env"), m)
+	old := m["APPS_TOKEN"]
+	g.users.update("ana", func(u *appUser) error { u.Apps = append(u.Apps, "noticias"); return nil })
+	g.syncAssistantToken()
+	m2 := readEnvFile(g.assistantPath("claves.env"))
+	if m2["APPS"] != "libros,noticias" || m2["APPS_TOKEN"] == old || m2["APPS_TOKEN"] == "" {
+		t.Fatalf("tras darle noticias: %v", m2)
+	}
+	if _, e, ok := g.tokens.check(m2["APPS_TOKEN"], "noticias", time.Now()); !ok || e.User != "ana" {
+		t.Fatal("el token nuevo no sirve para noticias")
+	}
+	if _, _, ok := g.tokens.check(old, "libros", time.Now()); ok {
+		t.Fatal("el token viejo sigue valiendo")
 	}
 }

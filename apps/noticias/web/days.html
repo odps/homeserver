@@ -1,0 +1,6 @@
+{{define "days.html"}}{{template "head" .}}
+<section class="intro"><h1>Días anteriores</h1><p class="meta">Se guardan los dos últimos meses.</p></section>
+<ul class="days">
+  {{range .Days}}<li><a href="{{$.Base}}/dia/{{.}}">{{longDay .}}</a></li>{{else}}<li class="meta">Aún no hay ninguno.</li>{{end}}
+</ul>
+{{template "foot" .}}{{end}}
