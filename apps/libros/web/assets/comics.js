@@ -1,7 +1,7 @@
 // Cómics: las series que sigues separadas por estado (con capítulos nuevos,
 // al día, por empezar, favoritas) y la ficha de cada serie con sus capítulos.
 // Los capítulos se leen en la web de origen; aquí se apunta por dónde vas.
-import { $, h, icon, api, ago, toast, hue, ambient, menu, plural, Offline } from './util.js'
+import { $, h, icon, api, ago, toast, hue, ambient, menu, pick, plural, Offline } from './util.js'
 
 export const SOURCES = { asura: 'Asura Scans', flame: 'Flame Comics' }
 const num = n => Number(n).toString()
@@ -135,10 +135,9 @@ function renderList(view) {
       h('div', { class: 'search' }, icon('search'), h('input', { type: 'search', placeholder: 'Buscar entre tus series…', value: state.q, 'aria-label': 'Buscar entre tus series',
         oninput: e => { state.q = e.target.value.trim(); rerender(); $('.search input')?.focus() } })),
       h('span', { class: 'grow' }),
-      sources.length > 1 ? h('div', { class: 'chips' }, ...[['', 'Todas'], ...sources.map(s => [s, SOURCES[s] ?? s])].map(([v, l]) =>
-        h('button', { class: 'chip', 'aria-pressed': String(state.source === v), onclick: () => { state.source = v; rerender() } }, l))) : null,
-      h('select', { 'aria-label': 'Ordenar', onchange: e => { state.sort = e.target.value; localStorage.setItem('libros.comics.sort', state.sort); rerender() } },
-        ...SORTS.map(([v, l]) => h('option', { value: v, selected: state.sort === v }, l)))),
+      sources.length > 1 ? pick('layers', 'Web', state.source, [['', 'Todas las webs'], ...sources.map(s => [s, SOURCES[s] ?? s])],
+        v => { state.source = v; rerender() }) : null,
+      pick('sparkle', 'Ordenar', state.sort, SORTS, v => { state.sort = v; localStorage.setItem('libros.comics.sort', v); rerender() })),
     list.length
       ? h('div', { class: 'grid' }, ...list.map(seriesTile))
       : h('div', { class: 'empty' }, h('h2', {}, 'Nada por aquí'), h('p', {}, {

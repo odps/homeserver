@@ -2,7 +2,7 @@
 // Gutenberg, Wikisource, Internet Archive con licencia libre) y series de
 // cómic en Asura Scans y Flame Comics. Los resultados se conservan al ir a una
 // ficha y volver; seguir una serie o añadir un libro no te saca de la lista.
-import { $, h, icon, api, toast, hue, Offline } from './util.js'
+import { h, icon, api, toast, hue, pick, Offline } from './util.js'
 import { prefs } from './prefs.js'
 import { seriesCover, SOURCES as COMIC_SOURCES } from './comics.js'
 
@@ -13,10 +13,10 @@ const BOOK_SOURCES = [
   ['archive', 'Internet Archive', 'Solo documentos con licencia libre explícita; a veces son escaneos con OCR.'],
 ]
 export const LANGS = [['es', 'Español'], ['en', 'English'], ['fr', 'Français'], ['de', 'Deutsch'], ['it', 'Italiano'], ['pt', 'Português'], ['ca', 'Català'], ['', 'Todos los idiomas']]
-const COMIC_SORTS = [['popular', 'Populares'], ['updated', 'Actualizadas'], ['rating', 'Mejor valoradas'], ['title', 'A–Z']]
-const COMIC_STATUS = [['', 'Cualquier estado'], ['ongoing', 'En emisión'], ['completed', 'Terminadas'], ['hiatus', 'En pausa'], ['dropped', 'Abandonadas']]
+const COMIC_SORTS = [['popular', 'Populares'], ['updated', 'Actualizadas'], ['rating', 'Valoradas'], ['title', 'A–Z']]
+const COMIC_STATUS = [['', 'Estado'], ['ongoing', 'En emisión'], ['completed', 'Terminadas'], ['hiatus', 'En pausa'], ['dropped', 'Abandonadas']]
 
-const books = { source: 'todas', lang: null, q: '', page: 1, items: null, more: false, loading: false, key: '' }
+const books = { source: 'todas', lang: null, visibility: null, q: '', page: 1, items: null, more: false, loading: false, key: '' }
 const comics = { source: null, q: '', sort: 'popular', status: '', page: 1, items: null, more: false, loading: false, notice: '', key: '' }
 let tab = localStorage.getItem('libros.discover') ?? 'libros'
 
@@ -24,6 +24,7 @@ export async function show(view, r) {
   if (r.id === 'libros' || r.id === 'comics') tab = r.id
   localStorage.setItem('libros.discover', tab)
   books.lang ??= prefs().search_lang
+  books.visibility ??= prefs().visibility
   comics.source ??= prefs().comic_source
   document.title = 'Descubrir · Libros'
   render(view)
@@ -66,27 +67,26 @@ function reload(view) {
   load(view)
 }
 
+// Filtros compactos: un desplegable con icono por cada uno.
 function bookFilters(view) {
-  return h('div', { class: 'toolbar' },
-    h('div', { class: 'chips' }, ...BOOK_SOURCES.map(([id, name, hint]) =>
-      h('button', { class: 'chip', title: hint, 'aria-pressed': String(books.source === id), onclick: () => { books.source = id; render(view); reload(view) } }, name))),
-    h('span', { class: 'grow' }),
-    h('select', { 'aria-label': 'Idioma', onchange: e => { books.lang = e.target.value; reload(view) } },
-      ...LANGS.filter(([v]) => v || books.source !== 'wikisource').map(([v, l]) => h('option', { value: v, selected: books.lang === v }, l))),
-    h('select', { 'aria-label': 'Quién verá lo que añadas', id: 'add-visibility' },
-      ...[['privado', 'Añadir solo para mí'], ['compartido', 'Añadir para todos']].map(([v, l]) =>
-        h('option', { value: v, selected: prefs().visibility === v }, l))))
+  const source = BOOK_SOURCES.find(([id]) => id === books.source)
+  return h('div', { class: 'picks' },
+    pick('layers', source?.[2] ?? 'Biblioteca', books.source, BOOK_SOURCES.map(([id, name]) => [id, id === 'todas' ? 'Todas' : name.replace('Project ', '')]),
+      v => { books.source = v; render(view); reload(view) }),
+    pick('globe', 'Idioma', books.lang, LANGS.filter(([v]) => v || books.source !== 'wikisource'), v => { books.lang = v; reload(view) }),
+    h('button', { class: 'chip vis', 'aria-pressed': 'false', title: 'Quién verá los libros que añadas (pulsa para cambiar)', onclick: () => {
+      books.visibility = books.visibility === 'compartido' ? 'privado' : 'compartido'
+      toast(books.visibility === 'compartido' ? 'Lo que añadas lo verán todos' : 'Lo que añadas solo lo verás tú')
+      render(view)
+    } }, icon(books.visibility === 'compartido' ? 'eye' : 'lock'), h('span', {}, books.visibility === 'compartido' ? 'Para todos' : 'Solo para mí')))
 }
 
 function comicFilters(view) {
-  return h('div', { class: 'toolbar' },
-    h('div', { class: 'chips' }, ...[['todas', 'Todas'], ['asura', COMIC_SOURCES.asura], ['flame', COMIC_SOURCES.flame]].map(([id, name]) =>
-      h('button', { class: 'chip', 'aria-pressed': String(comics.source === id), onclick: () => { comics.source = id; render(view); reload(view) } }, name))),
-    h('span', { class: 'grow' }),
-    h('select', { 'aria-label': 'Ordenar', onchange: e => { comics.sort = e.target.value; reload(view) } },
-      ...COMIC_SORTS.map(([v, l]) => h('option', { value: v, selected: comics.sort === v }, l))),
-    h('select', { 'aria-label': 'Estado', onchange: e => { comics.status = e.target.value; reload(view) } },
-      ...COMIC_STATUS.map(([v, l]) => h('option', { value: v, selected: comics.status === v }, l))))
+  return h('div', { class: 'picks' },
+    pick('layers', 'Web', comics.source, [['todas', 'Todas'], ['asura', 'Asura'], ['flame', 'Flame']],
+      v => { comics.source = v; reload(view) }),
+    pick('sparkle', 'Ordenar', comics.sort, COMIC_SORTS, v => { comics.sort = v; reload(view) }),
+    pick('filter', 'Estado', comics.status, COMIC_STATUS, v => { comics.status = v; reload(view) }))
 }
 
 async function load(view, append = false) {
@@ -162,7 +162,7 @@ function bookResult(item) {
     btn.disabled = true
     btn.textContent = 'Añadiendo…'
     try {
-      const visibility = $('#add-visibility')?.value ?? prefs().visibility
+      const visibility = books.visibility
       const res = await api('api/catalog/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source: item.source, id: item.id, visibility }) })
       item.book_id = res.book.id

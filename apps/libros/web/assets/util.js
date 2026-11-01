@@ -197,21 +197,66 @@ export function ambient(img, el) {
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 
 // menu crea un botón ⋯ con un menú de opciones ([icono, texto, acción, clase]).
+// El menú se abre fuera del flujo de la página (las fichas recortan lo que
+// sobresale): en pantallas estrechas, como hoja desde abajo; en las anchas,
+// junto al botón y sin salirse de la ventana.
 export function menu(items, label = 'Más opciones') {
-  const list = h('div', { class: 'menu', role: 'menu', hidden: true })
-  const wrap = h('div', { class: 'menu-wrap' },
-    h('button', { class: 'btn icon-only', 'aria-label': label, 'aria-haspopup': 'true', title: label,
-      onclick: e => { e.stopPropagation(); list.hidden = !list.hidden } }, icon('more')),
-    list)
+  const list = h('div', { class: 'menu', role: 'menu' })
+  const scrim = h('div', { class: 'menu-scrim' })
+  let open = false
+  const close = () => {
+    if (!open) return
+    open = false
+    list.remove()
+    scrim.remove()
+    removeEventListener('resize', close)
+    removeEventListener('scroll', onScroll, true)
+    document.removeEventListener('keydown', onKey)
+    document.removeEventListener('click', close)
+  }
+  const onScroll = e => { if (!list.contains(e.target)) close() }
+  const onKey = e => { if (e.key === 'Escape') { close(); btn.focus() } }
+  const btn = h('button', { class: 'btn icon-only', 'aria-label': label, 'aria-haspopup': 'menu', title: label, onclick: e => {
+    e.stopPropagation()
+    if (open) return close()
+    open = true
+    const sheet = innerWidth < 720
+    list.classList.toggle('as-sheet', sheet)
+    list.style.cssText = ''
+    if (sheet) document.body.append(scrim)
+    document.body.append(list)
+    if (!sheet) {
+      const r = btn.getBoundingClientRect()
+      const w = list.offsetWidth, hgt = list.offsetHeight
+      const left = Math.min(Math.max(8, r.right - w), innerWidth - w - 8)
+      const below = r.bottom + 6 + hgt <= innerHeight - 8
+      list.style.left = `${left}px`
+      list.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - 6 - hgt)}px`
+    }
+    list.querySelector('a, button')?.focus({ preventScroll: true })
+    addEventListener('resize', close)
+    addEventListener('scroll', onScroll, true)
+    document.addEventListener('keydown', onKey)
+    setTimeout(() => document.addEventListener('click', close))
+  } }, icon('more'))
+  scrim.addEventListener('click', close)
   for (const it of items.filter(Boolean)) {
     if (it === '-') { list.append(h('hr')); continue }
     const [ic, text, action, cls] = it
     list.append(typeof action === 'string'
-      ? h('a', { href: action, class: cls ?? '', role: 'menuitem', download: cls === 'download' ? '' : null }, icon(ic), text)
-      : h('button', { type: 'button', class: cls ?? '', role: 'menuitem', onclick: () => { list.hidden = true; action() } }, icon(ic), text))
+      ? h('a', { href: action, class: cls ?? '', role: 'menuitem', download: cls === 'download' ? '' : null, onclick: close }, icon(ic), text)
+      : h('button', { type: 'button', class: cls ?? '', role: 'menuitem', onclick: () => { close(); action() } }, icon(ic), text))
   }
-  document.addEventListener('click', () => { list.hidden = true })
-  return wrap
+  return h('div', { class: 'menu-wrap' }, btn)
+}
+
+// pick es un desplegable compacto con icono (para filtros): options son
+// [valor, texto]; onchange recibe el valor.
+export function pick(iconName, label, value, options, onchange) {
+  return h('label', { class: 'pick', title: label },
+    icon(iconName),
+    h('select', { 'aria-label': label, onchange: e => onchange(e.target.value) },
+      ...options.map(([v, t]) => h('option', { value: v, selected: String(value) === String(v) }, t))))
 }
 
 // Color estable para las portadas generadas, a partir del título.

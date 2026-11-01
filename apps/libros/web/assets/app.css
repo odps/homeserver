@@ -167,6 +167,23 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
 .toolbar .grow { flex: 1; }
 .toolbar select { width: auto; border-radius: 999px; padding: .42rem .8rem; font-size: .88rem; }
 .chips { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+/* Desplegable compacto con icono (filtros de Descubrir) */
+.pick { position: relative; display: inline-flex; align-items: center; gap: 0; color: var(--text); font-size: .86rem; flex: 0 1 auto; min-width: 0; }
+.pick svg { position: absolute; left: .7rem; width: .95rem; height: .95rem; color: var(--muted); pointer-events: none; }
+.pick select { appearance: none; -webkit-appearance: none; border-radius: 999px; padding: .42rem 1.9rem .42rem 2.05rem; font-size: .86rem; font-weight: 550;
+  width: auto; max-width: 100%; text-overflow: ellipsis; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2376726a' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right .65rem center / .8rem; }
+.pick select:hover { border-color: var(--muted); }
+.picks { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; margin-bottom: 1.3rem; }
+@media (max-width: 719px) {
+  /* En móvil, los filtros comparten una fila: sin icono delante y recortando el texto si no cabe. */
+  .picks { flex-wrap: nowrap; }
+  .picks .pick { flex: 1 1 auto; min-width: 0; }
+  .picks .pick svg { display: none; }
+  .picks .pick select { width: 100%; padding-left: .85rem; padding-right: 1.6rem; background-position: right .5rem center; }
+  .picks .vis { flex: none; padding: .42rem .65rem; }
+  .picks .vis span { display: none; }
+}
+
 .chip { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: .36rem .85rem; cursor: pointer;
   font-size: .86rem; color: var(--muted); font-weight: 550; display: inline-flex; gap: .35rem; align-items: center; transition: all .2s; }
 .chip:hover { color: var(--text); }
@@ -276,8 +293,14 @@ label { display: grid; gap: .3rem; font-size: .85rem; color: var(--muted); }
 
 /* Menú de opciones (⋯) */
 .menu-wrap { position: relative; }
-.menu { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 30; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; box-shadow: var(--shadow); padding: .4rem; min-width: 220px; display: grid; animation: drop .2s var(--ease); }
+.menu { position: fixed; z-index: 70; background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / .25); padding: .4rem; min-width: 230px; max-width: calc(100vw - 16px); display: grid; animation: drop .2s var(--ease); }
+.menu.as-sheet { left: 0; right: 0; bottom: 0; top: auto; max-width: none; border-radius: 22px 22px 0 0; border-bottom: 0;
+  padding: .6rem .6rem calc(.8rem + env(safe-area-inset-bottom)); animation: sheet-up .25s var(--ease); }
+.menu.as-sheet::before { content: ""; width: 2.4rem; height: 4px; border-radius: 4px; background: var(--border); justify-self: center; margin: .1rem 0 .5rem; }
+.menu.as-sheet button, .menu.as-sheet a { padding: .85rem .8rem; font-size: 1rem; }
+.menu-scrim { position: fixed; inset: 0; z-index: 69; background: rgb(0 0 0 / .35); animation: fade .2s; }
+@keyframes sheet-up { from { transform: translateY(100%); } }
 .menu button, .menu a { display: flex; align-items: center; gap: .6rem; text-align: left; padding: .55rem .7rem; border-radius: 9px; border: 0;
   background: none; color: var(--text); text-decoration: none; cursor: pointer; font-size: .92rem; }
 .menu button:hover, .menu a:hover { background: var(--surface-2); }
@@ -448,6 +471,8 @@ dialog::backdrop { background: rgb(0 0 0 / .38); backdrop-filter: blur(3px); }
   .search { max-width: none; flex-basis: 100%; }
   .searchbar .search { flex: 1 1 0; }
   .toolbar select { flex: 1; }
+  .toolbar .pick { flex: 1 1 auto; }
+  .toolbar .pick select { width: 100%; }
   .form { grid-template-columns: 1fr; }
   .page-head .btn .label { display: none; }
   .setting select, .setting input[type=text] { min-width: 0; width: 100%; }

@@ -1,7 +1,7 @@
 // Libros: la biblioteca separada por estados (en curso, por empezar, leídos,
 // favoritos) con búsqueda, filtros y orden, y la ficha de cada libro a
 // página completa. También la edición de datos y la subida de libros.
-import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, coverURL, shrinkCover, ambient, menu, plural, Offline } from './util.js'
+import { $, h, icon, api, ago, pct, formatSize, toast, hue, device, me, coverURL, shrinkCover, ambient, menu, pick, plural, Offline } from './util.js'
 import { rememberLibrary, cachedLibrary, downloadedIds, isDownloaded, loadFile, removeDownload, localProgress } from './local.js'
 import { prefs } from './prefs.js'
 
@@ -139,8 +139,7 @@ function renderList(view, downloaded, offline) {
       h('span', { class: 'grow' }),
       h('button', { class: 'chip', 'aria-pressed': String(state.showFilters), 'aria-expanded': String(state.showFilters),
         onclick: () => { state.showFilters = !state.showFilters; rerender() } }, icon('filter'), 'Filtros', nf ? h('span', { class: 'dot' }, nf) : null),
-      h('select', { 'aria-label': 'Ordenar', onchange: e => { state.sort = e.target.value; localStorage.setItem('libros.sort', state.sort); rerender() } },
-        ...SORTS.map(([v, l]) => h('option', { value: v, selected: state.sort === v }, l)))),
+      pick('sparkle', 'Ordenar', state.sort, SORTS, v => { state.sort = v; localStorage.setItem('libros.sort', v); rerender() })),
     state.showFilters ? filtersPanel(all, rerender) : null,
     list.length
       ? h('div', { class: 'grid' }, ...list.map(b => bookTile(b, downloaded.has(b.id))))
