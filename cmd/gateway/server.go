@@ -80,7 +80,7 @@ type gateway struct {
 	srvDir       string
 	svDir        string
 	slowPhone    cached[phoneStatus]
-	alerts       *alerter // avisos por Telegram; nil en los tests que no los usan
+	alerts       *alerter         // avisos por Telegram; nil en los tests que no los usan
 	now          func() time.Time // sustituible en los tests
 }
 
