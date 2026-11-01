@@ -343,3 +343,58 @@ func (s store) claimLegacy(ctx context.Context, who app.Identity) (int64, error)
 	})
 	return n, err
 }
+
+// Datos de los libros que se mejoran con lo encontrado en internet.
+
+const gapCols = `id, sha256, file_name, added_at, updated_at, title, authors, genres, isbn, has_cover, description, published, publisher, language`
+
+func scanGap(row pgx.Row) (metaGap, error) {
+	var g metaGap
+	err := row.Scan(&g.ID, &g.SHA256, &g.FileName, &g.AddedAt, &g.UpdatedAt, &g.Title, &g.Authors, &g.Genres, &g.ISBN, &g.HasCover,
+		&g.Description, &g.Published, &g.Publisher, &g.Language)
+	return g, err
+}
+
+func (s store) metaGap(ctx context.Context, id int64) (metaGap, error) {
+	g, err := scanGap(s.db.QueryRow(ctx, `SELECT `+gapCols+` FROM books WHERE id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return g, errNotFound
+	}
+	return g, err
+}
+
+// needingMeta devuelve libros que aún no se han buscado en internet, los más
+// recientes primero.
+func (s store) needingMeta(ctx context.Context, limit int) ([]metaGap, error) {
+	rows, err := s.db.Query(ctx, `SELECT `+gapCols+` FROM books WHERE meta_checked_at IS NULL
+		ORDER BY added_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []metaGap
+	for rows.Next() {
+		g, err := scanGap(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// saveMeta guarda los datos mejorados solo si el libro no ha cambiado desde
+// que se leyó (si alguien lo editó mientras tanto, gana lo suyo). updated_at
+// no se toca: así un libro mejorado solo no cuenta como «editado a mano».
+func (s store) saveMeta(ctx context.Context, g metaGap, u metaUpdate) (bool, error) {
+	tag, err := s.db.Exec(ctx, `UPDATE books SET title = $3, authors = $4, genres = $5, isbn = $6, description = $7,
+		published = $8, publisher = $9, language = $10, meta_checked_at = now()
+		WHERE id = $1 AND updated_at = $2`, g.ID, g.UpdatedAt, u.Title, u.Authors, u.Genres, u.ISBN, u.Description,
+		u.Published, u.Publisher, u.Language)
+	return err == nil && tag.RowsAffected() == 1, err
+}
+
+func (s store) markMetaChecked(ctx context.Context, id int64) error {
+	_, err := s.db.Exec(ctx, `UPDATE books SET meta_checked_at = now() WHERE id = $1`, id)
+	return err
+}

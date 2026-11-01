@@ -76,8 +76,25 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 			"publishers":[{"name":"Plenum"}],"publish_date":"March 1983","cover":{"large":"` + base + `/cover.jpg"}}}`))
 	})
 	mux.HandleFunc("/books/v1/volumes", func(w http.ResponseWriter, r *http.Request) {
+		if q := r.URL.Query().Get("q"); strings.Contains(q, `intitle:"Don Quijote"`) {
+			w.Write([]byte(`{"items":[{"volumeInfo":{"title":"Don Quijote de la Mancha","authors":["Miguel de Cervantes"],
+				"description":"Las aventuras del ingenioso hidalgo y de su escudero Sancho Panza por la Mancha, contadas con todo detalle.",
+				"language":"es","publishedDate":"2004-03-01","industryIdentifiers":[{"type":"ISBN_13","identifier":"9788420412146"}]}}]}`))
+			return
+		}
 		w.Write([]byte(`{"items":[{"volumeInfo":{"title":"Otro","description":"<p>Química &amp; polímeros</p>","language":"en"}}]}`))
 	})
+	// Open Library: búsqueda por título y portadas por id.
+	mux.HandleFunc("/search.json", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("title") != "Don Quijote" {
+			w.Write([]byte(`{"docs":[]}`))
+			return
+		}
+		w.Write([]byte(`{"docs":[{"title":"Don Quijote de la Mancha","author_name":["Miguel de Cervantes Saavedra"],"first_publish_year":1605,
+			"isbn":["8420412147","9788420412146"],"cover_i":123,"language":["spa"],"publisher":["Alfaguara"],"subject":["Novela","Caballería"]},
+			{"title":"Quijote para niños","author_name":["Otra Persona"],"cover_i":7}]}`))
+	})
+	mux.HandleFunc("/b/id/123-L.jpg", func(w http.ResponseWriter, r *http.Request) { w.Write(bigCover(t)) })
 	srv := httptest.NewServer(mux)
 	base = srv.URL
 	t.Cleanup(srv.Close)
@@ -87,7 +104,7 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 func testCatalog(srv *httptest.Server) *catalog {
 	u, _ := url.Parse(srv.URL)
 	urls := catalogURLs{Gutenberg: srv.URL, Wikisource: srv.URL + "/%s", WSExport: srv.URL, Archive: srv.URL,
-		OpenLibrary: srv.URL, GoogleBooks: srv.URL}
+		OpenLibrary: srv.URL, GoogleBooks: srv.URL, Covers: srv.URL}
 	return newCatalog(urls, []string{u.Hostname()}, true)
 }
 

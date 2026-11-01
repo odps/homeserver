@@ -201,15 +201,19 @@ func (c *catalog) fetchISBN(ctx context.Context, isbn string) (isbnInfo, error) 
 type googleVolumes struct {
 	Items []struct {
 		VolumeInfo struct {
-			Title         string   `json:"title"`
-			Subtitle      string   `json:"subtitle"`
-			Authors       []string `json:"authors"`
-			Publisher     string   `json:"publisher"`
-			PublishedDate string   `json:"publishedDate"`
-			Description   string   `json:"description"`
-			Categories    []string `json:"categories"`
-			Language      string   `json:"language"`
-			ImageLinks    struct {
+			Title               string   `json:"title"`
+			Subtitle            string   `json:"subtitle"`
+			Authors             []string `json:"authors"`
+			Publisher           string   `json:"publisher"`
+			PublishedDate       string   `json:"publishedDate"`
+			Description         string   `json:"description"`
+			Categories          []string `json:"categories"`
+			Language            string   `json:"language"`
+			IndustryIdentifiers []struct {
+				Type       string `json:"type"`
+				Identifier string `json:"identifier"`
+			} `json:"industryIdentifiers"`
+			ImageLinks struct {
 				Thumbnail string `json:"thumbnail"`
 			} `json:"imageLinks"`
 		} `json:"volumeInfo"`
@@ -259,7 +263,17 @@ func (a *api) putCover(w http.ResponseWriter, r *http.Request, who app.Identity)
 		return
 	}
 	var data []byte
-	if q := r.URL.Query().Get("isbn"); q != "" {
+	if ref := r.URL.Query().Get("ref"); ref != "" {
+		u, ok := a.catalog.coverByRef(ref)
+		if !ok {
+			a.fail(w, bad("esa portada ya no está disponible: vuelve a buscar"))
+			return
+		}
+		if data, _, err = a.catalog.fetchImage(r.Context(), u); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("no se pudo descargar la portada: %s", err)})
+			return
+		}
+	} else if q := r.URL.Query().Get("isbn"); q != "" {
 		isbn, ok := normalizeISBN(q)
 		if !ok {
 			a.fail(w, bad("el ISBN no es válido"))

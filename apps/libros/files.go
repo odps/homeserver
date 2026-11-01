@@ -19,7 +19,7 @@ import (
 type files struct{ dir string }
 
 const (
-	maxBookBytes  = 200 << 20
+	maxBookBytes  = 250 << 20
 	maxCoverBytes = 5 << 20
 )
 

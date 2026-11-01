@@ -390,6 +390,14 @@ dialog::backdrop { background: rgb(0 0 0 / .38); backdrop-filter: blur(3px); }
 .found dl { display: grid; grid-template-columns: auto 1fr; gap: .2rem .8rem; margin: .6rem 0; font-size: .9rem; }
 .found dt { color: var(--muted); }
 .found dd { margin: 0; }
+.found .results { list-style: none; margin: .6rem 0; padding: 0; display: grid; gap: .3rem; max-height: 46vh; overflow: auto; }
+.found .result { display: flex; gap: .8rem; align-items: center; width: 100%; padding: .45rem; border: 0; border-radius: 10px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.found .result:hover, .found .result:focus-visible { background: var(--accent-soft); }
+.found .result img, .found .result .nocover { width: 40px; height: 60px; flex: none; object-fit: cover; border-radius: 4px; background: var(--border); }
+.found .result .nocover { display: grid; place-items: center; color: var(--muted); }
+.found .result > span:last-child { display: grid; gap: .1rem; min-width: 0; }
+.found .result strong { font-weight: 550; }
 .check { display: flex; gap: .5rem; align-items: center; }
 .devices { list-style: none; margin: 0; padding: 0; }
 .devices li { display: flex; gap: .7rem; padding: .55rem 0; border-top: 1px solid var(--border); font-size: .88rem; align-items: center; }

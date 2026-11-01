@@ -54,6 +54,7 @@ type catalogURLs struct {
 	// Datos de libros por ISBN.
 	OpenLibrary string // https://openlibrary.org
 	GoogleBooks string // https://www.googleapis.com
+	Covers      string // https://covers.openlibrary.org
 }
 
 var defaultCatalogURLs = catalogURLs{
@@ -63,6 +64,7 @@ var defaultCatalogURLs = catalogURLs{
 	Archive:     "https://archive.org",
 	OpenLibrary: "https://openlibrary.org",
 	GoogleBooks: "https://www.googleapis.com",
+	Covers:      "https://covers.openlibrary.org",
 }
 
 // Dominios a los que puede conectarse el catálogo (y sus subdominios, para
@@ -76,9 +78,10 @@ type catalog struct {
 	hosts        []string
 	allowPrivate bool // solo en los tests: servidores locales por HTTP
 
-	mu    sync.Mutex
-	cache map[string]cacheEntry
-	isbns map[string]isbnEntry
+	mu        sync.Mutex
+	cache     map[string]cacheEntry
+	isbns     map[string]isbnEntry
+	coverRefs map[string]coverRef // portadas de las búsquedas de datos
 }
 
 type cacheEntry struct {

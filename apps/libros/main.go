@@ -35,7 +35,10 @@ func setup(env *app.Env) error {
 	}
 	// Comprueba cada 30 minutos los capítulos nuevos de las series seguidas.
 	go series.watch(context.Background(), 30*time.Minute)
-	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false), series: series}
+	a := &api{store: store{env.DB}, files: f, log: env.Log, catalog: newCatalog(defaultCatalogURLs, catalogHosts, false), series: series,
+		metaQueue: make(chan int64, 64)}
+	// Busca en internet los datos que les falten a los libros.
+	go a.metaWorker(context.Background())
 	a.routes(env.Mux)
 	serveWeb(env.Mux)
 	addTools(env.MCP, a, series.store)

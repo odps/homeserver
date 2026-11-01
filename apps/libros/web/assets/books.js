@@ -279,7 +279,7 @@ function renderDetail(view, book, devices, { local, downloaded, offline }) {
     const p = h('div', { class: 'prose clamp' }, book.description)
     const more = h('button', { class: 'linkish', onclick: () => { p.classList.toggle('clamp'); more.textContent = p.classList.contains('clamp') ? 'Leer más' : 'Leer menos' } }, 'Leer más')
     return h('div', {}, h('h3', {}, 'Sinopsis'), p, book.description.length > 400 ? more : null)
-  })() : h('p', { class: 'meta' }, book.can_edit ? 'Sin sinopsis. Puedes añadirla o buscarla por ISBN desde «Editar datos».' : 'Sin sinopsis.')
+  })() : h('p', { class: 'meta' }, book.can_edit ? 'Sin sinopsis. Puedes añadirla o buscarla en internet desde «Editar datos».' : 'Sin sinopsis.')
 
   const info = [
     ['Géneros', book.genres.join(', ')],
@@ -314,14 +314,14 @@ const editable = b => ({
 function openEdit(book) {
   const dlg = $('#dialog')
   const f = name => h('input', { type: 'text', name, value: (Array.isArray(book[name]) ? book[name].join(', ') : book[name]) ?? '' })
-  let newCover = null      // imagen elegida a mano
-  let coverFromISBN = null // ISBN cuya portada se usará al guardar
+  let newCover = null   // imagen elegida a mano
+  let coverQuery = null // portada encontrada que se usará al guardar («isbn=…» o «ref=…»)
   const preview = bookCover(book)
   const coverInput = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async e => {
     const file = e.target.files[0]
     if (!file) return
     newCover = await shrinkCover(file)
-    coverFromISBN = null
+    coverQuery = null
     showCover(URL.createObjectURL(newCover))
   } })
   const showCover = src => {
@@ -339,26 +339,51 @@ function openEdit(book) {
     try {
       const info = await api(`api/isbn/${encodeURIComponent(v)}`)
       isbnInput.value = info.isbn
-      showFound(info)
+      showFound(info, `isbn=${encodeURIComponent(info.isbn)}`)
     } catch (err) { toast(err.message) }
     btn.disabled = false
   }
-  function showFound(info) {
-    const useCover = h('input', { type: 'checkbox', checked: info.has_cover })
+  // Búsqueda por título y autor: varios resultados para elegir.
+  const searchWeb = async e => {
+    const btn = e.currentTarget
+    const title = form.elements.title.value.trim()
+    if (!title) return toast('Escribe el título')
+    const author = form.elements.authors.value.split(',')[0].trim()
+    btn.disabled = true
+    found.hidden = false
+    found.replaceChildren(h('p', { class: 'meta' }, 'Buscando…'))
+    try {
+      const { items } = await api(`api/meta/buscar?${new URLSearchParams({ title, author })}`)
+      if (!items.length) found.replaceChildren(h('p', { class: 'meta' }, 'Sin resultados. Prueba con el título original o sin el autor.'),
+        h('button', { type: 'button', class: 'btn small', onclick: () => { found.hidden = true } }, 'Cerrar'))
+      else found.replaceChildren(h('strong', {}, 'Elige el que corresponde'),
+        h('ul', { class: 'results' }, ...items.map(it => h('li', {},
+          h('button', { type: 'button', class: 'result', onclick: () => showFound(it, it.ref ? `ref=${it.ref}` : null) },
+            it.ref ? h('img', { src: `api/meta/portada?ref=${it.ref}`, alt: '', loading: 'lazy' }) : h('span', { class: 'nocover' }, icon('book')),
+            h('span', {}, h('strong', {}, it.title), h('span', { class: 'meta' }, [it.authors.join(', '), it.published, it.publisher].filter(Boolean).join(' · ')))))),
+        h('button', { type: 'button', class: 'btn small', onclick: () => { found.hidden = true } }, 'Cerrar'))
+    } catch (err) {
+      found.hidden = true
+      toast(err.message)
+    }
+    btn.disabled = false
+  }
+  function showFound(info, cover) {
+    const useCover = h('input', { type: 'checkbox', checked: info.has_cover && !!cover })
     const rows = [['Título', info.title], ['Autores', info.authors?.join(', ')], ['Editorial', info.publisher], ['Año', info.published],
-      ['Géneros', info.genres?.join(', ')], ['Idioma', info.language]].filter(([, v]) => v)
+      ['ISBN', info.isbn], ['Géneros', info.genres?.join(', ')], ['Idioma', info.language]].filter(([, v]) => v)
     found.hidden = false
     found.replaceChildren(
       h('strong', {}, 'Datos encontrados'),
       h('dl', {}, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
-      info.has_cover ? h('label', { class: 'check' }, useCover, 'Usar también su portada') : null,
+      info.has_cover && cover ? h('label', { class: 'check' }, useCover, 'Usar también su portada') : null,
       h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn small primary', onclick: () => {
           const set = (name, v) => { if (v) form.elements[name].value = Array.isArray(v) ? v.join(', ') : v }
           set('title', info.title); set('authors', info.authors); set('publisher', info.publisher); set('published', info.published)
-          set('genres', info.genres); set('language', info.language); set('description', info.description)
-          if (info.has_cover && useCover.checked) {
-            coverFromISBN = info.isbn
+          set('genres', info.genres); set('language', info.language); set('description', info.description); set('isbn', info.isbn)
+          if (info.has_cover && cover && useCover.checked) {
+            coverQuery = cover
             newCover = null
             preview.querySelector('img')?.remove()
             preview.querySelector('.fmt.new')?.remove()
@@ -384,7 +409,7 @@ function openEdit(book) {
     try {
       await api(`api/books/${book.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (newCover) await api(`api/books/${book.id}/cover`, { method: 'PUT', headers: { 'Content-Type': newCover.type || 'image/jpeg' }, body: newCover })
-      else if (coverFromISBN) await api(`api/books/${book.id}/cover?isbn=${encodeURIComponent(coverFromISBN)}`, { method: 'PUT' })
+      else if (coverQuery) await api(`api/books/${book.id}/cover?${coverQuery}`, { method: 'PUT' })
       toast('Guardado')
       dlg.close()
       reshow()
@@ -396,13 +421,14 @@ function openEdit(book) {
     h('div', { class: 'full cover-edit' }, preview,
       h('div', {},
         h('button', { type: 'button', class: 'btn small', onclick: () => coverInput.click() }, icon('edit'), 'Cambiar portada'),
-        h('p', { class: 'meta' }, 'Una imagen de tu dispositivo, o la que se encuentre por el ISBN.')),
+        h('p', { class: 'meta' }, 'Una imagen de tu dispositivo, o la de los datos que encuentres en internet.')),
       coverInput),
     h('label', { class: 'full' }, 'Título', f('title')),
     h('label', { class: 'full' }, 'Autores (separados por comas)', f('authors')),
+    h('div', { class: 'full' }, h('button', { type: 'button', class: 'btn small', onclick: searchWeb }, icon('search'), 'Buscar datos en internet por título y autor')),
     h('label', { class: 'full' }, 'ISBN',
       h('div', { class: 'inline' }, isbnInput,
-        h('button', { type: 'button', class: 'btn small', onclick: lookup }, icon('search'), 'Buscar datos'))),
+        h('button', { type: 'button', class: 'btn small', onclick: lookup }, icon('search'), 'Buscar por ISBN'))),
     found,
     h('label', { class: 'full' }, 'Géneros (separados por comas)', f('genres')),
     h('label', {}, 'Serie', f('series')),
@@ -429,7 +455,7 @@ function openUpload() {
     ondragleave: () => drop.classList.remove('over'),
     ondrop: e => { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files) } },
     h('p', {}, h('strong', {}, 'Arrastra tus libros aquí'), h('br'), 'o pulsa para elegirlos'),
-    h('p', { class: 'meta' }, 'EPUB, PDF, MOBI, AZW3, FB2, FBZ y CBZ · hasta 200 MB cada uno'))
+    h('p', { class: 'meta' }, 'EPUB, PDF, MOBI, AZW3, FB2, FBZ y CBZ · hasta 250 MB cada uno'))
   let added = 0
   let chain = Promise.resolve()
   const visibility = h('select', { 'aria-label': 'Quién los ve' },
@@ -454,8 +480,8 @@ function openUpload() {
 }
 
 async function uploadOne(file, status, bar, visibility) {
-  if (file.size > 200 * 1024 * 1024) {
-    status.textContent = 'Supera 200 MB'
+  if (file.size > 250 * 1024 * 1024) {
+    status.textContent = 'Supera 250 MB'
     status.className = 'err'
     return false
   }

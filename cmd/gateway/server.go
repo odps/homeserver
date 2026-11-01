@@ -371,7 +371,8 @@ func (g *gateway) proxy(w http.ResponseWriter, r *http.Request) {
 		rc.SetReadDeadline(time.Now().Add(30 * time.Minute))
 		rc.SetWriteDeadline(time.Now().Add(30 * time.Minute))
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, int64(limitMB)<<20)
+	// Margen para lo que acompaña al fichero en una subida (portada, datos).
+	r.Body = http.MaxBytesReader(w, r.Body, int64(limitMB+10)<<20)
 	prefix := "/" + name
 	target := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", a.Port)}
 	rp := &httputil.ReverseProxy{

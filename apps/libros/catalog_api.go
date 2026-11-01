@@ -184,6 +184,7 @@ func (a *api) importBook(ctx context.Context, who app.Identity, source, id, visi
 		return Book{}, false, err
 	}
 	a.log.Info("libro importado", "id", newID, "usuario", who.User, "fuente", src, "titulo", b.Title, "bytes", b.Size)
+	a.queueMeta(newID)
 	return saved, false, nil
 }
 

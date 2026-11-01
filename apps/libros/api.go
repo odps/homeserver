@@ -28,6 +28,8 @@ type api struct {
 	series  *seriesService
 	log     *slog.Logger
 	legacy  sync.Once // asignación de los datos anteriores a las cuentas
+	// Libros recién añadidos a los que buscar los datos que falten (nil: no se buscan).
+	metaQueue chan int64
 }
 
 func (a *api) routes(mux *http.ServeMux) {
@@ -46,6 +48,8 @@ func (a *api) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/books/{id}/cover", a.user(a.cover))
 	mux.HandleFunc("PUT /api/books/{id}/cover", a.user(a.putCover))
 	mux.HandleFunc("GET /api/isbn/{isbn}", a.user(a.isbnLookup))
+	mux.HandleFunc("GET /api/meta/buscar", a.user(a.metaSearch))
+	mux.HandleFunc("GET /api/meta/portada", a.user(a.metaCover))
 	mux.HandleFunc("PUT /api/books/{id}/progress", a.user(a.progress))
 	a.catalogRoutes(mux)
 	a.seriesRoutes(mux)
@@ -318,6 +322,7 @@ func (a *api) upload(w http.ResponseWriter, r *http.Request, who app.Identity) {
 		return
 	}
 	a.log.Info("libro añadido", "id", id, "usuario", who.User, "titulo", b.Title, "formato", format, "visibilidad", visibility, "bytes", b.Size)
+	a.queueMeta(id)
 	writeJSON(w, http.StatusCreated, map[string]any{"book": saved, "duplicate": false})
 }
 
