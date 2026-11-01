@@ -130,6 +130,19 @@ func TestAutofill(t *testing.T) {
 	}
 }
 
+func TestMergeAuthors(t *testing.T) {
+	g := metaGap{Title: "What every BODY is saying", Authors: []string{"Navarro, Joe, 1953-"}}
+	u := mergeMeta(g, isbnInfo{Title: "What every BODY is saying", Authors: []string{"Joe Navarro", "Marvin Karlins"}}, true)
+	if strings.Join(u.Authors, ",") != "Joe Navarro,Marvin Karlins" {
+		t.Fatalf("autores: %v", u.Authors)
+	}
+	// Otros autores no sustituyen a los que hay.
+	u = mergeMeta(g, isbnInfo{Title: "What every BODY is saying", Authors: []string{"Otra Persona"}}, true)
+	if strings.Join(u.Authors, ",") != "Navarro, Joe, 1953-" {
+		t.Fatalf("autores distintos: %v", u.Authors)
+	}
+}
+
 func TestBlankCoverAndAuthor(t *testing.T) {
 	white := image.NewRGBA(image.Rect(0, 0, 400, 600))
 	for i := range white.Pix {

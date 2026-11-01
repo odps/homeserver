@@ -414,7 +414,9 @@ func mergeMeta(g metaGap, f isbnInfo, upgrade bool) metaUpdate {
 	if len(found.Authors) > 0 && len(found.Authors) >= len(u.Authors) {
 		mine, theirs := map[string]bool{}, map[string]bool{}
 		for _, w := range searchWords(strings.Join(u.Authors, " ")) {
-			mine[w] = true
+			if strings.Trim(w, "0123456789") != "" { // fechas como «1953-»
+				mine[w] = true
+			}
 		}
 		for _, w := range searchWords(strings.Join(found.Authors, " ")) {
 			theirs[w] = true
