@@ -355,7 +355,7 @@ function openEdit(book) {
         h('ul', { class: 'results' }, ...items.map(it => h('li', {},
           h('button', { type: 'button', class: 'result', onclick: () => showFound(it, it.ref ? `ref=${it.ref}` : null) },
             it.ref ? h('img', { src: `api/meta/portada?ref=${it.ref}`, alt: '', loading: 'lazy' }) : h('span', { class: 'nocover' }, icon('book')),
-            h('span', {}, h('strong', {}, it.title), h('span', { class: 'meta' }, [it.authors.join(', '), it.published, it.publisher].filter(Boolean).join(' · ')))))),
+            h('span', {}, h('strong', {}, it.title), h('span', { class: 'meta' }, [it.authors.join(', '), it.published, it.publisher].filter(Boolean).join(' · '))))))),
         h('button', { type: 'button', class: 'btn small', onclick: () => { found.hidden = true } }, 'Cerrar'))
     } catch (err) {
       found.hidden = true
