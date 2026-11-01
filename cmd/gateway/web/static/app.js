@@ -2,22 +2,27 @@
 // confirmación en las acciones marcadas y copia el token recién creado.
 // Sin dependencias ni scripts en línea (la CSP los prohíbe).
 
+// Una sección con [data-soon] espera un cambio inminente: se mira cada 3 s.
 for (const el of document.querySelectorAll("[data-refresh]")) {
   const every = (Number(el.dataset.interval) || 30) * 1000;
-  setInterval(async () => {
+  const next = () => setTimeout(tick, el.querySelector("[data-soon]") ? 3000 : every);
+  const tick = async () => {
     // No pisar lo que el usuario está escribiendo ni gastar en segundo plano.
-    if (document.hidden || el.contains(document.activeElement) || el.querySelector("details[open]")) return;
-    try {
-      const r = await fetch(el.dataset.refresh, { headers: { Accept: "text/html" } });
-      if (r.redirected && new URL(r.url).pathname === "/login") {
-        location.href = "/login";
-        return;
+    if (!(document.hidden || el.contains(document.activeElement) || el.querySelector("details[open]"))) {
+      try {
+        const r = await fetch(el.dataset.refresh, { headers: { Accept: "text/html" } });
+        if (r.redirected && new URL(r.url).pathname === "/login") {
+          location.href = "/login";
+          return;
+        }
+        if (r.ok) el.innerHTML = await r.text();
+      } catch {
+        // Sin red: se reintenta en el siguiente ciclo.
       }
-      if (r.ok) el.innerHTML = await r.text();
-    } catch {
-      // Sin red: se reintenta en el siguiente ciclo.
     }
-  }, every);
+    next();
+  };
+  next();
 }
 
 document.addEventListener("submit", (e) => {

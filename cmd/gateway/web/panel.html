@@ -245,7 +245,11 @@
 <h2>Asistente</h2>
 <p class="muted small">Bot de Telegram que consulta tus apps, busca en internet y guarda notas. Solo responde a tu ID de Telegram. Las claves se guardan en el móvil y no se vuelven a mostrar: solo sus 4 últimos caracteres.</p>
 {{if not $a.Installed}}<p class="flash">La app <code>asistente</code> aún no está desplegada; puedes dejar la configuración preparada.</p>{{end}}
-{{with $a.Status}}
+{{if $a.Pending}}
+<ul class="list" data-soon>
+  <li><span class="dot warn" aria-hidden="true"></span><span class="grow">Aplicando la nueva configuración…</span></li>
+</ul>
+{{else}}{{with $a.Status}}
 <ul class="list">
   <li><span class="dot {{if or $a.Stale .Problems}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
     <span class="grow"><strong>{{if .Bot}}@{{.Bot}}{{else}}Bot sin conectar{{end}}</strong>{{with .Model}} · <span class="mono small">{{.}}</span>{{end}}<br>
@@ -253,7 +257,7 @@
   {{range .Problems}}<li><span class="dot warn" aria-hidden="true"></span><span class="grow small">{{.}}</span></li>{{end}}
   {{with .Tools}}<li><span class="grow muted small">Herramientas: {{join . ", "}}</span></li>{{end}}
 </ul>
-{{end}}
+{{end}}{{end}}
 <details{{if not $a.Masked.TELEGRAM_TOKEN}} open{{end}}>
   <summary>Configurar</summary>
   <form method="post" action="/panel/asistente" class="stack" autocomplete="off">

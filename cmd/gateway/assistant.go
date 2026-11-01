@@ -108,6 +108,7 @@ type assistantView struct {
 	Values    map[string]string // datos no secretos (proveedor, modelo, usuario…)
 	Status    *assistantStatus
 	Stale     bool // el estado no se actualiza (asistente parado)
+	Pending   bool // hay claves nuevas que el asistente aún no ha aplicado
 	Providers []string
 }
 
@@ -124,6 +125,10 @@ func mask(v string) string {
 func (g *gateway) assistantView() assistantView {
 	_, installed := g.apps[assistantApp]
 	m := readEnvFile(g.assistantPath("claves.env"))
+	var saved time.Time
+	if st, err := os.Stat(g.assistantPath("claves.env")); err == nil {
+		saved = st.ModTime()
+	}
 	v := assistantView{Installed: installed, Masked: map[string]string{}, Values: map[string]string{}, Providers: []string{"groq", "gemini", "openrouter", "custom"}}
 	for _, k := range []string{"TELEGRAM_TOKEN", "LLM_API_KEY", "BRAVE_API_KEY", "APPS_TOKEN"} {
 		v.Masked[k] = mask(m[k])
@@ -138,7 +143,11 @@ func (g *gateway) assistantView() assistantView {
 		var s assistantStatus
 		if json.Unmarshal(b, &s) == nil {
 			v.Status = &s
-			v.Stale = g.clock().Sub(s.UpdatedAt) > 5*time.Minute
+			// El asistente relee las claves cada pocos segundos: el estado de
+			// antes de guardar no vale. Si tarda más de un minuto, algo pasa.
+			v.Pending = s.UpdatedAt.Before(saved)
+			v.Stale = g.clock().Sub(s.UpdatedAt) > 5*time.Minute || (v.Pending && g.clock().Sub(saved) > time.Minute)
+			v.Pending = v.Pending && !v.Stale
 		}
 	}
 	return v

@@ -124,7 +124,7 @@ var flashes = map[string]string{
 	"usuario":    "Usuario actualizado.",
 	"borrado":    "Usuario borrado.",
 	"appsesion":  "Sesión cerrada.",
-	"asistente":  "Configuración del asistente guardada.",
+	"asistente":  "Configuración del asistente guardada. Se aplica en unos segundos.",
 	"error":      "No se pudo completar la acción; mira la auditoría.",
 }
 

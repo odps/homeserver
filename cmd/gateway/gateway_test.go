@@ -585,8 +585,13 @@ func TestAssistantConfig(t *testing.T) {
 	if user, e, ok := h.g.tokens.check(m["APPS_TOKEN"], "hola", time.Now()); !ok || e.User != "ana" || user == "" {
 		t.Fatalf("token del asistente: %v %+v", ok, e)
 	}
+	// Recién guardado, el estado anterior no vale: el panel dice que se está aplicando.
+	os.WriteFile(h.g.assistantPath("estado.json"), []byte(`{"updated_at":"`+time.Now().Add(-time.Minute/2).UTC().Format(time.RFC3339Nano)+`","bot":"","problems":["Falta el token"]}`), 0o600)
+	if page := body(t, func() *http.Response { r, _ := c.Get(h.gw.URL + "/panel/frag/asistente"); return r }()); !strings.Contains(page, "Aplicando") || strings.Contains(page, "Falta el token") {
+		t.Fatalf("estado de antes de guardar: %s", page)
+	}
 	// El panel muestra el estado que publica el asistente.
-	os.WriteFile(h.g.assistantPath("estado.json"), []byte(`{"updated_at":"`+time.Now().UTC().Format(time.RFC3339)+`","bot":"mibot","model":"openai/gpt-oss-120b",
+	os.WriteFile(h.g.assistantPath("estado.json"), []byte(`{"updated_at":"`+time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)+`","bot":"mibot","model":"openai/gpt-oss-120b",
 		"models":["openai/gpt-oss-120b"],"tools":["libros_leyendo","notas_guardar"],"problems":["Falta algo"],"today":3,"limit":200}`), 0o600)
 	// Los secretos no se muestran en el panel; un formulario sin ellos no los borra.
 	page := body(t, func() *http.Response { r, _ := c.Get(h.gw.URL + "/panel/frag/asistente"); return r }())

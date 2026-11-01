@@ -68,7 +68,7 @@ func (a *agent) run(ctx context.Context) {
 	loaded := time.Unix(-1, 0) // distinto de cualquier fecha: la primera vuelta siempre carga
 	pollCancel := context.CancelFunc(func() {})
 	defer func() { pollCancel() }()
-	tick := time.NewTicker(10 * time.Second)
+	tick := time.NewTicker(3 * time.Second) // releer las claves que guarda el panel
 	defer tick.Stop()
 	statusTick := time.NewTicker(time.Minute)
 	defer statusTick.Stop()
