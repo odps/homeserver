@@ -44,6 +44,7 @@ type panelData struct {
 	NewSecret string    // contraseña temporal recién creada (se muestra una vez)
 	SecretFor string
 	Assistant assistantView
+	Alerts    alertsView
 }
 
 // sections dice qué datos necesita cada fragmento, para no recoger de más.
@@ -72,6 +73,10 @@ var sections = map[string]func(g *gateway, r *http.Request, d *panelData){
 	},
 	"asistente": func(g *gateway, r *http.Request, d *panelData) {
 		d.Assistant = g.assistantView()
+		d.Users, _ = g.users.list()
+	},
+	"avisos": func(g *gateway, r *http.Request, d *panelData) {
+		d.Alerts = g.alertsView()
 		d.Users, _ = g.users.list()
 	},
 	"users": func(g *gateway, r *http.Request, d *panelData) {
@@ -117,15 +122,17 @@ func (g *gateway) fragment(w http.ResponseWriter, r *http.Request) {
 }
 
 var flashes = map[string]string{
-	"reiniciado": "Servicio reiniciado.",
-	"sesion":     "Sesión cerrada.",
-	"sesiones":   "Se han cerrado todas las demás sesiones.",
-	"revocado":   "Token revocado.",
-	"usuario":    "Usuario actualizado.",
-	"borrado":    "Usuario borrado.",
-	"appsesion":  "Sesión cerrada.",
-	"asistente":  "Configuración del asistente guardada. Se aplica en unos segundos.",
-	"error":      "No se pudo completar la acción; mira la auditoría.",
+	"reiniciado":   "Servicio reiniciado.",
+	"sesion":       "Sesión cerrada.",
+	"sesiones":     "Se han cerrado todas las demás sesiones.",
+	"revocado":     "Token revocado.",
+	"usuario":      "Usuario actualizado.",
+	"borrado":      "Usuario borrado.",
+	"appsesion":    "Sesión cerrada.",
+	"asistente":    "Configuración del asistente guardada. Se aplica en unos segundos.",
+	"avisos":       "Avisos guardados.",
+	"aviso_prueba": "Aviso de prueba enviado: míralo en Telegram.",
+	"error":        "No se pudo completar la acción; mira la auditoría.",
 }
 
 func flashText(k string) string { return flashes[k] }

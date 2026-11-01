@@ -24,6 +24,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -119,10 +120,12 @@ func serve(srv string, tokens *tokenStore, recovery *recoveryStore) error {
 		audit:        &auditLog{path: filepath.Join(state, "audit.jsonl"), log: log},
 		log:          log,
 		srvDir:       srv,
+		alerts:       newAlerter(srv),
 		svDir:        env("SVDIR", filepath.Join(env("PREFIX", "/data/data/com.termux/files/usr"), "var", "service")),
 	}
 	addr := env("GATEWAY_ADDR", "127.0.0.1:8100")
 	log.Info("escuchando", "addr", addr, "version", version.Version, "apps", len(apps), "totp", totp != nil)
+	go g.runAlerts(context.Background())
 	return g.listen(addr)
 }
 

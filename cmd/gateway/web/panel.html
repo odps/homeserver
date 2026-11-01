@@ -15,7 +15,7 @@
 <header class="topbar">
   <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
   <nav aria-label="Secciones">
-    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#security">Seguridad</a>
+    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#avisos">Avisos</a><a href="#security">Seguridad</a>
   </nav>
   <form method="post" action="/logout"><button class="ghost">Salir</button></form>
 </header>
@@ -40,6 +40,7 @@
   <section id="deploys" class="panel" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
   <section id="users" class="panel" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
   <section id="asistente" class="panel" data-refresh="/panel/frag/asistente" data-interval="60">{{template "sec-asistente" .}}</section>
+  <section id="avisos" class="panel" data-refresh="/panel/frag/avisos" data-interval="60">{{template "sec-avisos" .}}</section>
   <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
 </main>
 <footer class="container foot">homeserver {{.Version}}</footer>
@@ -301,6 +302,60 @@
     <button class="ghost small">Borrar todas las claves</button>
   </form>
   {{end}}
+</details>
+{{end}}
+{{define "sec-avisos"}}
+{{$v := .Alerts}}{{$c := $v.Config}}
+<h2>Avisos</h2>
+<p class="muted small">Mensajes automáticos por Telegram con el bot del asistente, sin IA. Cada situación avisa una vez al empezar (y, si importa, al acabar); en las horas de silencio llegan sin sonido.</p>
+<ul class="list">
+  <li><span class="dot {{if and $c.Enabled $v.Bot}}ok{{else}}warn{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{if not $v.Bot}}Falta configurar el bot y tu ID de Telegram en la sección Asistente.{{else if $c.Enabled}}Activados{{else}}Desactivados{{end}}</span>
+    {{if $v.Bot}}<form method="post" action="/panel/avisos"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="test"><button class="ghost small">Enviar prueba</button></form>{{end}}</li>
+  {{range $v.Recent}}<li><span class="dot {{if .Error}}bad{{else}}ok{{end}}" aria-hidden="true"></span><span class="grow small">{{.Text}}{{with .Error}}<br><span class="muted">No se pudo enviar: {{.}}</span>{{end}}</span><span class="muted small">{{date .Time}}</span></li>{{end}}
+</ul>
+<details>
+  <summary>Configurar</summary>
+  <form method="post" action="/panel/avisos" class="stack" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
+    <label class="check"><input type="checkbox" name="enabled" value="1"{{if $c.Enabled}} checked{{end}}> Enviar avisos</label>
+    <fieldset><legend>Horas de silencio (sin sonido)</legend>
+      <div class="row"><label>Desde<input name="quiet_from" type="time" value="{{$c.QuietFrom}}"></label>
+      <label>Hasta<input name="quiet_to" type="time" value="{{$c.QuietTo}}"></label></div>
+      <p class="muted small">Vacías: siempre con sonido.</p>
+    </fieldset>
+    <fieldset><legend>Cómics</legend>
+      <label class="check"><input type="checkbox" name="chapters" value="1"{{if $c.Chapters.On}} checked{{end}}> Capítulos nuevos de las series que sigues</label>
+      <label class="check"><input type="checkbox" name="chapters_favorites" value="1"{{if $c.Chapters.Favorites}} checked{{end}}> Solo de las favoritas</label>
+      <label>Cuándo
+        <select name="chapters_mode"><option value="now"{{if not $c.Chapters.Daily}} selected{{end}}>Al momento</option><option value="daily"{{if $c.Chapters.Daily}} selected{{end}}>Un resumen al día</option></select></label>
+      <label>Hora del resumen<input name="chapters_at" type="time" value="{{$c.Chapters.DailyAt}}"></label>
+      <label>Cuenta
+        <select name="user"><option value="">Ninguna</option>
+          {{range .Users}}{{if not .Disabled}}<option value="{{.Username}}"{{if eq .Username $c.User}} selected{{end}}>{{.Name}} ({{.Username}})</option>{{end}}{{end}}
+        </select></label>
+    </fieldset>
+    <fieldset><legend>Servidor</legend>
+      <label class="check"><input type="checkbox" name="apps" value="1"{{if $c.Apps.On}} checked{{end}}> Una app deja de funcionar</label>
+      <label>…durante (minutos)<input name="apps_minutes" type="number" min="1" max="600" value="{{$c.Apps.Minutes}}"></label>
+      <label class="check"><input type="checkbox" name="deploys_failed" value="1"{{if $c.Deploys.Failed}} checked{{end}}> Un despliegue falla y se vuelve a la versión anterior</label>
+      <label class="check"><input type="checkbox" name="deploys_ok" value="1"{{if $c.Deploys.OK}} checked{{end}}> Cada despliegue correcto</label>
+      <label class="check"><input type="checkbox" name="network" value="1"{{if $c.Network.On}} checked{{end}}> Cortes de red (se avisa al volver)</label>
+      <label>…de al menos (minutos)<input name="network_minutes" type="number" min="0" max="600" value="{{$c.Network.MinMinutes}}"></label>
+      <label class="check"><input type="checkbox" name="disk" value="1"{{if $c.Disk.On}} checked{{end}}> Poco espacio libre</label>
+      <label>…menos de (GB)<input name="disk_gb" type="number" min="0" max="500" step="0.5" value="{{$c.Disk.MinFreeGB}}"></label>
+    </fieldset>
+    <fieldset><legend>Móvil</legend>
+      <label class="check"><input type="checkbox" name="battery" value="1"{{if $c.Battery.On}} checked{{end}}> Batería</label>
+      <label class="check"><input type="checkbox" name="battery_unplugged" value="1"{{if $c.Battery.Unplugged}} checked{{end}}> Deja de cargar (corte de luz, cable suelto)</label>
+      <div class="row"><label>Baja, al llegar a (%)<input name="battery_low" type="number" min="0" max="90" value="{{$c.Battery.Low}}"></label>
+      <label>Alta, al pasar de (%; 0 = no)<input name="battery_high" type="number" min="0" max="100" value="{{$c.Battery.High}}"></label></div>
+      <label class="check"><input type="checkbox" name="temp" value="1"{{if $c.Temp.On}} checked{{end}}> Temperatura</label>
+      <div class="row"><label>Batería (°C)<input name="temp_battery" type="number" min="0" max="80" value="{{$c.Temp.Battery}}"></label>
+      <label>Procesador (°C)<input name="temp_cpu" type="number" min="0" max="110" value="{{$c.Temp.CPU}}"></label></div>
+    </fieldset>
+    <button class="primary">Guardar</button>
+  </form>
 </details>
 {{end}}
 {{define "sec-users"}}

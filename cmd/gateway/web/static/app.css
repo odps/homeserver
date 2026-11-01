@@ -140,6 +140,10 @@ label.check input { width: auto; margin: 0; }
 fieldset { border: 1px solid var(--border); border-radius: 9px; padding: .5rem .8rem .7rem; margin: 0; }
 legend { font-size: .82rem; color: var(--muted); padding: 0 .3rem; }
 .stack { display: grid; gap: .8rem; }
+fieldset > label:not(.check), fieldset > .row { margin-top: .5rem; }
+fieldset > label.check { display: flex; margin-top: .45rem; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; }
+.row > label { margin: 0; }
 details { margin-top: 1rem; }
 summary { cursor: pointer; color: var(--accent); font-weight: 550; margin-bottom: .8rem; }
 

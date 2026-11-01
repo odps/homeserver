@@ -188,6 +188,7 @@ func newHarness(t *testing.T) *harness {
 		log:          log,
 		srvDir:       dir,
 		svDir:        filepath.Join(dir, "sv"),
+		alerts:       newAlerter(dir),
 	}
 	gw := httptest.NewServer(g.handler())
 	t.Cleanup(gw.Close)

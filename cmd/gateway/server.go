@@ -80,6 +80,7 @@ type gateway struct {
 	srvDir       string
 	svDir        string
 	slowPhone    cached[phoneStatus]
+	alerts       *alerter // avisos por Telegram; nil en los tests que no los usan
 	now          func() time.Time // sustituible en los tests
 }
 
@@ -119,6 +120,7 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/tokens/revoke", g.session(g.csrf(http.HandlerFunc(g.revokeToken))))
 	mux.Handle("POST /panel/users", g.session(g.csrf(http.HandlerFunc(g.userAction))))
 	mux.Handle("POST /panel/asistente", g.session(g.csrf(http.HandlerFunc(g.assistantAction))))
+	mux.Handle("POST /panel/avisos", g.session(g.csrf(http.HandlerFunc(g.alertsAction))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
 	mux.HandleFunc("/{app}/", g.appRoutes)
 	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))
