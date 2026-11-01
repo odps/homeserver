@@ -194,8 +194,10 @@ func (w *web) renderSettings(rw http.ResponseWriter, r *http.Request, who app.Id
 	w.render(rw, r, "settings.html", data)
 }
 
+// back redirige dentro de la app. La pasarela ya antepone /noticias a las
+// redirecciones que empiezan por «/»: aquí no se añade.
 func back(rw http.ResponseWriter, r *http.Request, to, ok string) {
-	http.Redirect(rw, r, base(r)+to+"?ok="+ok, http.StatusSeeOther)
+	http.Redirect(rw, r, to+"?ok="+ok, http.StatusSeeOther)
 }
 
 func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identity) {

@@ -230,3 +230,26 @@ func TestDueDigests(t *testing.T) {
 		t.Fatalf("a su hora: %v %+v", err, d)
 	}
 }
+
+// Detrás de la pasarela: los enlaces llevan /noticias, las redirecciones no
+// (la pasarela se lo añade; si no, quedaría /noticias/noticias/…).
+func TestPrefix(t *testing.T) {
+	h := newHarness(t)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	req, _ := http.NewRequest("POST", h.srv.URL+"/ajustes", strings.NewReader("digest_at=07:00&top_count=10&topic_count=5"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Auth-User", "ana")
+	req.Header.Set("X-Forwarded-Prefix", "/noticias")
+	resp, err := client.Do(req)
+	if err != nil || resp.Header.Get("Location") != "/ajustes?ok=ajustes" {
+		t.Fatalf("redirección: %v %q", err, resp.Header.Get("Location"))
+	}
+	req, _ = http.NewRequest("GET", h.srv.URL+"/ajustes", nil)
+	req.Header.Set("X-Auth-User", "ana")
+	req.Header.Set("X-Forwarded-Prefix", "/noticias")
+	resp, _ = client.Do(req)
+	b, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(b), `action="/noticias/ajustes"`) || !strings.Contains(string(b), `href="/noticias/static/app.css"`) {
+		t.Fatal("los enlaces no llevan el prefijo")
+	}
+}
