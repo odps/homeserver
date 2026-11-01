@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -81,7 +82,9 @@ func (l llm) chat(ctx context.Context, msgs []chatMessage, tools []toolDef, choi
 	for attempt := 0; ; attempt++ {
 		err := l.post(ctx, "/chat/completions", req, &out)
 		var rl rateLimit
-		if errors.As(err, &rl) && attempt == 0 && rl.wait <= 10*time.Second {
+		// Los límites por minuto de las capas gratuitas se pasan esperando un poco
+		// (Telegram sigue mostrando «escribiendo…»); los diarios, no.
+		if errors.As(err, &rl) && attempt < 2 && rl.wait <= time.Minute {
 			select {
 			case <-time.After(rl.wait):
 				continue
@@ -123,8 +126,8 @@ func (l llm) do(req *http.Request, out any) error {
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode == http.StatusTooManyRequests {
-		wait, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
-		return rateLimit{time.Duration(max(wait, 1)) * time.Second}
+		wait, _ := strconv.ParseFloat(resp.Header.Get("Retry-After"), 64)
+		return rateLimit{time.Duration(math.Ceil(max(wait, 1))) * time.Second}
 	}
 	if resp.StatusCode != http.StatusOK {
 		var e struct {
