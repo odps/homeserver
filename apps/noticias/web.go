@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"homeserver/platform/app"
 	"homeserver/platform/version"
@@ -24,11 +25,13 @@ import (
 var webFS embed.FS
 
 var pages = template.Must(template.New("").Funcs(template.FuncMap{
-	"ago":     ago,
-	"longDay": longDay,
-	"plus":    func(n int) string { return fmt.Sprintf("y %d más", n) },
-	"join":    strings.Join,
-	"has":     func(list []string, s string) bool { return slices.Contains(list, s) },
+	"ago":       ago,
+	"longDay":   longDay,
+	"plus":      func(n int) string { return fmt.Sprintf("y %d más", n) },
+	"join":      strings.Join,
+	"has":       func(list []string, s string) bool { return slices.Contains(list, s) },
+	"inc":       func(n int) int { return n + 1 },
+	"twodigits": func(n int) string { return fmt.Sprintf("%02d", n) },
 }).ParseFS(webFS, "web/*.html"))
 
 const csp = "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
@@ -47,12 +50,20 @@ type pageData struct {
 	Topics  []topic
 	General []generalView
 	Feeds   map[string]feedState
+	Themes  []presetView // categorías
+	Social  []presetView // redes y tendencias
+	Reddit  string
 }
 
 type generalView struct {
 	generalSource
 	Enabled bool
 	State   feedState
+}
+
+type presetView struct {
+	Key, Name, Hint string
+	Enabled         bool
 }
 
 func ago(t time.Time) string {
@@ -188,6 +199,18 @@ func (w *web) renderSettings(rw http.ResponseWriter, r *http.Request, who app.Id
 	for _, g := range generalSources {
 		data.General = append(data.General, generalView{generalSource: g, Enabled: !slices.Contains(p.Disabled, g.Key), State: states[g.URL]})
 	}
+	for _, pr := range presets {
+		v := presetView{Key: pr.Key, Name: pr.Name, Hint: pr.Hint, Enabled: slices.Contains(p.Presets, pr.Key)}
+		if pr.Group == "redes" {
+			data.Social = append(data.Social, v)
+		} else {
+			data.Themes = append(data.Themes, v)
+		}
+	}
+	for _, r := range p.Reddit {
+		data.Reddit += "r/" + r + " "
+	}
+	data.Reddit = strings.TrimSpace(data.Reddit)
 	if errMsg != "" {
 		rw.WriteHeader(http.StatusBadRequest)
 	}
@@ -206,21 +229,50 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 		w.renderSettings(rw, r, who, err.Error())
 		return
 	}
-	at := strings.TrimSpace(r.FormValue("digest_at"))
-	top, err1 := strconv.Atoi(r.FormValue("top_count"))
-	per, err2 := strconv.Atoi(r.FormValue("topic_count"))
-	if t, err := time.Parse("15:04", at); err != nil || errors.Join(err1, err2) != nil || top < 3 || top > 30 || per < 1 || per > 15 {
-		w.renderSettings(rw, r, who, "Revisa los ajustes: la hora como 07:00, de 3 a 30 noticias generales y de 1 a 15 por interés.")
-		return
-	} else {
-		at = t.Format("15:04")
-	}
-	p.DigestAt, p.TopCount, p.TopicCount, p.AISummary = at, top, per, r.FormValue("ai_summary") != ""
-	p.Disabled = []string{}
-	for _, g := range generalSources {
-		if r.FormValue("src_"+g.Key) == "" {
-			p.Disabled = append(p.Disabled, g.Key)
+	// El formulario de ajustes va por partes (secciones, medios, digest):
+	// cada una manda solo sus campos y «part» dice cuál es.
+	switch r.FormValue("part") {
+	case "secciones":
+		p.Presets = []string{}
+		for _, pr := range presets {
+			if r.FormValue("preset_"+pr.Key) != "" {
+				p.Presets = append(p.Presets, pr.Key)
+			}
 		}
+		p.Reddit = []string{}
+		var bad []string
+		for _, f := range strings.FieldsFunc(r.FormValue("reddit"), func(c rune) bool { return c == ',' || unicode.IsSpace(c) }) {
+			if sub := cleanSubreddit(f); sub != "" {
+				if !slices.Contains(p.Reddit, sub) && len(p.Reddit) < 10 {
+					p.Reddit = append(p.Reddit, sub)
+				}
+			} else {
+				bad = append(bad, f)
+			}
+		}
+		if len(bad) > 0 {
+			w.renderSettings(rw, r, who, "Estos subforos no tienen un nombre válido: "+strings.Join(bad, ", "))
+			return
+		}
+		p.World = r.FormValue("world") != ""
+	case "medios":
+		p.Disabled = []string{}
+		for _, g := range generalSources {
+			if r.FormValue("src_"+g.Key) == "" {
+				p.Disabled = append(p.Disabled, g.Key)
+			}
+		}
+	default:
+		at := strings.TrimSpace(r.FormValue("digest_at"))
+		top, err1 := strconv.Atoi(r.FormValue("top_count"))
+		world, err2 := strconv.Atoi(r.FormValue("world_count"))
+		per, err3 := strconv.Atoi(r.FormValue("topic_count"))
+		t, err := time.Parse("15:04", at)
+		if err != nil || errors.Join(err1, err2, err3) != nil || top < 3 || top > 30 || world < 3 || world > 30 || per < 1 || per > 15 {
+			w.renderSettings(rw, r, who, "Revisa los ajustes: la hora como 07:00, de 3 a 30 noticias generales y del mundo, y de 1 a 15 por sección.")
+			return
+		}
+		p.DigestAt, p.TopCount, p.WorldCount, p.TopicCount, p.AISummary = t.Format("15:04"), top, world, per, r.FormValue("ai_summary") != ""
 	}
 	if err := w.svc.store.savePrefs(r.Context(), who.User, p); err != nil {
 		w.renderSettings(rw, r, who, err.Error())

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -96,6 +97,13 @@ type rssItem struct {
 	PubDate     string `xml:"pubDate"`
 	Date        string `xml:"http://purl.org/dc/elements/1.1/ date"`
 	Source      string `xml:"source"`
+	// Google Tendencias: cuánto se busca y las noticias relacionadas.
+	Traffic string `xml:"approx_traffic"`
+	News    []struct {
+		Title  string `xml:"news_item_title"`
+		URL    string `xml:"news_item_url"`
+		Source string `xml:"news_item_source"`
+	} `xml:"news_item"`
 }
 
 type atomDoc struct {
@@ -134,7 +142,54 @@ func (f *fetcher) fetch(ctx context.Context, feedURL string) (parsedFeed, error)
 	if err != nil {
 		return parsedFeed{}, err
 	}
+	if t := strings.TrimSpace(string(data)); strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[") {
+		return parseJSONFeed(feedURL, data, time.Now())
+	}
 	return parseFeed(data, time.Now())
+}
+
+// parseJSONFeed entiende las dos fuentes de redes que no dan RSS: los enlaces
+// en tendencia de Mastodon y los temas del momento de Bluesky.
+func parseJSONFeed(feedURL string, data []byte, now time.Time) (parsedFeed, error) {
+	switch {
+	case strings.Contains(feedURL, "/api/v1/trends/links"):
+		var links []struct {
+			URL         string `json:"url"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Provider    string `json:"provider_name"`
+		}
+		if err := json.Unmarshal(data, &links); err != nil {
+			return parsedFeed{}, err
+		}
+		out := parsedFeed{Title: "Mastodon"}
+		for _, l := range links {
+			src := cleanText(l.Provider, 100)
+			if src == "" {
+				src = "Mastodon"
+			}
+			out.Items = append(out.Items, feedItem{Source: src, Link: l.URL, Title: cleanText(l.Title, 300), Summary: summarize(l.Description), Published: now})
+		}
+		return out.valid(), nil
+	case strings.Contains(feedURL, "getTrendingTopics"):
+		var tt struct {
+			Topics []struct {
+				Topic       string `json:"topic"`
+				DisplayName string `json:"displayName"`
+				Link        string `json:"link"`
+			} `json:"topics"`
+		}
+		if err := json.Unmarshal(data, &tt); err != nil {
+			return parsedFeed{}, err
+		}
+		out := parsedFeed{Title: "Bluesky"}
+		for _, t := range tt.Topics {
+			name := firstNonEmpty(t.DisplayName, t.Topic)
+			out.Items = append(out.Items, feedItem{Source: "Bluesky", Link: "https://bsky.app" + t.Link, Title: cleanText(name, 200), Published: now})
+		}
+		return out.valid(), nil
+	}
+	return parsedFeed{}, errors.New("formato no reconocido")
 }
 
 func newDecoder(data []byte) *xml.Decoder {
@@ -176,8 +231,20 @@ func parseFeed(data []byte, now time.Time) (parsedFeed, error) {
 			if source != "" && strings.HasSuffix(title, " - "+source) {
 				title = strings.TrimSuffix(title, " - "+source)
 			}
-			out.Items = append(out.Items, feedItem{Source: source, Link: link, Title: title,
-				Summary: summarize(it.Description), Published: parseDate(firstNonEmpty(it.PubDate, it.Date), now)})
+			fi := feedItem{Source: source, Link: link, Title: title,
+				Summary: summarize(it.Description), Published: parseDate(firstNonEmpty(it.PubDate, it.Date), now)}
+			if len(it.News) > 0 { // Google Tendencias: el término y la noticia que lo explica
+				n := it.News[0]
+				fi.Summary = cleanText(n.Title, 300)
+				if t := cleanText(it.Traffic, 20); t != "" {
+					fi.Summary = t + " búsquedas · " + fi.Summary
+				}
+				if strings.HasPrefix(n.URL, "http") {
+					fi.Link = n.URL
+				}
+				fi.Source = firstNonEmpty(cleanText(n.Source, 100), "Google Tendencias")
+			}
+			out.Items = append(out.Items, fi)
 		}
 		return out.valid(), nil
 	}
@@ -207,6 +274,10 @@ func (p parsedFeed) valid() parsedFeed {
 	for _, it := range p.Items {
 		if strings.HasPrefix(it.Summary, it.Title) && len([]rune(it.Summary)) < len([]rune(it.Title))+60 {
 			it.Summary = ""
+		}
+		it.Summary = socialSummary(it.Summary)
+		if strings.HasPrefix(p.Title, "Hacker News") {
+			it.Source = "Hacker News"
 		}
 		if it.Title != "" && (strings.HasPrefix(it.Link, "https://") || strings.HasPrefix(it.Link, "http://")) {
 			items = append(items, it)
@@ -255,6 +326,21 @@ func cleanText(s string, max int) string {
 		s = strings.TrimSpace(string(r[:max])) + "…"
 	}
 	return s
+}
+
+var (
+	reHNStats   = regexp.MustCompile(`Points: (\d+).*Comments: (\d+)`)
+	reRedditTag = regexp.MustCompile(`(?s)\s*submitted by\s+/u/\S+.*$`)
+)
+
+// socialSummary arregla las entradillas de Hacker News («Article URL: …
+// Points: 51 # Comments: 22» → «51 puntos · 22 comentarios») y quita el pie
+// que Reddit pone a cada entrada.
+func socialSummary(s string) string {
+	if m := reHNStats.FindStringSubmatch(s); m != nil && strings.Contains(s, "Comments URL:") {
+		return m[1] + " puntos · " + m[2] + " comentarios"
+	}
+	return strings.TrimSpace(reRedditTag.ReplaceAllString(s, ""))
 }
 
 // summarize deja un extracto corto: el feed puede traer el artículo entero,

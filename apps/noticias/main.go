@@ -9,6 +9,7 @@ import (
 	"context"
 	"embed"
 	"os"
+	"time"
 
 	"homeserver/platform/app"
 )
@@ -25,7 +26,8 @@ func setup(env *app.Env) error {
 	if assistant == "" {
 		assistant = "http://127.0.0.1:8103"
 	}
-	svc := &service{store: store{env.DB}, fetch: newFetcher(false), log: env.Log, summarizer: assistantSummarizer(assistant)}
+	svc := &service{store: store{env.DB}, fetch: newFetcher(false), log: env.Log, summarizer: assistantSummarizer(assistant),
+		redditPause: 8 * time.Second}
 	go svc.run(context.Background())
 	(&web{svc: svc}).routes(env.Mux)
 	addTools(env.MCP, svc)

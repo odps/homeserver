@@ -1,28 +1,71 @@
 {{define "digest.html"}}{{template "head" .}}
 {{$d := .Digest}}
-<section class="intro">
-  <p class="kicker">{{if .Today}}Buenos días{{with .Name}}, {{.}}{{end}}{{else}}Digest{{end}}</p>
-  <h1>{{if $d.Day}}{{longDay $d.Day}}{{else}}Hoy{{end}}</h1>
-  {{if not $d.Created.IsZero}}<p class="meta">Preparado {{ago $d.Created}}{{if .Today}} ·
-    <form class="inline" method="post" action="{{.Base}}/rehacer"><button class="link">Actualizar con lo último</button></form>{{end}}</p>{{end}}
+<section class="hero">
+  <p class="eyebrow">{{if .Today}}Buenos días{{with .Name}}, {{.}}{{end}}{{else}}Archivo{{end}}</p>
+  <h1 class="date">{{if $d.Day}}{{longDay $d.Day}}{{else}}Hoy{{end}}</h1>
+  {{if not $d.Created.IsZero}}
+  <div class="hero-meta">
+    <span>Preparado {{ago $d.Created}}</span>
+    <span>{{len $d.Sections}} secciones</span>
+    {{if .Today}}<form class="inline" method="post" action="{{.Base}}/rehacer"><button class="pill">Actualizar</button></form>{{end}}
+  </div>
+  {{end}}
 </section>
-{{with $d.Summary}}<section class="summary"><h2>En resumen</h2><p>{{.}}</p></section>{{end}}
-{{range $d.Sections}}
-<section class="section">
-  <h2>{{.Title}}</h2>
-  <ol class="news">
-    {{range .Items}}
+
+{{if gt (len $d.Sections) 1}}
+<nav class="toc" aria-label="Ir a una sección">
+  <div class="toc-in">{{range $i, $s := $d.Sections}}<a href="#s{{$i}}">{{$s.Title}}</a>{{end}}</div>
+</nav>
+{{end}}
+
+{{with $d.Summary}}
+<section class="brief" aria-labelledby="brief-h">
+  <h2 id="brief-h" class="label">En resumen</h2>
+  <p>{{.}}</p>
+</section>
+{{end}}
+
+{{range $i, $s := $d.Sections}}
+<section class="sec{{if eq $s.Kind "red"}} sec-red{{end}}{{if eq $i 0}} sec-top{{end}}" id="s{{$i}}" aria-labelledby="h{{$i}}">
+  <header class="sec-head">
+    <h2 id="h{{$i}}">{{$s.Title}}</h2>
+    <span class="count">{{len $s.Items}}</span>
+  </header>
+  {{if eq $s.Kind "red"}}
+  <ol class="ranked">
+    {{range $n, $it := $s.Items}}
     <li>
-      <a class="headline" href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
-      <p class="meta">{{.Source}}{{with .Others}} <span title="{{join . ", "}}">{{plus (len .)}}</span>{{end}} · {{ago .Time}}</p>
-      {{with .Summary}}<p class="extract">{{.}}</p>{{end}}
+      <span class="rank" aria-hidden="true">{{inc $n}}</span>
+      <div>
+        <a class="hl" href="{{$it.Link}}" target="_blank" rel="noopener noreferrer">{{$it.Title}}</a>
+        <p class="meta">{{$it.Source}}{{with $it.Summary}} · {{.}}{{end}}</p>
+      </div>
     </li>
     {{end}}
   </ol>
+  {{else}}
+  <div class="stories">
+    {{range $n, $it := $s.Items}}
+    <article class="story{{if eq $n 0}} lead{{end}}">
+      <span class="num" aria-hidden="true">{{twodigits (inc $n)}}</span>
+      <div class="story-body">
+        <a class="hl" href="{{$it.Link}}" target="_blank" rel="noopener noreferrer">{{$it.Title}}</a>
+        {{with $it.Summary}}<p class="dek">{{.}}</p>{{end}}
+        <p class="meta">
+          <span class="src">{{$it.Source}}</span>
+          {{with $it.Others}}<span class="cover" title="También: {{join . ", "}}">{{inc (len .)}} medios</span>{{end}}
+          <span>{{ago $it.Time}}</span>
+        </p>
+      </div>
+    </article>
+    {{end}}
+  </div>
+  {{end}}
 </section>
 {{else}}
 <section class="empty">
-  <p>Todavía no hay noticias{{if .Today}}: se están recogiendo los medios. Vuelve en un par de minutos o añade tus intereses en <a href="{{.Base}}/ajustes">Ajustes</a>{{end}}.</p>
+  <p class="big">Aún no hay noticias.</p>
+  <p>{{if .Today}}Se están recogiendo los medios; vuelve en un par de minutos. Mientras, elige tus secciones en <a href="{{.Base}}/ajustes">Ajustes</a>.{{else}}Este día no tiene digest.{{end}}</p>
 </section>
 {{end}}
 {{template "foot" .}}{{end}}

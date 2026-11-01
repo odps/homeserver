@@ -13,14 +13,24 @@ func TestLiveFeeds(t *testing.T) {
 		t.Skip("solo con NOTICIAS_LIVE=1")
 	}
 	f := newFetcher(false)
-	for _, g := range append(generalSources, generalSource{"gn", "Google News", topicFeedURL("inteligencia artificial")}) {
+	urls := map[string]string{}
+	for _, g := range generalSources {
+		urls[g.URL] = g.Name
+	}
+	for _, p := range presets {
+		for _, u := range p.Feeds() {
+			urls[u] = p.Name
+		}
+	}
+	urls[redditFeedURL("worldnews")] = "Reddit"
+	for u, name := range urls {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		p, err := f.fetch(ctx, g.URL)
+		p, err := f.fetch(ctx, u)
 		cancel()
 		first := ""
 		if len(p.Items) > 0 {
-			first = p.Items[0].Title + " | " + p.Items[0].Source + " | " + p.Items[0].Published.Format(time.RFC3339)
+			first = p.Items[0].Title + " | " + p.Items[0].Source
 		}
-		t.Logf("%-24s %3d %v %s", g.Name, len(p.Items), err, first)
+		t.Logf("%-28s %3d %v %s", name, len(p.Items), err, first)
 	}
 }

@@ -44,7 +44,7 @@ func addTools(server *mcp.Server, svc *service) {
 			d, err := svc.today(ctx, who.User, time.Now())
 			return nil, d, err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "noticias_buscar", Description: "Busca noticias recogidas en los últimos 3 días (medios generales y los intereses de esta persona) que contengan todas las palabras"},
+	mcp.AddTool(server, &mcp.Tool{Name: "noticias_buscar", Description: "Busca noticias recogidas en los últimos 3 días (medios de España y del mundo, y las categorías, intereses, redes y subforos de esta persona) que contengan todas las palabras"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, newsOut, error) {
 			who, err := identity(req)
 			if err != nil {
@@ -68,6 +68,16 @@ func addTools(server *mcp.Server, svc *service) {
 				}
 				for _, f := range t.Feeds {
 					feeds = append(feeds, f.URL)
+				}
+			}
+			if p, err := svc.store.prefs(ctx, who.User); err == nil {
+				for _, k := range p.Presets {
+					if pr, ok := presetByKey(k); ok {
+						feeds = append(feeds, pr.Feeds()...)
+					}
+				}
+				for _, r := range p.Reddit {
+					feeds = append(feeds, redditFeedURL(r))
 				}
 			}
 			items, err := svc.store.itemsSince(ctx, feeds, time.Now().Add(-72*time.Hour))

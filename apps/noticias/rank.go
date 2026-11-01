@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -121,7 +122,9 @@ func toDigestItem(c *cluster) digestItem {
 	return digestItem{Title: l.Title, Link: l.Link, Source: l.Source, Summary: l.Summary, Time: l.Published, Others: c.others()}
 }
 
-// buildDigest prepara el digest de una cuenta con lo recogido hasta ahora.
+// buildDigest prepara el digest de una cuenta con lo recogido hasta ahora:
+// lo más importante (medios de España), en el mundo (internacionales), las
+// categorías que tenga activadas, sus intereses, las redes y sus subforos.
 func (s store) buildDigest(ctx context.Context, user string, now time.Time) (digest, error) {
 	p, err := s.prefs(ctx, user)
 	if err != nil {
@@ -132,70 +135,97 @@ func (s store) buildDigest(ctx context.Context, user string, now time.Time) (dig
 		return digest{}, err
 	}
 	d := digest{Day: now.In(madrid).Format("2006-01-02"), Created: now}
+	used := map[string]bool{} // enlaces ya en el digest
+
+	// section junta las noticias de unos feeds. Por cobertura: agrupa y van
+	// antes las que cuentan más medios. Por orden de la red (byRank): tal
+	// cual vienen, sin agrupar.
+	section := func(title string, urls []string, since time.Duration, limit int, byRank bool) error {
+		if len(urls) == 0 || limit <= 0 {
+			return nil
+		}
+		items, err := s.itemsSince(ctx, urls, now.Add(-since))
+		if err != nil {
+			return err
+		}
+		sec := digestSection{Title: title}
+		if byRank {
+			sec.Kind = "red"
+			for _, it := range items { // ya vienen por «fecha» = posición, de más a menos
+				if len(sec.Items) >= limit {
+					break
+				}
+				if !used[it.Link] {
+					sec.Items = append(sec.Items, digestItem{Title: it.Title, Link: it.Link, Source: it.Source, Summary: it.Summary, Time: it.Published})
+					used[it.Link] = true
+				}
+			}
+		} else {
+			cs := group(items)
+			rankClusters(cs)
+			for _, c := range cs {
+				if len(sec.Items) >= limit {
+					break
+				}
+				if it := toDigestItem(c); !used[it.Link] {
+					sec.Items = append(sec.Items, it)
+					used[it.Link] = true
+				}
+			}
+		}
+		if len(sec.Items) > 0 {
+			d.Sections = append(d.Sections, sec)
+		}
+		return nil
+	}
 
 	disabled := map[string]bool{}
 	for _, k := range p.Disabled {
 		disabled[k] = true
 	}
-	var general []string
+	var spain, world []string
 	for _, g := range generalSources {
-		if !disabled[g.Key] {
-			general = append(general, g.URL)
+		switch {
+		case disabled[g.Key]:
+		case g.Group == "mundo":
+			world = append(world, g.URL)
+		default:
+			spain = append(spain, g.URL)
 		}
 	}
-	used := map[string]bool{} // enlaces ya en el digest
-	if len(general) > 0 {
-		items, err := s.itemsSince(ctx, general, now.Add(-30*time.Hour))
-		if err != nil {
-			return d, err
-		}
-		cs := group(items)
-		rankClusters(cs)
-		sec := digestSection{Title: "Lo más importante"}
-		for _, c := range cs {
-			if len(sec.Items) >= p.TopCount {
-				break
-			}
-			it := toDigestItem(c)
-			sec.Items = append(sec.Items, it)
-			used[it.Link] = true
-		}
-		if len(sec.Items) > 0 {
-			d.Sections = append(d.Sections, sec)
+	enabled := map[string]bool{}
+	for _, k := range p.Presets {
+		enabled[k] = true
+	}
+	var errs []error
+	errs = append(errs, section("Lo más importante", spain, 30*time.Hour, p.TopCount, false))
+	if p.World {
+		errs = append(errs, section("En el mundo", world, 30*time.Hour, p.WorldCount, false))
+	}
+	for _, pr := range presets {
+		if pr.Group == "tema" && enabled[pr.Key] {
+			errs = append(errs, section(pr.Name, pr.Feeds(), 36*time.Hour, p.TopicCount, false))
 		}
 	}
 	for _, t := range topics {
-		var feeds []string
+		var urls []string
 		if t.Query != "" {
-			feeds = append(feeds, topicFeedURL(t.Query))
+			urls = append(urls, topicFeedURL(t.Query))
 		}
 		for _, f := range t.Feeds {
-			feeds = append(feeds, f.URL)
+			urls = append(urls, f.URL)
 		}
-		if len(feeds) == 0 {
-			continue
-		}
-		items, err := s.itemsSince(ctx, feeds, now.Add(-48*time.Hour))
-		if err != nil {
-			return d, err
-		}
-		cs := group(items)
-		rankClusters(cs)
-		sec := digestSection{Title: t.Name}
-		for _, c := range cs {
-			if len(sec.Items) >= p.TopicCount {
-				break
-			}
-			if it := toDigestItem(c); !used[it.Link] {
-				sec.Items = append(sec.Items, it)
-				used[it.Link] = true
-			}
-		}
-		if len(sec.Items) > 0 {
-			d.Sections = append(d.Sections, sec)
+		errs = append(errs, section(t.Name, urls, 48*time.Hour, p.TopicCount, false))
+	}
+	for _, pr := range presets {
+		if pr.Group == "redes" && enabled[pr.Key] {
+			errs = append(errs, section(pr.Name, pr.Feeds(), 6*time.Hour, p.TopicCount, true))
 		}
 	}
-	return d, nil
+	for _, r := range p.Reddit {
+		errs = append(errs, section("r/"+r, []string{redditFeedURL(r)}, 6*time.Hour, p.TopicCount, true))
+	}
+	return d, errors.Join(errs...)
 }
 
 // summaryPrompt es lo que se le pasa al modelo para el resumen del día.

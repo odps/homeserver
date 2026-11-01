@@ -24,12 +24,18 @@ type item struct {
 	Published time.Time `json:"publicada"`
 }
 
-// saveItems guarda las noticias nuevas de un feed y devuelve cuántas eran nuevas.
+// saveItems guarda las noticias nuevas de un feed y devuelve cuántas eran
+// nuevas. En los feeds por orden de la red (ranked) la fecha es la posición
+// en la última lectura: se actualiza también en las que ya estaban.
 func (s store) saveItems(ctx context.Context, feed string, items []feedItem) (int, error) {
 	n := 0
+	conflict := "DO NOTHING"
+	if ranked(feed) {
+		conflict = "DO UPDATE SET published = excluded.published, title = excluded.title, summary = excluded.summary"
+	}
 	for _, it := range items {
 		tag, err := s.db.Exec(ctx, `INSERT INTO items (feed, source, link, title, summary, published)
-			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (feed, link) DO NOTHING`, feed, it.Source, it.Link, it.Title, it.Summary, it.Published)
+			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (feed, link) `+conflict, feed, it.Source, it.Link, it.Title, it.Summary, it.Published)
 		if err != nil {
 			return n, err
 		}
@@ -97,6 +103,24 @@ func (s store) feedURLs(ctx context.Context) ([]string, error) {
 	for _, g := range generalSources {
 		add(g.URL)
 	}
+	// Categorías y fuentes de redes que tenga activadas alguien, y sus subforos.
+	var keys, subs []string
+	if err := s.db.QueryRow(ctx, `SELECT coalesce(array_agg(DISTINCT p), '{}') FROM prefs, unnest(presets) p`).Scan(&keys); err != nil {
+		return nil, err
+	}
+	for _, k := range keys {
+		if p, ok := presetByKey(k); ok {
+			for _, f := range p.Feeds() {
+				add(f)
+			}
+		}
+	}
+	if err := s.db.QueryRow(ctx, `SELECT coalesce(array_agg(DISTINCT lower(r)), '{}') FROM prefs, unnest(reddit) r`).Scan(&subs); err != nil {
+		return nil, err
+	}
+	for _, r := range subs {
+		add(redditFeedURL(r))
+	}
 	rows, err := s.db.Query(ctx, `SELECT DISTINCT query FROM topics WHERE query <> ''`)
 	if err != nil {
 		return nil, err
@@ -150,17 +174,23 @@ type prefs struct {
 	AISummary  bool
 	TopCount   int
 	TopicCount int
-	Disabled   []string
+	Disabled   []string // medios generales desactivados
+	Presets    []string // categorías y fuentes de redes activadas
+	Reddit     []string // subforos
+	World      bool     // sección «En el mundo»
+	WorldCount int
 }
 
 func defaultPrefs() prefs {
-	return prefs{DigestAt: "07:00", AISummary: true, TopCount: 10, TopicCount: 5, Disabled: []string{}}
+	return prefs{DigestAt: "07:00", AISummary: true, TopCount: 10, TopicCount: 5, Disabled: []string{}, Presets: []string{},
+		Reddit: []string{}, World: true, WorldCount: 8}
 }
 
 func (s store) prefs(ctx context.Context, user string) (prefs, error) {
 	p := defaultPrefs()
-	err := s.db.QueryRow(ctx, `SELECT digest_at, ai_summary, top_count, topic_count, disabled FROM prefs WHERE username = $1`, user).
-		Scan(&p.DigestAt, &p.AISummary, &p.TopCount, &p.TopicCount, &p.Disabled)
+	err := s.db.QueryRow(ctx, `SELECT digest_at, ai_summary, top_count, topic_count, disabled, presets, reddit, world, world_count
+		FROM prefs WHERE username = $1`, user).
+		Scan(&p.DigestAt, &p.AISummary, &p.TopCount, &p.TopicCount, &p.Disabled, &p.Presets, &p.Reddit, &p.World, &p.WorldCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, nil
 	}
@@ -168,9 +198,11 @@ func (s store) prefs(ctx context.Context, user string) (prefs, error) {
 }
 
 func (s store) savePrefs(ctx context.Context, user string, p prefs) error {
-	_, err := s.db.Exec(ctx, `INSERT INTO prefs (username, digest_at, ai_summary, top_count, topic_count, disabled) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (username) DO UPDATE SET digest_at = $2, ai_summary = $3, top_count = $4, topic_count = $5, disabled = $6, updated_at = now()`,
-		user, p.DigestAt, p.AISummary, p.TopCount, p.TopicCount, p.Disabled)
+	_, err := s.db.Exec(ctx, `INSERT INTO prefs (username, digest_at, ai_summary, top_count, topic_count, disabled, presets, reddit, world, world_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (username) DO UPDATE SET digest_at = $2, ai_summary = $3, top_count = $4, topic_count = $5, disabled = $6,
+			presets = $7, reddit = $8, world = $9, world_count = $10, updated_at = now()`,
+		user, p.DigestAt, p.AISummary, p.TopCount, p.TopicCount, p.Disabled, p.Presets, p.Reddit, p.World, p.WorldCount)
 	return err
 }
 
@@ -281,6 +313,7 @@ type digestItem struct {
 
 type digestSection struct {
 	Title string       `json:"titulo"`
+	Kind  string       `json:"tipo,omitempty"` // «red»: por orden de la red (tendencias, votos); si no, por cobertura
 	Items []digestItem `json:"noticias"`
 }
 

@@ -1,55 +1,98 @@
 {{define "settings.html"}}{{template "head" .}}
-<section class="intro"><h1>Ajustes</h1><p class="meta">Tu digest: lo más importante del día y una sección por cada interés.</p></section>
+<section class="hero compact">
+  <p class="eyebrow">Ajustes</p>
+  <h1 class="date">Tu digest</h1>
+  <div class="hero-meta"><span>Elige qué leer cada mañana y cuándo</span></div>
+</section>
 
-<section class="card">
-  <h2>Intereses</h2>
-  <p class="meta">Cada interés es una sección. Se llena con lo que publiquen los medios sobre las palabras que pongas (búsqueda de Google News) y con los feeds RSS que le añadas.</p>
+<nav class="toc" aria-label="Partes de los ajustes">
+  <div class="toc-in"><a href="#secciones">Secciones</a><a href="#intereses">Intereses</a><a href="#medios">Medios</a><a href="#digest">Hora y cantidad</a></div>
+</nav>
+
+<form id="secciones" method="post" action="{{.Base}}/ajustes" class="panel">
+  <input type="hidden" name="part" value="secciones">
+  <header class="panel-head"><h2>Secciones</h2><p>Toca para activar o quitar. Cada una es un bloque de tu digest.</p></header>
+
+  <h3 class="label">General</h3>
+  <div class="chips">
+    <label class="chip fixed"><span class="chip-name">Lo más importante</span><span class="chip-hint">Medios de España, por cobertura</span></label>
+    <label class="chip"><input type="checkbox" name="world" value="1"{{if .Prefs.World}} checked{{end}}><span class="chip-name">En el mundo</span><span class="chip-hint">BBC, Guardian, NYT, Al Jazeera…</span></label>
+  </div>
+
+  <h3 class="label">Categorías</h3>
+  <div class="chips">
+    {{range .Themes}}<label class="chip"><input type="checkbox" name="preset_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}><span class="chip-name">{{.Name}}</span><span class="chip-hint">{{.Hint}}</span></label>{{end}}
+  </div>
+
+  <h3 class="label">Redes y tendencias</h3>
+  <div class="chips">
+    {{range .Social}}<label class="chip"><input type="checkbox" name="preset_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}><span class="chip-name">{{.Name}}</span><span class="chip-hint">{{.Hint}}</span></label>{{end}}
+  </div>
+  <label class="field">Subforos de Reddit <span class="help">Lo más votado del día en cada uno. Separados por espacios, hasta 10.</span>
+    <input name="reddit" value="{{.Reddit}}" placeholder="r/worldnews r/golang" autocomplete="off" spellcheck="false"></label>
+  <div class="actions"><button class="btn primary">Guardar secciones</button></div>
+</form>
+
+<section id="intereses" class="panel">
+  <header class="panel-head"><h2>Intereses propios</h2><p>Temas a tu medida: se llenan con lo que publiquen los medios sobre las palabras que pongas y con los feeds RSS que les añadas.</p></header>
+  <div class="topics">
   {{range .Topics}}
   <details class="topic">
-    <summary><strong>{{.Name}}</strong> <span class="meta">{{if .Query}}«{{.Query}}»{{else}}solo feeds{{end}}{{with .Feeds}} · {{len .}} feed{{if gt (len .) 1}}s{{end}}{{end}}</span></summary>
-    <form method="post" action="{{$.Base}}/temas/{{.ID}}" class="stack">
-      <label>Nombre<input name="name" value="{{.Name}}" maxlength="60" required></label>
-      <label>Buscar en las noticias (vacío: solo sus feeds)<input name="query" value="{{.Query}}" maxlength="120" placeholder="p. ej. inteligencia artificial"></label>
-      <div class="row"><button name="action" value="save">Guardar</button><button name="action" value="delete" class="ghost">Borrar interés</button></div>
-    </form>
-    <ul class="feeds">
-      {{range .Feeds}}{{$st := index $.Feeds .URL}}
-      <li><span class="url">{{with $st.Title}}{{.}}{{else}}Feed{{end}}</span><span class="meta small">{{.URL}}{{with $st.Error}} · <em>falla: {{.}}</em>{{end}}</span>
-        <form method="post" action="{{$.Base}}/feeds/{{.ID}}/borrar" class="inline"><button class="link">Quitar</button></form></li>
-      {{end}}
-    </ul>
-    <form method="post" action="{{$.Base}}/temas/{{.ID}}/feeds" class="row">
-      <input name="url" type="url" placeholder="https://… (RSS o Atom)" required aria-label="Dirección del feed">
-      <button>Añadir feed</button>
-    </form>
-  </details>
-  {{else}}<p class="meta">Aún no tienes intereses.</p>{{end}}
-  <form method="post" action="{{.Base}}/temas" class="stack add">
-    <h3>Nuevo interés</h3>
-    <div class="row">
-      <input name="name" maxlength="60" required placeholder="Nombre (p. ej. Tecnología)" aria-label="Nombre del interés">
-      <input name="query" maxlength="120" placeholder="Palabras a buscar (p. ej. Apple OR Android)" aria-label="Palabras a buscar">
+    <summary><span class="topic-name">{{.Name}}</span><span class="meta">{{if .Query}}«{{.Query}}»{{else}}solo feeds{{end}}{{with .Feeds}} · {{len .}} feed{{if gt (len .) 1}}s{{end}}{{end}}</span><span class="chev" aria-hidden="true"></span></summary>
+    <div class="topic-body">
+      <form method="post" action="{{$.Base}}/temas/{{.ID}}" class="grid2">
+        <label class="field">Nombre<input name="name" value="{{.Name}}" maxlength="60" required></label>
+        <label class="field">Buscar en las noticias <span class="help">Vacío: solo sus feeds</span><input name="query" value="{{.Query}}" maxlength="120" placeholder="p. ej. inteligencia artificial"></label>
+        <div class="actions span2"><button class="btn" name="action" value="save">Guardar</button><button class="btn danger" name="action" value="delete">Borrar interés</button></div>
+      </form>
+      {{with .Feeds}}<ul class="feeds">
+        {{range .}}{{$st := index $.Feeds .URL}}
+        <li><div><strong>{{with $st.Title}}{{.}}{{else}}Feed{{end}}</strong><span class="meta">{{.URL}}{{with $st.Error}} · <em class="warn">falla: {{.}}</em>{{end}}</span></div>
+          <form method="post" action="{{$.Base}}/feeds/{{.ID}}/borrar" class="inline"><button class="link">Quitar</button></form></li>
+        {{end}}
+      </ul>{{end}}
+      <form method="post" action="{{$.Base}}/temas/{{.ID}}/feeds" class="addline">
+        <input name="url" type="url" placeholder="https://… (RSS o Atom)" required aria-label="Dirección del feed">
+        <button class="btn">Añadir feed</button>
+      </form>
     </div>
-    <button>Añadir</button>
+  </details>
+  {{else}}<p class="meta">Aún no tienes intereses propios.</p>{{end}}
+  </div>
+  <form method="post" action="{{.Base}}/temas" class="newtopic">
+    <h3 class="label">Nuevo interés</h3>
+    <div class="grid2">
+      <label class="field">Nombre<input name="name" maxlength="60" required placeholder="p. ej. Astronomía"></label>
+      <label class="field">Palabras a buscar<input name="query" maxlength="120" placeholder="p. ej. telescopio OR NASA"></label>
+    </div>
+    <div class="actions"><button class="btn primary">Añadir interés</button></div>
   </form>
 </section>
 
-<form method="post" action="{{.Base}}/ajustes" class="card stack">
-  <h2>Digest</h2>
-  <div class="row">
-    <label>Hora a la que se prepara<input name="digest_at" type="time" value="{{.Prefs.DigestAt}}" required></label>
-    <label>Noticias en «Lo más importante»<input name="top_count" type="number" min="3" max="30" value="{{.Prefs.TopCount}}"></label>
-    <label>Noticias por interés<input name="topic_count" type="number" min="1" max="15" value="{{.Prefs.TopicCount}}"></label>
+<form id="medios" method="post" action="{{.Base}}/ajustes" class="panel">
+  <input type="hidden" name="part" value="medios">
+  <header class="panel-head"><h2>Medios</h2><p>Los de España forman «Lo más importante»; los internacionales, «En el mundo».</p></header>
+  <div class="grid2 sources">
+    <div><h3 class="label">España</h3>
+      {{range .General}}{{if ne .Group "mundo"}}<label class="switch"><input type="checkbox" name="src_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}><span class="switch-name">{{.Name}}</span><span class="meta">{{with .State.Error}}<em class="warn">falla</em>{{else}}{{with .State.OKAt}}{{ago .}}{{end}}{{end}}</span></label>{{end}}{{end}}
+    </div>
+    <div><h3 class="label">Mundo</h3>
+      {{range .General}}{{if eq .Group "mundo"}}<label class="switch"><input type="checkbox" name="src_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}><span class="switch-name">{{.Name}}</span><span class="meta">{{with .State.Error}}<em class="warn">falla</em>{{else}}{{with .State.OKAt}}{{ago .}}{{end}}{{end}}</span></label>{{end}}{{end}}
+    </div>
   </div>
-  <label class="check"><input type="checkbox" name="ai_summary" value="1"{{if .Prefs.AISummary}} checked{{end}}> Resumen del día escrito por el asistente (IA)</label>
-  <p class="meta">Para recibir los titulares por Telegram, actívalo en el panel del servidor, sección Avisos.</p>
-  <h3>Medios generales</h3>
-  <ul class="sources">
-    {{range .General}}
-    <li><label class="check"><input type="checkbox" name="src_{{.Key}}" value="1"{{if .Enabled}} checked{{end}}> {{.Name}}</label>
-      <span class="meta small">{{with .State.Error}}falla: {{.}}{{else}}{{with .State.OKAt}}leído {{ago .}}{{end}}{{end}}</span></li>
-    {{end}}
-  </ul>
-  <button class="primary">Guardar</button>
+  <div class="actions"><button class="btn primary">Guardar medios</button></div>
+</form>
+
+<form id="digest" method="post" action="{{.Base}}/ajustes" class="panel">
+  <input type="hidden" name="part" value="digest">
+  <header class="panel-head"><h2>Hora y cantidad</h2><p>Para recibir los titulares por Telegram, actívalo en el panel del servidor, sección Avisos.</p></header>
+  <div class="grid4">
+    <label class="field">Se prepara a las<input name="digest_at" type="time" value="{{.Prefs.DigestAt}}" required></label>
+    <label class="field">Lo más importante<input name="top_count" type="number" min="3" max="30" value="{{.Prefs.TopCount}}"></label>
+    <label class="field">En el mundo<input name="world_count" type="number" min="3" max="30" value="{{.Prefs.WorldCount}}"></label>
+    <label class="field">Por sección<input name="topic_count" type="number" min="1" max="15" value="{{.Prefs.TopicCount}}"></label>
+  </div>
+  <label class="switch wide"><input type="checkbox" name="ai_summary" value="1"{{if .Prefs.AISummary}} checked{{end}}><span class="switch-name">Resumen del día</span><span class="meta">Un párrafo escrito por el asistente (IA)</span></label>
+  <div class="actions"><button class="btn primary">Guardar</button></div>
 </form>
 {{template "foot" .}}{{end}}

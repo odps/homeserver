@@ -20,8 +20,9 @@ type service struct {
 	store      store
 	fetch      *fetcher
 	log        *slog.Logger
-	summarizer func(ctx context.Context, prompt string) (string, error) // nil: sin resumen
-	mu         sync.Mutex                                               // una recogida a la vez
+	summarizer  func(ctx context.Context, prompt string) (string, error) // nil: sin resumen
+	redditPause time.Duration                                            // entre subforos
+	mu          sync.Mutex                                               // una recogida a la vez
 }
 
 // collect lee todos los feeds (de 4 en 4) y guarda lo nuevo.
@@ -33,39 +34,70 @@ func (s *service) collect(ctx context.Context) {
 		s.log.Warn("feeds", "err", err)
 		return
 	}
+	// Reddit limita mucho a quien no tiene cuenta: sus subforos van de uno en
+	// uno y con pausa; lo demás, de 4 en 4.
+	var reddit, rest []string
+	for _, u := range urls {
+		if strings.HasPrefix(u, redditRoot+"/") {
+			reddit = append(reddit, u)
+		} else {
+			rest = append(rest, u)
+		}
+	}
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
-	for _, u := range urls {
+	for _, u := range rest {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			fctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-			defer cancel()
-			f, err := s.fetch.fetch(fctx, u)
-			s.store.feedChecked(ctx, u, f.Title, err)
-			if err != nil {
-				s.log.Warn("leer feed", "url", u, "err", err)
-				return
-			}
-			source := f.Title
-			if g, ok := generalByURL(u); ok {
-				source, _, _ = strings.Cut(g.Name, " · ") // «El País · Internacional» cuenta como El País
-			}
-			for i := range f.Items {
-				if f.Items[i].Source == "" {
-					f.Items[i].Source = source
-				}
-			}
-			if _, err := s.store.saveItems(ctx, u, f.Items); err != nil {
-				s.log.Warn("guardar noticias", "url", u, "err", err)
-			}
+			s.collectOne(ctx, u)
 		}()
 	}
 	wg.Wait()
+	for i, u := range reddit {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.redditPause):
+			}
+		}
+		s.collectOne(ctx, u)
+	}
 	if err := s.store.prune(ctx); err != nil {
 		s.log.Warn("limpiar noticias", "err", err)
+	}
+}
+
+func (s *service) collectOne(ctx context.Context, u string) {
+	fctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	f, err := s.fetch.fetch(fctx, u)
+	s.store.feedChecked(ctx, u, f.Title, err)
+	if err != nil {
+		s.log.Warn("leer feed", "url", u, "err", err)
+		return
+	}
+	source := f.Title
+	if g, ok := generalByURL(u); ok {
+		source, _, _ = strings.Cut(g.Name, " · ") // «El País · Internacional» cuenta como El País
+	}
+	if strings.HasPrefix(u, redditRoot+"/r/") {
+		source = "r/" + strings.SplitN(strings.TrimPrefix(u, redditRoot+"/r/"), "/", 2)[0]
+	}
+	now := time.Now()
+	for i := range f.Items {
+		if f.Items[i].Source == "" {
+			f.Items[i].Source = source
+		}
+		if ranked(u) { // el orden de la red manda: la «fecha» es la posición
+			f.Items[i].Published = now.Add(-time.Duration(i) * time.Second)
+		}
+	}
+	if _, err := s.store.saveItems(ctx, u, f.Items); err != nil {
+		s.log.Warn("guardar noticias", "url", u, "err", err)
 	}
 }
 
