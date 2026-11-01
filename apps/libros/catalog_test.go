@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -95,6 +96,22 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 			{"title":"Quijote para niños","author_name":["Otra Persona"],"cover_i":7}]}`))
 	})
 	mux.HandleFunc("/b/id/123-L.jpg", func(w http.ResponseWriter, r *http.Request) { w.Write(bigCover(t)) })
+	// OpenStax: el catálogo de cada idioma de una vez.
+	mux.HandleFunc("/apps/cms/api/v2/pages/", func(w http.ResponseWriter, r *http.Request) {
+		book := func(id int, title, locale, state, license string) string {
+			return fmt.Sprintf(`{"id":%d,"title":%q,"book_state":%q,"high_resolution_pdf_url":"%s/openstax/%d.pdf","license_name":%q,
+				"publish_date":"2022-03-24","description":"<p>Libro de <i>texto</i></p>","authors":[{"value":{"name":"Gilbert Strang"}}],
+				"meta":{"slug":"libro-%d","locale":%q}}`, id, title, state, base, id, license, id, locale)
+		}
+		switch r.URL.Query().Get("locale") {
+		case "es":
+			w.Write([]byte(`{"items":[` + book(578, "Cálculo volumen 1", "es", "live", "Creative Commons Attribution-NonCommercial-ShareAlike License") + "," +
+				book(579, "Física antigua", "es", "retired", "Creative Commons Attribution License") + "]}"))
+		default:
+			w.Write([]byte(`{"items":[` + book(100, "Calculus Volume 1", "en", "live", "Creative Commons Attribution License") + "]}"))
+		}
+	})
+	mux.HandleFunc("/openstax/", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("%PDF-1.7\n% libro de prueba\n")) })
 	srv := httptest.NewServer(mux)
 	base = srv.URL
 	t.Cleanup(srv.Close)
@@ -104,7 +121,7 @@ func fakeSources(t *testing.T, epub []byte) *httptest.Server {
 func testCatalog(srv *httptest.Server) *catalog {
 	u, _ := url.Parse(srv.URL)
 	urls := catalogURLs{Gutenberg: srv.URL, Wikisource: srv.URL + "/%s", WSExport: srv.URL, Archive: srv.URL,
-		OpenLibrary: srv.URL, GoogleBooks: srv.URL, Covers: srv.URL}
+		OpenLibrary: srv.URL, GoogleBooks: srv.URL, Covers: srv.URL, OpenStax: srv.URL}
 	return newCatalog(urls, []string{u.Hostname()}, true)
 }
 
@@ -239,5 +256,40 @@ func TestReadEPUBMeta(t *testing.T) {
 	}
 	if got := readEPUBMeta("no-existe"); got.Title != "" {
 		t.Fatal("un fichero inexistente debería dar metadatos vacíos")
+	}
+}
+
+func TestOpenStax(t *testing.T) {
+	src := fakeSources(t, nil)
+	c := testCatalog(src)
+	ctx := context.Background()
+	// En español solo los vigentes; sin idioma, los de todos; por palabras sin acentos.
+	p, err := c.search(ctx, "openstax", "calculo", "es", 1)
+	if err != nil || len(p.Items) != 1 || p.Items[0].ID != "578" || p.Items[0].Authors[0] != "Gilbert Strang" || p.Items[0].Description != "Libro de texto" || p.Items[0].Year != "2022" {
+		t.Fatalf("búsqueda en español: %v %+v", err, p.Items)
+	}
+	if p, _ := c.search(ctx, "openstax", "", "", 1); len(p.Items) != 2 {
+		t.Fatalf("sin idioma: %+v", p.Items)
+	}
+	if p, _ := c.search(ctx, "openstax", "fisica", "es", 1); len(p.Items) != 0 {
+		t.Fatalf("aparece un libro retirado: %+v", p.Items)
+	}
+	if p, _ := c.search(ctx, "openstax", "", "fr", 1); len(p.Items) != 0 {
+		t.Fatalf("en francés no hay libros de OpenStax: %+v", p.Items)
+	}
+	dl, err := c.resolve(ctx, "openstax", "578")
+	if err != nil || !strings.HasSuffix(dl.url, "/openstax/578.pdf") || dl.fileName != "libro-578.pdf" || dl.meta.Title != "Cálculo volumen 1" {
+		t.Fatalf("descarga: %v %+v", err, dl)
+	}
+	if _, err := c.resolve(ctx, "openstax", "579"); err == nil {
+		t.Fatal("se descarga un libro retirado")
+	}
+	// Importarlo a la biblioteca.
+	h := newHarness(t)
+	h.api.catalog = c
+	resp := h.do(t, "POST", "/api/catalog/import", map[string]any{"source": "openstax", "id": "578"})
+	out := decode[struct{ Book Book }](t, resp)
+	if resp.StatusCode != http.StatusCreated || out.Book.Format != "pdf" || out.Book.Title != "Cálculo volumen 1" || out.Book.Source == nil || *out.Book.Source != "openstax:578" {
+		t.Fatalf("importar: %d %+v", resp.StatusCode, out.Book)
 	}
 }

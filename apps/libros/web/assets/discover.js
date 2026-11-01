@@ -7,10 +7,11 @@ import { prefs } from './prefs.js'
 import { seriesCover, SOURCES as COMIC_SOURCES } from './comics.js'
 
 const BOOK_SOURCES = [
-  ['todas', 'Todas', 'Busca a la vez en Project Gutenberg, Internet Archive y Wikisource.'],
+  ['todas', 'Todas', 'Busca a la vez en Project Gutenberg, Internet Archive, Wikisource y OpenStax.'],
   ['gutenberg', 'Project Gutenberg', 'Unos 75 000 clásicos en EPUB, con portadas. La mejor calidad.'],
   ['wikisource', 'Wikisource', 'Obras transcritas por voluntarios. Busca por título o autor.'],
   ['archive', 'Internet Archive', 'Solo documentos con licencia libre explícita; a veces son escaneos con OCR.'],
+  ['openstax', 'OpenStax', 'Libros de texto universitarios con licencia libre, en PDF (en español: cálculo, física, química, estadística).'],
 ]
 export const LANGS = [['es', 'Español'], ['en', 'English'], ['fr', 'Français'], ['de', 'Deutsch'], ['it', 'Italiano'], ['pt', 'Português'], ['ca', 'Català'], ['', 'Todos los idiomas']]
 const COMIC_SORTS = [['popular', 'Populares'], ['updated', 'Actualizadas'], ['rating', 'Valoradas'], ['title', 'A–Z']]

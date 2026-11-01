@@ -21,8 +21,9 @@ import (
 )
 
 // Catálogo de bibliotecas públicas legales: Project Gutenberg (catálogo OPDS),
-// Wikisource (exportado a EPUB con ws-export) e Internet Archive (solo con
-// licencia explícita de dominio público o Creative Commons). El servidor
+// Wikisource (exportado a EPUB con ws-export), Internet Archive (solo con
+// licencia explícita de dominio público o Creative Commons) y OpenStax (libros
+// de texto Creative Commons en PDF, openstax.go). El servidor
 // busca y descarga en nombre de la app; solo puede hablar con estos dominios.
 
 type catalogItem struct {
@@ -51,6 +52,7 @@ type catalogURLs struct {
 	Wikisource string // https://%s.wikisource.org (con el idioma)
 	WSExport   string // https://ws-export.wmcloud.org
 	Archive    string // https://archive.org
+	OpenStax   string // https://openstax.org
 	// Datos de libros por ISBN.
 	OpenLibrary string // https://openlibrary.org
 	GoogleBooks string // https://www.googleapis.com
@@ -62,6 +64,7 @@ var defaultCatalogURLs = catalogURLs{
 	Wikisource:  "https://%s.wikisource.org",
 	WSExport:    "https://ws-export.wmcloud.org",
 	Archive:     "https://archive.org",
+	OpenStax:    "https://openstax.org",
 	OpenLibrary: "https://openlibrary.org",
 	GoogleBooks: "https://www.googleapis.com",
 	Covers:      "https://covers.openlibrary.org",
@@ -69,7 +72,7 @@ var defaultCatalogURLs = catalogURLs{
 
 // Dominios a los que puede conectarse el catálogo (y sus subdominios, para
 // las redirecciones de descarga como ia800….us.archive.org).
-var catalogHosts = []string{"gutenberg.org", "wikisource.org", "ws-export.wmcloud.org", "archive.org",
+var catalogHosts = []string{"gutenberg.org", "wikisource.org", "ws-export.wmcloud.org", "archive.org", "openstax.org",
 	"openlibrary.org", "googleapis.com", "books.google.com"}
 
 type catalog struct {
@@ -81,7 +84,8 @@ type catalog struct {
 	mu        sync.Mutex
 	cache     map[string]cacheEntry
 	isbns     map[string]isbnEntry
-	coverRefs map[string]coverRef // portadas de las búsquedas de datos
+	coverRefs map[string]coverRef  // portadas de las búsquedas de datos
+	lists     map[string]listEntry // catálogos enteros (OpenStax)
 }
 
 type cacheEntry struct {
@@ -193,7 +197,7 @@ func (c *catalog) getJSON(ctx context.Context, rawURL string, v any) error {
 // Idiomas que ofrece la app (ISO 639-1) y su código en Internet Archive.
 var languages = map[string]string{"es": "spa", "en": "eng", "fr": "fre", "de": "ger", "it": "ita", "pt": "por", "ca": "cat"}
 
-var sources = map[string]bool{"gutenberg": true, "wikisource": true, "archive": true}
+var sources = map[string]bool{"gutenberg": true, "wikisource": true, "archive": true, "openstax": true}
 
 var (
 	numericID = regexp.MustCompile(`^[0-9]{1,7}$`)
@@ -233,6 +237,8 @@ func (c *catalog) search(ctx context.Context, source, q, lang string, page int) 
 		p, err = c.searchWikisource(ctx, q, lang, page)
 	case "archive":
 		p, err = c.searchArchive(ctx, q, lang, page)
+	case "openstax":
+		p, err = c.searchOpenStax(ctx, q, lang, page)
 	}
 	if err != nil {
 		return p, err
@@ -249,7 +255,7 @@ func (c *catalog) search(ctx context.Context, source, q, lang string, page int) 
 // searchAll busca a la vez en todas las fuentes y mezcla los resultados
 // alternándolos. Si alguna falla, se muestran los de las demás.
 func (c *catalog) searchAll(ctx context.Context, q, lang string, page int) (catalogPage, error) {
-	names := []string{"gutenberg", "archive"}
+	names := []string{"gutenberg", "archive", "openstax"}
 	if clean(q, 200) != "" {
 		names = append(names, "wikisource") // sin texto, Wikisource no tiene nada que mostrar
 	}
@@ -660,6 +666,11 @@ func (c *catalog) resolve(ctx context.Context, source, id string) (download, err
 			}
 		}
 		return download{}, bad("este documento no tiene EPUB")
+	case "openstax":
+		if !numericID.MatchString(id) {
+			return download{}, bad("id no válido")
+		}
+		return c.resolveOpenStax(ctx, id)
 	}
 	return download{}, bad("fuente no válida")
 }
