@@ -101,7 +101,9 @@ func (a *agent) run(ctx context.Context) {
 func (a *agent) refresh(ctx context.Context, all bool) {
 	c := a.cfg()
 	a.mu.Lock()
-	stale := all || time.Since(a.toolsAt) > 10*time.Minute
+	// Con problemas (p. ej. la pasarela reiniciándose en un despliegue) se
+	// reintenta en cada vuelta del estado, cada minuto.
+	stale := all || time.Since(a.toolsAt) > 10*time.Minute || len(a.problems) > 0
 	a.mu.Unlock()
 	if !stale {
 		return
