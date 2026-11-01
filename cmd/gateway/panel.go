@@ -45,6 +45,9 @@ type panelData struct {
 	SecretFor string
 	Assistant assistantView
 	Alerts    alertsView
+	Backups   backupView
+	// Clave privada de las copias recién creada (se muestra una vez).
+	NewBackupKey string
 }
 
 // sections dice qué datos necesita cada fragmento, para no recoger de más.
@@ -75,6 +78,7 @@ var sections = map[string]func(g *gateway, r *http.Request, d *panelData){
 		d.Assistant = g.assistantView()
 		d.Users, _ = g.users.list()
 	},
+	"copias": func(g *gateway, r *http.Request, d *panelData) { d.Backups = g.backupView() },
 	"avisos": func(g *gateway, r *http.Request, d *panelData) {
 		d.Alerts = g.alertsView()
 		d.Users, _ = g.users.list()
@@ -131,6 +135,8 @@ var flashes = map[string]string{
 	"appsesion":    "Sesión cerrada.",
 	"asistente":    "Configuración del asistente guardada. Se aplica en unos segundos.",
 	"avisos":       "Avisos guardados.",
+	"copias":       "Configuración de las copias guardada.",
+	"copia_pedida": "Copia pedida: el móvil la hará en los próximos minutos.",
 	"aviso_prueba": "Aviso de prueba enviado: míralo en Telegram.",
 	"error":        "No se pudo completar la acción; mira la auditoría.",
 }

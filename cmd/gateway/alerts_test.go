@@ -239,7 +239,7 @@ func TestAlertsPanel(t *testing.T) {
 	form := url.Values{"action": {"save"}, "enabled": {"1"}, "quiet_from": {"22:30"}, "quiet_to": {"07:00"}, "user": {"ana"},
 		"chapters": {"1"}, "chapters_mode": {"daily"}, "chapters_at": {"21:00"}, "apps": {"1"}, "apps_minutes": {"10"},
 		"network_minutes": {"5"}, "battery": {"1"}, "battery_low": {"30"}, "battery_high": {"0"}, "temp_battery": {"44"},
-		"temp_cpu": {"75,5"}, "disk_gb": {"1.5"}}
+		"temp_cpu": {"75,5"}, "disk_gb": {"1.5"}, "backups_pc_days": {"0"}}
 	if resp := post(form); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("guardar: %d %s", resp.StatusCode, body(t, resp))
 	}
@@ -253,9 +253,9 @@ func TestAlertsPanel(t *testing.T) {
 		t.Fatalf("sección de avisos: %s", page)
 	}
 	for _, bad := range []url.Values{
-		{"action": {"save"}, "quiet_from": {"25:00"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}},
-		{"action": {"save"}, "chapters_at": {"20:00"}, "apps_minutes": {"0"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}},
-		{"action": {"save"}, "user": {"nadie"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}},
+		{"action": {"save"}, "quiet_from": {"25:00"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
+		{"action": {"save"}, "chapters_at": {"20:00"}, "apps_minutes": {"0"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
+		{"action": {"save"}, "user": {"nadie"}, "chapters_at": {"20:00"}, "apps_minutes": {"5"}, "network_minutes": {"3"}, "battery_low": {"20"}, "battery_high": {"90"}, "temp_battery": {"45"}, "temp_cpu": {"80"}, "disk_gb": {"2"}, "backups_pc_days": {"3"}},
 	} {
 		if resp := post(bad); resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("acepta %v: %d", bad, resp.StatusCode)

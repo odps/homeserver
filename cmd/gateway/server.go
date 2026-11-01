@@ -121,6 +121,7 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/users", g.session(g.csrf(http.HandlerFunc(g.userAction))))
 	mux.Handle("POST /panel/asistente", g.session(g.csrf(http.HandlerFunc(g.assistantAction))))
 	mux.Handle("POST /panel/avisos", g.session(g.csrf(http.HandlerFunc(g.alertsAction))))
+	mux.Handle("POST /panel/copias", g.session(g.csrf(http.HandlerFunc(g.backupAction))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
 	mux.HandleFunc("/{app}/", g.appRoutes)
 	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))

@@ -65,6 +65,10 @@ type alertsConfig struct {
 		On        bool    `json:"on"`
 		MinFreeGB float64 `json:"min_free_gb"`
 	} `json:"disk"`
+	Backups struct {
+		Failed bool `json:"failed"`
+		PCDays int  `json:"pc_days"` // 0: sin aviso
+	} `json:"backups"`
 }
 
 func defaultAlerts() alertsConfig {
@@ -78,6 +82,7 @@ func defaultAlerts() alertsConfig {
 	c.Temp.On, c.Temp.Battery, c.Temp.CPU = true, 45, 80
 	c.Apps.On, c.Apps.Minutes = true, 5
 	c.Disk.On, c.Disk.MinFreeGB = true, 2
+	c.Backups.Failed, c.Backups.PCDays = true, 3
 	return c
 }
 
@@ -212,6 +217,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 	if c.Enabled {
 		g.alertPhone(ctx, c, &s, add)
 		g.alertApps(ctx, c, &s, now, add)
+		g.alertBackups(c, &s, now, add)
 		if now.Sub(a.chaptersAt) >= 10*time.Minute {
 			a.chaptersAt = now
 			g.alertChapters(ctx, c, &s, add)
@@ -308,18 +314,7 @@ func (g *gateway) alertEvents(c alertsConfig, s *alertsState, add func(kind, tex
 func (g *gateway) alertPhone(ctx context.Context, c alertsConfig, s *alertsState, add func(kind, text string)) {
 	p := g.alerts.readPhone(ctx, g)
 	cond := func(key string, on, enter, leave bool, start, end string) {
-		switch {
-		case !on:
-			delete(s.Active, key)
-		case !s.Active[key] && enter:
-			s.Active[key] = true
-			add(key, start)
-		case s.Active[key] && leave:
-			delete(s.Active, key)
-			if end != "" {
-				add(key, end)
-			}
-		}
+		s.cond(key, on, enter, leave, start, end, add)
 	}
 	if p.HasBattery {
 		b := c.Battery
@@ -344,6 +339,44 @@ func (g *gateway) alertPhone(ctx context.Context, c alertsConfig, s *alertsState
 		cond("disco", d.On && d.MinFreeGB > 0, p.DiskFreeGB < d.MinFreeGB, p.DiskFreeGB >= d.MinFreeGB*1.2,
 			fmt.Sprintf("Queda poco espacio: %.1f GB libres.", p.DiskFreeGB), "")
 	}
+}
+
+// cond avisa al empezar una condición (start) y, si end no está vacío, al
+// acabar; entre medias no repite.
+func (s *alertsState) cond(key string, on, enter, leave bool, start, end string, add func(kind, text string)) {
+	switch {
+	case !on:
+		delete(s.Active, key)
+	case !s.Active[key] && enter:
+		s.Active[key] = true
+		add(key, start)
+	case s.Active[key] && leave:
+		delete(s.Active, key)
+		if end != "" {
+			add(key, end)
+		}
+	}
+}
+
+// alertBackups avisa si falla la copia nocturna o si el PC lleva días sin
+// recogerlas.
+func (g *gateway) alertBackups(c alertsConfig, s *alertsState, now time.Time, add func(kind, text string)) {
+	b := g.backupView()
+	on := b.Config.Recipient != ""
+	s.cond("copia_fallida", on && c.Backups.Failed, b.Status.Error != "", b.Status.Error == "",
+		"Ha fallado la copia de seguridad: "+truncateRunes(b.Status.Error, 300), "Las copias de seguridad vuelven a funcionar.", add)
+	ref := b.PickedUp
+	if ref.IsZero() && len(b.Files) > 0 {
+		ref = b.Files[len(b.Files)-1].Time // la más antigua sin recoger
+	}
+	late := !ref.IsZero() && now.Sub(ref) > time.Duration(c.Backups.PCDays)*24*time.Hour
+	last := "nunca"
+	if !b.PickedUp.IsZero() {
+		last = "el " + b.PickedUp.In(madrid).Format("02/01 a las 15:04")
+	}
+	s.cond("copias_pc", on && c.Backups.PCDays > 0, late, !late,
+		fmt.Sprintf("El PC lleva más de %d %s sin recoger las copias de seguridad (última vez: %s). Enciéndelo con Tailscale activo.", c.Backups.PCDays, plural(c.Backups.PCDays, "día", "días"), last),
+		"El PC ha vuelto a recoger las copias de seguridad.", add)
 }
 
 // alertApps avisa de una app que lleva un rato sin responder, y cuando vuelve.

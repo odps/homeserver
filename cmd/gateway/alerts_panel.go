@@ -95,5 +95,6 @@ func applyAlertsForm(c *alertsConfig, r *http.Request) error {
 	c.Temp.On, c.Temp.Battery, c.Temp.CPU = on("temp"), get("temp_battery", "Temperatura de la batería", 0, 80), get("temp_cpu", "Temperatura del procesador", 0, 110)
 	c.Apps.On, c.Apps.Minutes = on("apps"), int(get("apps_minutes", "Minutos con una app caída", 1, 600))
 	c.Disk.On, c.Disk.MinFreeGB = on("disk"), get("disk_gb", "Espacio libre mínimo", 0, 500)
+	c.Backups.Failed, c.Backups.PCDays = on("backups_failed"), int(get("backups_pc_days", "Días sin recoger las copias", 0, 60))
 	return errors.Join(errs...)
 }

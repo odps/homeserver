@@ -3,6 +3,7 @@ module homeserver
 go 1.27.3
 
 require (
+	filippo.io/age v1.2.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0

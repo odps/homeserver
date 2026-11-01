@@ -19,6 +19,7 @@
 //	env/<app>.env     DATABASE_URL de cada app (permisos 600)
 //	data/<app>/       ficheros de cada app (DATA_DIR)
 //	backups/          pg_dump antes de cada cambio de versión
+//	backups/copias/   copias completas cifradas para sacar del móvil (offsite.go)
 //	state/bad         tags que fallaron y no se reintentan
 package main
 
@@ -102,6 +103,7 @@ func main() {
 			log.Info("hay un updater nuevo; salgo para que runit lo arranque")
 			return
 		}
+		u.maybeOffsite(ctx, time.Now())
 		select {
 		case <-ctx.Done():
 			return

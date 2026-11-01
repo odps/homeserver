@@ -15,7 +15,7 @@
 <header class="topbar">
   <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
   <nav aria-label="Secciones">
-    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#avisos">Avisos</a><a href="#security">Seguridad</a>
+    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#avisos">Avisos</a><a href="#copias">Copias</a><a href="#security">Seguridad</a>
   </nav>
   <form method="post" action="/logout"><button class="ghost">Salir</button></form>
 </header>
@@ -26,6 +26,12 @@
   <div class="token-once">
     <p>Token nuevo (solo se muestra ahora):</p>
     <div class="copy-row"><code id="new-token">{{.}}</code><button type="button" class="ghost" data-copy="new-token">Copiar</button></div>
+  </div>
+  {{end}}
+  {{with .NewBackupKey}}
+  <div class="token-once">
+    <p>Clave privada de las copias (solo se muestra ahora; guárdala en tu gestor de contraseñas, sin ella no se pueden abrir):</p>
+    <div class="copy-row"><code id="new-backup-key">{{.}}</code><button type="button" class="ghost" data-copy="new-backup-key">Copiar</button></div>
   </div>
   {{end}}
   {{with .NewSecret}}
@@ -41,6 +47,7 @@
   <section id="users" class="panel" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
   <section id="asistente" class="panel" data-refresh="/panel/frag/asistente" data-interval="60">{{template "sec-asistente" .}}</section>
   <section id="avisos" class="panel" data-refresh="/panel/frag/avisos" data-interval="60">{{template "sec-avisos" .}}</section>
+  <section id="copias" class="panel" data-refresh="/panel/frag/copias" data-interval="60">{{template "sec-copias" .}}</section>
   <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
 </main>
 <footer class="container foot">homeserver {{.Version}}</footer>
@@ -345,6 +352,10 @@
       <label class="check"><input type="checkbox" name="disk" value="1"{{if $c.Disk.On}} checked{{end}}> Poco espacio libre</label>
       <label>…menos de (GB)<input name="disk_gb" type="number" min="0" max="500" step="0.5" value="{{$c.Disk.MinFreeGB}}"></label>
     </fieldset>
+    <fieldset><legend>Copias de seguridad</legend>
+      <label class="check"><input type="checkbox" name="backups_failed" value="1"{{if $c.Backups.Failed}} checked{{end}}> Falla la copia nocturna</label>
+      <label>El PC lleva sin recogerlas más de (días; 0 = no avisar)<input name="backups_pc_days" type="number" min="0" max="60" value="{{$c.Backups.PCDays}}"></label>
+    </fieldset>
     <fieldset><legend>Móvil</legend>
       <label class="check"><input type="checkbox" name="battery" value="1"{{if $c.Battery.On}} checked{{end}}> Batería</label>
       <label class="check"><input type="checkbox" name="battery_unplugged" value="1"{{if $c.Battery.Unplugged}} checked{{end}}> Deja de cargar (corte de luz, cable suelto)</label>
@@ -357,6 +368,43 @@
     <button class="primary">Guardar</button>
   </form>
 </details>
+{{end}}
+{{define "sec-copias"}}
+{{$b := .Backups}}
+<h2>Copias de seguridad</h2>
+<p class="muted small">Cada noche el móvil guarda una copia completa cifrada (base de datos, libros, configuración y estado) y el PC la recoge por Tailscale cuando está encendido. Solo tu clave privada puede abrirlas; en el móvil está únicamente la pública.</p>
+{{if not $b.Config.Recipient}}
+<ul class="list"><li><span class="dot warn" aria-hidden="true"></span><span class="grow">Aún no hay clave: sin ella no se hacen copias.</span></li></ul>
+<form method="post" action="/panel/copias">
+  <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
+  <button class="primary">Crear la clave de las copias</button>
+</form>
+{{else}}
+<ul class="list">
+  <li><span class="dot {{if $b.Status.Error}}bad{{else if $b.Status.LastOK.IsZero}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{if $b.Status.LastOK.IsZero}}Todavía no se ha hecho ninguna copia{{else}}Última copia: {{date $b.Status.LastOK}} · {{$b.Status.Took}}{{end}}{{if $b.Asked}} · <em>copia pedida, en camino</em>{{end}}
+    {{with $b.Status.Error}}<br><span class="small">Falló la última vez ({{date $b.Status.LastTry}}): {{.}}</span>{{end}}</span>
+    <form method="post" action="/panel/copias"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="now"><button class="ghost small">Hacer copia ahora</button></form></li>
+  <li><span class="dot {{if $b.PickedUp.IsZero}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{if $b.PickedUp.IsZero}}El PC aún no ha recogido ninguna copia{{else}}El PC las recogió por última vez {{date $b.PickedUp}}{{end}}</span></li>
+  {{range $b.Files}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small">{{.Size}}</span></li>{{end}}
+</ul>
+<details>
+  <summary>Configurar</summary>
+  <form method="post" action="/panel/copias" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
+    <div class="row"><label>Hora de la copia diaria<input name="hour" type="number" min="0" max="23" value="{{$b.Config.Hour}}"></label>
+    <label>Copias diarias que guardar<input name="keep_daily" type="number" min="1" max="60" value="{{$b.Config.KeepDaily}}"></label>
+    <label>Copias semanales que guardar<input name="keep_weekly" type="number" min="0" max="52" value="{{$b.Config.KeepWeekly}}"></label></div>
+    <button class="primary">Guardar</button>
+  </form>
+  <p class="muted small">Clave pública: <span class="mono">{{$b.Config.Recipient}}</span></p>
+  <form method="post" action="/panel/copias" data-confirm="Las copias nuevas usarán la clave nueva; para abrir las anteriores seguirás necesitando la clave antigua. ¿Seguir?">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
+    <button class="ghost small">Cambiar la clave</button>
+  </form>
+</details>
+{{end}}
 {{end}}
 {{define "sec-users"}}
 <h2>Usuarios de las apps</h2>
