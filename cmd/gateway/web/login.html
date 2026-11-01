@@ -2,24 +2,29 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Entrar · homeserver</title>
-<meta name="theme-color" content="#0f1115">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="login">
 <main class="login-card">
-  <div class="brand"><img src="/static/icon.svg" alt="" width="40" height="40"><span>homeserver</span></div>
+  <div class="login-head">
+    <img src="/static/icon.svg" alt="" width="44" height="44">
+    <div><h1>homeserver</h1><p>Entra con tu contraseña y el código de la app de verificación.</p></div>
+  </div>
   {{if .NoTOTP}}<p class="alert">El segundo factor no está configurado. Ejecuta <code>gateway totp</code> en el servidor.</p>{{end}}
   {{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
-  <form method="post" action="/login" class="stack">
+  <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
-    <label>Contraseña
+    <label class="field"><span class="field-label">Contraseña</span>
       <input type="password" name="password" autocomplete="current-password" required autofocus>
     </label>
-    <label>Código de verificación
+    <label class="field"><span class="field-label">Código de verificación</span>
       <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="9" required placeholder="123456">
     </label>
     <button class="primary">Entrar</button>

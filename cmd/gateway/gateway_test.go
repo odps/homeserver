@@ -307,7 +307,7 @@ func TestProxyAndPanel(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(page, `id="security"`) || !strings.Contains(resp.Header.Get("Content-Security-Policy"), "script-src 'self'") {
 		t.Fatalf("panel: %d", resp.StatusCode)
 	}
-	for _, sec := range []string{"apps", "phone", "deploys", "security"} {
+	for _, sec := range []string{"resumen", "apps", "phone", "deploys", "security"} {
 		if resp, _ := c.Get(h.gw.URL + "/panel/frag/" + sec); resp.StatusCode != http.StatusOK {
 			t.Errorf("fragmento %s: %d", sec, resp.StatusCode)
 		}

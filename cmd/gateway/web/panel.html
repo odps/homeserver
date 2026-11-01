@@ -2,79 +2,169 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>homeserver</title>
-<meta name="theme-color" content="#0f1115">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.webmanifest">
-<link rel="stylesheet" href="/static/app.css">
-<script src="/static/app.js" defer></script>
+<link rel="stylesheet" href="/static/app.css?v={{.Version}}">
+<script src="/static/app.js?v={{.Version}}" defer></script>
 </head>
-<body>
-<header class="topbar">
-  <div class="brand"><img src="/static/icon.svg" alt="" width="28" height="28"><span>homeserver</span></div>
-  <nav aria-label="Secciones">
-    <a href="#apps">Apps</a><a href="#phone">Móvil</a><a href="#deploys">Despliegues</a><a href="#users">Usuarios</a><a href="#asistente">Asistente</a><a href="#avisos">Avisos</a><a href="#copias">Copias</a><a href="#security">Seguridad</a>
-  </nav>
-  <form method="post" action="/logout"><button class="ghost">Salir</button></form>
-</header>
+<body class="panel-page">
+<a class="skip" href="#main">Saltar al contenido</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#resumen"><img src="/static/icon.svg" alt="" width="30" height="30"><span>homeserver</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <p class="nav-label">Estado</p>
+      <a href="#resumen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg><span>Resumen</span></a>
+      <a href="#apps"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 3.5 8 12 12.5 20.5 8Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16 8.5 4.5 8.5-4.5"/></svg><span>Apps</span></a>
+      <a href="#phone"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M11 18h2"/></svg><span>Móvil</span></a>
+      <a href="#deploys"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5V4"/><path d="m7 8.5 5-5 5 5"/><path d="M4.5 20h15"/></svg><span>Despliegues</span></a>
+      <a href="#copias"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V9"/><path d="M10 13h4"/></svg><span>Copias</span></a>
+      <p class="nav-label">Gestión</p>
+      <a href="#users"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.2 14.2A6.5 6.5 0 0 1 21.5 20"/></svg><span>Usuarios</span></a>
+      <a href="#asistente"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6v7.5a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4.3A2.5 2.5 0 0 1 4 13.5Z"/><path d="M8.5 9.8h7"/></svg><span>Asistente</span></a>
+      <a href="#avisos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Avisos</span></a>
+      <a href="#security"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.5 3.2 8.2 7.5 9.5 4.3-1.3 7.5-5 7.5-9.5V6Z"/><path d="m9 12 2 2 4-4"/></svg><span>Seguridad</span></a>
+    </nav>
+    <div class="side-foot">
+      <span class="version mono">{{.Version}}</span>
+      <form method="post" action="/logout"><button class="ghost small" title="Cerrar la sesión"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="m15 17 5-5-5-5"/><path d="M20 12H9"/></svg><span>Salir</span></button></form>
+    </div>
+  </aside>
 
-<main class="container">
-  {{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}
-  {{with .NewToken}}
-  <div class="token-once">
-    <p>Token nuevo (solo se muestra ahora):</p>
-    <div class="copy-row"><code id="new-token">{{.}}</code><button type="button" class="ghost" data-copy="new-token">Copiar</button></div>
-  </div>
-  {{end}}
-  {{with .NewBackupKey}}
-  <div class="token-once">
-    <p>Clave privada de las copias (solo se muestra ahora; guárdala en tu gestor de contraseñas, sin ella no se pueden abrir):</p>
-    <div class="copy-row"><code id="new-backup-key">{{.}}</code><button type="button" class="ghost" data-copy="new-backup-key">Copiar</button></div>
-  </div>
-  {{end}}
-  {{with .NewSecret}}
-  <div class="token-once">
-    <p>Contraseña temporal de <strong>{{$.SecretFor}}</strong> (solo se muestra ahora):</p>
-    <div class="copy-row"><code id="new-secret">{{.}}</code><button type="button" class="ghost" data-copy="new-secret">Copiar</button></div>
-  </div>
-  {{end}}
+  <main id="main" class="content" tabindex="-1">
+    {{if or .Flash .NewToken .NewBackupKey .NewSecret}}
+    <div class="notices">
+      {{with .Flash}}<div class="flash" role="status"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/></svg><p>{{.}}</p><button type="button" class="icon-btn" data-dismiss aria-label="Cerrar el aviso">×</button></div>{{end}}
+      {{with .NewToken}}
+      <div class="reveal" role="alert">
+        <p class="reveal-title">Token nuevo · solo se muestra ahora</p>
+        <p class="hint">Cópialo y guárdalo: no se puede volver a consultar.</p>
+        <div class="copy-row"><code id="new-token">{{.}}</code><button type="button" class="small" data-copy="new-token">Copiar</button></div>
+      </div>
+      {{end}}
+      {{with .NewBackupKey}}
+      <div class="reveal" role="alert">
+        <p class="reveal-title">Clave privada de las copias · solo se muestra ahora</p>
+        <p class="hint">Guárdala en tu gestor de contraseñas: sin ella no se pueden abrir las copias.</p>
+        <div class="copy-row"><code id="new-backup-key">{{.}}</code><button type="button" class="small" data-copy="new-backup-key">Copiar</button></div>
+      </div>
+      {{end}}
+      {{with .NewSecret}}
+      <div class="reveal" role="alert">
+        <p class="reveal-title">Contraseña temporal de <strong>{{$.SecretFor}}</strong> · solo se muestra ahora</p>
+        <p class="hint">Pásasela por un canal seguro; podrá cambiarla en la app (Mi cuenta).</p>
+        <div class="copy-row"><code id="new-secret">{{.}}</code><button type="button" class="small" data-copy="new-secret">Copiar</button></div>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
 
-  <section id="apps" class="panel" data-refresh="/panel/frag/apps" data-interval="20">{{template "sec-apps" .}}</section>
-  <section id="phone" class="panel" data-refresh="/panel/frag/phone" data-interval="30">{{template "sec-phone" .}}</section>
-  <section id="deploys" class="panel" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
-  <section id="users" class="panel" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
-  <section id="asistente" class="panel" data-refresh="/panel/frag/asistente" data-interval="60">{{template "sec-asistente" .}}</section>
-  <section id="avisos" class="panel" data-refresh="/panel/frag/avisos" data-interval="60">{{template "sec-avisos" .}}</section>
-  <section id="copias" class="panel" data-refresh="/panel/frag/copias" data-interval="60">{{template "sec-copias" .}}</section>
-  <section id="security" class="panel" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
-</main>
-<footer class="container foot">homeserver {{.Version}}</footer>
+    <section id="resumen" class="section overview" aria-label="Resumen" data-refresh="/panel/frag/resumen" data-interval="30">{{template "sec-resumen" .}}</section>
+    <section id="apps" class="section" aria-labelledby="h-apps" data-refresh="/panel/frag/apps" data-interval="20">{{template "sec-apps" .}}</section>
+    <section id="phone" class="section" aria-labelledby="h-phone" data-refresh="/panel/frag/phone" data-interval="30">{{template "sec-phone" .}}</section>
+    <section id="deploys" class="section" aria-labelledby="h-deploys" data-refresh="/panel/frag/deploys" data-interval="60">{{template "sec-deploys" .}}</section>
+    <section id="copias" class="section" aria-labelledby="h-copias" data-refresh="/panel/frag/copias" data-interval="60">{{template "sec-copias" .}}</section>
+    <section id="users" class="section" aria-labelledby="h-users" data-refresh="/panel/frag/users" data-interval="60">{{template "sec-users" .}}</section>
+    <section id="asistente" class="section" aria-labelledby="h-asistente" data-refresh="/panel/frag/asistente" data-interval="60">{{template "sec-asistente" .}}</section>
+    <section id="avisos" class="section" aria-labelledby="h-avisos" data-refresh="/panel/frag/avisos" data-interval="60">{{template "sec-avisos" .}}</section>
+    <section id="security" class="section" aria-labelledby="h-security" data-refresh="/panel/frag/security" data-interval="60">{{template "sec-security" .}}</section>
+    <footer class="foot">homeserver <span class="mono">{{.Version}}</span></footer>
+  </main>
+</div>
 </body>
 </html>
 
+{{define "sec-resumen"}}
+{{$p := .Phone}}{{$b := .Backups}}{{$d := .Deploys}}
+{{$down := false}}{{range .Apps}}{{if not .OK}}{{$down = true}}{{end}}{{end}}
+{{$deployBad := false}}{{with $d.Events}}{{with index . 0}}{{if ne .Event "desplegada"}}{{$deployBad = true}}{{end}}{{end}}{{end}}
+{{$noDisk := and (eq $p.DiskUsedPct 0) (eq $p.DiskFreeGB 0.0)}}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Panel de control</p>
+    <h1>{{if or $down $b.Status.Error $deployBad}}Hay algo que revisar{{else}}Todo en orden{{end}}</h1>
+  </div>
+  <p class="hero-meta"><span class="live" aria-hidden="true"></span>Actualizado {{date $p.Updated}}</p>
+</div>
+<div class="stats">
+  <a class="stat" href="#apps" data-state="{{if not .Apps}}off{{else if $down}}bad{{else}}ok{{end}}">
+    <span class="stat-label"><span class="dot" aria-hidden="true"></span>Apps</span>
+    <span class="stat-value">{{len .Apps}}</span>
+    <span class="stat-sub">{{if not .Apps}}ninguna desplegada{{else if $down}}caída: {{range .Apps}}{{if not .OK}}<strong>{{.Name}}</strong> {{end}}{{end}}{{else}}todas funcionan{{end}}</span>
+    {{with .Apps}}<span class="pips" aria-hidden="true">{{range .}}<i class="{{if .OK}}ok{{else}}bad{{end}}" title="{{.Name}}"></i>{{end}}</span>{{end}}
+  </a>
+  <a class="stat" href="#phone" data-state="{{if not $p.HasBattery}}off{{else if le $p.BatteryPct 15}}bad{{else if or (le $p.BatteryPct 30) (not $p.Plugged)}}warn{{else}}ok{{end}}">
+    <span class="stat-label"><span class="dot" aria-hidden="true"></span>Batería</span>
+    {{if $p.HasBattery}}
+    <span class="stat-value">{{$p.BatteryPct}}<small>%</small></span>
+    <span class="stat-sub">{{$p.BatteryStatus}}{{if not $p.Plugged}} · sin enchufar{{end}}</span>
+    <meter min="0" max="100" low="20" high="80" optimum="60" value="{{$p.BatteryPct}}" aria-label="Batería"></meter>
+    {{else}}
+    <span class="stat-value is-empty">—</span>
+    <span class="stat-sub">sin datos del móvil</span>
+    {{end}}
+  </a>
+  <a class="stat" href="#phone" data-state="{{if $noDisk}}off{{else if ge $p.DiskUsedPct 90}}bad{{else if ge $p.DiskUsedPct 75}}warn{{else}}ok{{end}}">
+    <span class="stat-label"><span class="dot" aria-hidden="true"></span>Disco</span>
+    {{if $noDisk}}
+    <span class="stat-value is-empty">—</span>
+    <span class="stat-sub">sin datos</span>
+    {{else}}
+    <span class="stat-value">{{printf "%.1f" $p.DiskFreeGB}}<small>GB libres</small></span>
+    <span class="stat-sub">{{$p.DiskUsedPct}} % ocupado</span>
+    <meter min="0" max="100" low="70" high="90" optimum="20" value="{{$p.DiskUsedPct}}" aria-label="Disco ocupado"></meter>
+    {{end}}
+  </a>
+  <a class="stat" href="#copias" data-state="{{if not $b.Config.Recipient}}warn{{else if $b.Status.Error}}bad{{else if $b.Status.LastOK.IsZero}}warn{{else}}ok{{end}}">
+    <span class="stat-label"><span class="dot" aria-hidden="true"></span>Última copia</span>
+    {{if not $b.Config.Recipient}}
+    <span class="stat-value is-empty">—</span>
+    <span class="stat-sub">falta crear la clave</span>
+    {{else if $b.Status.LastOK.IsZero}}
+    <span class="stat-value is-empty">—</span>
+    <span class="stat-sub">{{if $b.Status.Error}}falló: {{$b.Status.Error}}{{else}}todavía ninguna{{end}}</span>
+    {{else}}
+    <span class="stat-value"><small class="pre">hace</small>{{since $b.Status.LastOK}}</span>
+    <span class="stat-sub">{{if $b.Status.Error}}la última falló{{else}}{{date $b.Status.LastOK}}{{end}}{{if $b.Asked}} · pedida otra{{end}}</span>
+    {{end}}
+  </a>
+  <a class="stat" href="#deploys" data-state="{{if not $d.Events}}off{{else if $deployBad}}bad{{else}}ok{{end}}">
+    <span class="stat-label"><span class="dot" aria-hidden="true"></span>Versión</span>
+    <span class="stat-value mono is-version">{{with $d.Current}}{{.}}{{else}}—{{end}}</span>
+    <span class="stat-sub">{{with $d.Events}}{{with index . 0}}{{.Event}} {{date .Time}}{{end}}{{else}}sin despliegues{{end}}</span>
+  </a>
+</div>
+{{end}}
+
 {{define "sec-apps"}}
-<h2>Apps</h2>
+<header class="sec-head">
+  <div><h2 id="h-apps">Apps</h2><p class="sec-desc">Las apps desplegadas y los servicios de runit que las mantienen en marcha.</p></div>
+</header>
 <div class="grid apps">
   {{range .Apps}}
-  <article class="card app">
+  <article class="card app{{if not .OK}} is-bad{{end}}">
     <div class="app-head">
-      <span class="dot {{if .OK}}ok{{else}}bad{{end}}" aria-hidden="true"></span>
-      <h3>{{.Name}}</h3>
+      <span class="avatar" aria-hidden="true">{{printf "%.1s" .Name}}</span>
+      <div class="grow"><h3>{{.Name}}</h3><p class="mono small muted">{{with .Version}}{{.}}{{else}}sin versión{{end}}</p></div>
+      <span class="pill {{if .OK}}ok{{else}}bad{{end}}"><span class="dot" aria-hidden="true"></span>{{if .OK}}Funcionando{{else}}Caída{{end}}</span>
     </div>
-    <p class="muted">{{if .OK}}Funcionando{{else}}{{.Error}}{{end}}</p>
-    <p class="mono small">{{.Version}}</p>
+    {{if not .OK}}<p class="app-error">{{.Error}}</p>{{end}}
     <div class="actions">
-      <a class="button primary" href="/{{.Name}}/">Abrir</a>
+      <a class="button primary small" href="/{{.Name}}/">Abrir<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8.5 7H17v8.5"/></svg></a>
       <form method="post" action="/panel/restart" data-confirm="¿Reiniciar {{.Name}}?">
         <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
-        <button class="ghost">Reiniciar</button>
+        <button class="ghost small">Reiniciar</button>
       </form>
     </div>
   </article>
   {{else}}
-  <p class="muted">No hay apps desplegadas.</p>
+  <div class="empty"><p class="empty-title">No hay apps desplegadas</p><p>Aparecerán aquí en cuanto el updater instale la primera.</p></div>
   {{end}}
 </div>
 <h3 class="sub">Servicios</h3>
@@ -92,91 +182,96 @@
     {{end}}
   </li>
   {{else}}
-  <li class="muted">Sin datos de runit.</li>
+  <li class="empty-row">Sin datos de runit.</li>
   {{end}}
 </ul>
 {{end}}
 
 {{define "sec-phone"}}
-<h2>Móvil</h2>
+<header class="sec-head">
+  <div><h2 id="h-phone">Móvil</h2><p class="sec-desc">El Xperia que hace de servidor: energía, temperatura, memoria, disco y red.</p></div>
+</header>
 {{with .Phone}}
 <div class="grid tiles">
   <div class="tile">
     <span class="label">Batería</span>
     {{if .HasBattery}}
     <span class="value">{{.BatteryPct}}<small>%</small></span>
-    <meter min="0" max="100" low="20" high="80" optimum="60" value="{{.BatteryPct}}"></meter>
+    <meter min="0" max="100" low="20" high="80" optimum="60" value="{{.BatteryPct}}" aria-label="Batería"></meter>
     <span class="muted small">{{.BatteryStatus}} · {{printf "%.0f" .BatteryTemp}} °C</span>
-    {{else}}<span class="value">—</span><span class="muted small">sin datos de termux-api</span>{{end}}
+    {{else}}<span class="value is-empty">—</span><span class="muted small">sin datos de termux-api</span>{{end}}
   </div>
   <div class="tile">
     <span class="label">CPU</span>
     {{if .CPUTemp}}<span class="value">{{printf "%.0f" .CPUTemp}}<small>°C</small></span>
-    <meter min="20" max="95" low="60" high="80" optimum="35" value="{{.CPUTemp}}"></meter>{{else}}<span class="value">—</span>{{end}}
+    <meter min="20" max="95" low="60" high="80" optimum="35" value="{{.CPUTemp}}" aria-label="Temperatura de la CPU"></meter>{{else}}<span class="value is-empty">—</span>{{end}}
     <span class="muted small">temperatura máxima</span>
   </div>
   <div class="tile">
     <span class="label">Memoria</span>
     <span class="value">{{.MemUsedPct}}<small>%</small></span>
-    <meter min="0" max="100" low="70" high="90" optimum="30" value="{{.MemUsedPct}}"></meter>
+    <meter min="0" max="100" low="70" high="90" optimum="30" value="{{.MemUsedPct}}" aria-label="Memoria usada"></meter>
     <span class="muted small">{{.MemAvailMB}} MB disponibles</span>
   </div>
   <div class="tile">
     <span class="label">Disco</span>
     <span class="value">{{.DiskUsedPct}}<small>%</small></span>
-    <meter min="0" max="100" low="70" high="90" optimum="20" value="{{.DiskUsedPct}}"></meter>
+    <meter min="0" max="100" low="70" high="90" optimum="20" value="{{.DiskUsedPct}}" aria-label="Disco ocupado"></meter>
     <span class="muted small">{{printf "%.1f" .DiskFreeGB}} GB libres</span>
   </div>
   <div class="tile">
     <span class="label">Wifi</span>
     {{if .HasWifi}}
     <span class="value">{{.WifiRSSI}}<small>dBm</small></span>
-    <meter min="-90" max="-30" low="-75" high="-60" optimum="-40" value="{{.WifiRSSI}}"></meter>
+    <meter min="-90" max="-30" low="-75" high="-60" optimum="-40" value="{{.WifiRSSI}}" aria-label="Señal wifi"></meter>
     <span class="muted small">{{if ge .WifiMHz 5000}}5 GHz{{else}}2,4 GHz{{end}} · {{.WifiMbps}} Mbps · {{.WifiIP}}</span>
-    {{else}}<span class="value">—</span><span class="muted small">sin conexión o sin datos</span>{{end}}
+    {{else}}<span class="value is-empty">—</span><span class="muted small">sin conexión o sin datos</span>{{end}}
   </div>
 </div>
 {{end}}
 <h3 class="sub">Red</h3>
 <ul class="list">
   {{range .NetEvents}}
-  <li><span class="grow">{{if eq .Event "recuperada"}}Red recuperada{{else}}Wifi reiniciada por netwatch{{end}}</span><span class="muted small">{{date .Time}}</span></li>
+  <li><span class="dot {{if eq .Event "recuperada"}}ok{{else}}warn{{end}}" aria-hidden="true"></span><span class="grow">{{if eq .Event "recuperada"}}Red recuperada{{else}}Wifi reiniciada por netwatch{{end}}</span><span class="muted small nowrap">{{date .Time}}</span></li>
   {{else}}
-  <li class="muted">Sin cortes registrados.</li>
+  <li class="empty-row">Sin cortes registrados.</li>
   {{end}}
 </ul>
 {{end}}
 
 {{define "sec-deploys"}}
-<h2>Despliegues</h2>
-<p>Versión activa: <span class="mono">{{.Deploys.Current}}</span></p>
-<ul class="list">
+<header class="sec-head">
+  <div><h2 id="h-deploys">Despliegues</h2><p class="sec-desc">Versión activa: <span class="chip mono">{{with .Deploys.Current}}{{.}}{{else}}ninguna{{end}}</span></p></div>
+</header>
+<ol class="list timeline">
   {{range .Deploys.Events}}
   <li>
     <span class="dot {{if eq .Event "desplegada"}}ok{{else}}bad{{end}}" aria-hidden="true"></span>
-    <span class="grow mono small">{{.Tag}}</span>
-    <span class="small">{{.Event}}</span>
-    <span class="muted small">{{date .Time}}</span>
+    <span class="grow"><span class="mono small">{{.Tag}}</span>{{with .Detail}}<br><span class="muted small">{{.}}</span>{{end}}</span>
+    <span class="pill {{if eq .Event "desplegada"}}ok{{else}}bad{{end}}">{{.Event}}</span>
+    <span class="muted small nowrap">{{date .Time}}</span>
   </li>
   {{else}}
-  <li class="muted">Sin despliegues registrados todavía.</li>
+  <li class="empty-row">Sin despliegues registrados todavía.</li>
   {{end}}
-</ul>
+</ol>
 <div class="grid two">
   <div>
     <h3 class="sub">Releases guardadas</h3>
-    <ul class="list compact">{{range .Deploys.Releases}}<li class="mono small">{{.}}</li>{{end}}</ul>
-    {{with .Deploys.Bad}}<h3 class="sub">Descartadas</h3><ul class="list compact">{{range .}}<li class="mono small">{{.}}</li>{{end}}</ul>{{end}}
+    <ul class="list compact">{{range .Deploys.Releases}}<li class="mono small">{{.}}</li>{{else}}<li class="empty-row">Ninguna.</li>{{end}}</ul>
+    {{with .Deploys.Bad}}<h3 class="sub">Descartadas</h3><ul class="list compact">{{range .}}<li class="mono small"><span class="dot bad" aria-hidden="true"></span>{{.}}</li>{{end}}</ul>{{end}}
   </div>
   <div>
     <h3 class="sub">Copias de la base de datos</h3>
-    <ul class="list compact">{{range .Deploys.Backups}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small">{{.Size}}</span></li>{{else}}<li class="muted">Ninguna.</li>{{end}}</ul>
+    <ul class="list compact">{{range .Deploys.Backups}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small nowrap">{{.Size}}</span></li>{{else}}<li class="empty-row">Ninguna.</li>{{end}}</ul>
   </div>
 </div>
 {{end}}
 
 {{define "sec-security"}}
-<h2>Seguridad</h2>
+<header class="sec-head">
+  <div><h2 id="h-security">Seguridad</h2><p class="sec-desc">Quién tiene la puerta abierta: sesiones de este panel, tokens de acceso y el registro de lo que ha pasado.</p></div>
+</header>
 <div class="grid two">
   <div>
     <h3 class="sub">Sesiones abiertas</h3>
@@ -184,7 +279,7 @@
       {{range .Sessions}}
       <li>
         <span class="grow"><span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>
-        {{if eq .ID $.SessionID}}<span class="badge">esta</span>{{else}}
+        {{if eq .ID $.SessionID}}<span class="pill ok">esta</span>{{else}}
         <form method="post" action="/panel/sessions/revoke">
           <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
           <button class="ghost small">Cerrar</button>
@@ -192,11 +287,13 @@
       </li>
       {{end}}
     </ul>
-    <form method="post" action="/panel/sessions/revoke" data-confirm="¿Cerrar todas las demás sesiones?">
-      <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <button class="ghost">Cerrar las demás</button>
-    </form>
-    <p class="muted small">Códigos de recuperación sin usar: {{.Recovery}}{{if lt .Recovery 3}} — genera nuevos con <code>gateway totp</code>.{{end}}</p>
+    <div class="list-foot">
+      <p class="muted small">Códigos de recuperación sin usar: <strong>{{.Recovery}}</strong>{{if lt .Recovery 3}} — genera nuevos con <code>gateway totp</code>.{{end}}</p>
+      <form method="post" action="/panel/sessions/revoke" data-confirm="¿Cerrar todas las demás sesiones?">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <button class="ghost small">Cerrar las demás</button>
+      </form>
+    </div>
   </div>
   <div>
     <h3 class="sub">Tokens (agente y MCP)</h3>
@@ -206,29 +303,33 @@
         <span class="grow"><span class="mono small">{{.Name}}</span>{{with .User}} <span class="badge">como {{.}}</span>{{end}}<br><span class="muted small">{{.Apps}} · {{with .Expires}}caduca {{date .}}{{else}}sin caducidad{{end}} · {{with .LastUsed}}usado {{date .}}{{else}}sin uso{{end}}</span></span>
         <form method="post" action="/panel/tokens/revoke" data-confirm="¿Revocar {{.Name}}?">
           <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}">
-          <button class="ghost small">Revocar</button>
+          <button class="danger-ghost small">Revocar</button>
         </form>
       </li>
       {{else}}
-      <li class="muted">Ningún token.</li>
+      <li class="empty-row">Ningún token.</li>
       {{end}}
     </ul>
-    <details>
-      <summary>Crear token</summary>
-      <form method="post" action="/panel/tokens" class="stack">
+    <details class="disclosure">
+      <summary><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear token</summary>
+      <form method="post" action="/panel/tokens" class="form">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
-        <label>Nombre<input name="name" required maxlength="40" pattern="[A-Za-z0-9_\-]+" placeholder="agente"></label>
-        <fieldset><legend>Apps</legend>
-          {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}"> {{.}}</label>{{end}}
-          <label class="check"><input type="checkbox" name="apps" value="*"> todas</label>
+        <label class="field"><span class="field-label">Nombre</span><input name="name" required maxlength="40" pattern="[A-Za-z0-9_\-]+" placeholder="agente" autocapitalize="none" spellcheck="false"><span class="hint">Letras, números, guion o guion bajo.</span></label>
+        <fieldset class="group"><legend>Apps</legend>
+          <div class="checks">
+            {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}"> {{.}}</label>{{end}}
+            <label class="check"><input type="checkbox" name="apps" value="*"> todas</label>
+          </div>
         </fieldset>
-        <label>Actúa en nombre de
-          <select name="user"><option value="">Nadie (servicio)</option>{{range .Users}}<option value="{{.Username}}">{{.Username}}</option>{{end}}</select>
-        </label>
-        <label>Caducidad
-          <select name="days"><option value="30">30 días</option><option value="90" selected>90 días</option><option value="365">1 año</option><option value="0">Sin caducidad</option></select>
-        </label>
-        <button class="primary">Crear</button>
+        <div class="row">
+          <label class="field"><span class="field-label">Actúa en nombre de</span>
+            <select name="user"><option value="">Nadie (servicio)</option>{{range .Users}}<option value="{{.Username}}">{{.Username}}</option>{{end}}</select>
+          </label>
+          <label class="field"><span class="field-label">Caducidad</span>
+            <select name="days"><option value="30">30 días</option><option value="90" selected>90 días</option><option value="365">1 año</option><option value="0">Sin caducidad</option></select>
+          </label>
+        </div>
+        <div class="form-actions"><button class="primary">Crear</button></div>
       </form>
     </details>
   </div>
@@ -238,228 +339,268 @@
   {{range .Audit}}
   <li>
     <span class="tag {{.Event}}">{{.Event}}</span>
-    <span class="grow small">{{range $k, $v := .Detail}}{{$k}}: {{$v}} {{end}}</span>
+    <span class="grow small">{{range $k, $v := .Detail}}<span class="kv"><span class="muted">{{$k}}:</span> {{$v}}</span> {{end}}</span>
     <span class="muted small mono">{{.IP}}</span>
-    <span class="muted small">{{date .Time}}</span>
+    <span class="muted small nowrap">{{date .Time}}</span>
   </li>
   {{else}}
-  <li class="muted">Sin eventos.</li>
+  <li class="empty-row">Sin eventos.</li>
   {{end}}
 </ul>
 {{end}}
 
 {{define "sec-asistente"}}
 {{$a := .Assistant}}
-<h2>Asistente</h2>
-<p class="muted small">Bot de Telegram que consulta tus apps, busca en internet y guarda notas. Solo responde a tu ID de Telegram. Las claves se guardan en el móvil y no se vuelven a mostrar: solo sus 4 últimos caracteres.</p>
-{{if not $a.Installed}}<p class="flash">La app <code>asistente</code> aún no está desplegada; puedes dejar la configuración preparada.</p>{{end}}
+<header class="sec-head">
+  <div><h2 id="h-asistente">Asistente</h2><p class="sec-desc">Bot de Telegram que consulta tus apps, busca en internet y guarda notas. Solo responde a tu ID de Telegram. Las claves se guardan en el móvil y no se vuelven a mostrar: solo sus 4 últimos caracteres.</p></div>
+</header>
+{{if not $a.Installed}}<p class="callout">La app <code>asistente</code> aún no está desplegada; puedes dejar la configuración preparada.</p>{{end}}
 {{if $a.Pending}}
 <ul class="list" data-soon>
-  <li><span class="dot warn" aria-hidden="true"></span><span class="grow">Aplicando la nueva configuración…</span></li>
+  <li><span class="spinner" aria-hidden="true"></span><span class="grow">Aplicando la nueva configuración…</span></li>
 </ul>
 {{else}}{{with $a.Status}}
 <ul class="list">
-  <li><span class="dot {{if or $a.Stale .Problems}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
-    <span class="grow"><strong>{{if .Bot}}@{{.Bot}}{{else}}Bot sin conectar{{end}}</strong>{{with .Model}} · <span class="mono small">{{.}}</span>{{end}}<br>
+  <li class="status-row"><span class="dot {{if or $a.Stale .Problems}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow"><strong>{{if .Bot}}@{{.Bot}}{{else}}Bot sin conectar{{end}}</strong>{{with .Model}} <span class="chip mono">{{.}}</span>{{end}}<br>
     <span class="muted small">{{if $a.Stale}}Sin noticias del asistente desde {{date .UpdatedAt}}: ¿está parado?{{else}}Hoy {{.Today}} de {{.Limit}} peticiones al modelo{{if not .LastChat.IsZero}} · último mensaje {{date .LastChat}}{{end}}{{end}}</span></span></li>
   {{range .Problems}}<li><span class="dot warn" aria-hidden="true"></span><span class="grow small">{{.}}</span></li>{{end}}
-  {{with .Tools}}<li><span class="grow muted small">Herramientas: {{join . ", "}}</span></li>{{end}}
+  {{with .Tools}}<li><span class="grow small"><span class="muted">Herramientas:</span> <span class="chips">{{range .}}<span class="chip mono">{{.}}</span>{{end}}</span></span></li>{{end}}
 </ul>
 {{end}}{{end}}
-<details{{if not $a.Masked.TELEGRAM_TOKEN}} open{{end}}>
-  <summary>Configurar</summary>
-  <form method="post" action="/panel/asistente" class="stack" autocomplete="off">
+<details class="disclosure"{{if not $a.Masked.TELEGRAM_TOKEN}} open{{end}}>
+  <summary><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Configurar</summary>
+  <form method="post" action="/panel/asistente" class="form" autocomplete="off">
     <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
-    <fieldset><legend>Telegram</legend>
-      <label>Token del bot (de @BotFather){{with $a.Masked.TELEGRAM_TOKEN}} · guardado {{.}}{{end}}
-        <input name="telegram_token" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.TELEGRAM_TOKEN}}Déjalo vacío para no cambiarlo{{else}}123456:ABC…{{end}}"></label>
-      <label>Tu ID de Telegram (el bot te lo dice si le escribes)
-        <input name="telegram_user" inputmode="numeric" pattern="[0-9]{3,15}" value="{{$a.Values.TELEGRAM_USER_ID}}" placeholder="123456789"></label>
+    <fieldset class="group"><legend>Telegram</legend>
+      <label class="field"><span class="field-label">Token del bot{{with $a.Masked.TELEGRAM_TOKEN}} <span class="saved">guardado {{.}}</span>{{end}}</span>
+        <input name="telegram_token" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.TELEGRAM_TOKEN}}Déjalo vacío para no cambiarlo{{else}}123456:ABC…{{end}}">
+        <span class="hint">Te lo da @BotFather al crear el bot.</span></label>
+      <label class="field"><span class="field-label">Tu ID de Telegram</span>
+        <input name="telegram_user" inputmode="numeric" pattern="[0-9]{3,15}" value="{{$a.Values.TELEGRAM_USER_ID}}" placeholder="123456789">
+        <span class="hint">El bot te lo dice si le escribes.</span></label>
     </fieldset>
-    <fieldset><legend>Modelo de IA</legend>
-      <label>Proveedor
-        <select name="provider">
-          {{range $a.Providers}}<option value="{{.}}"{{if eq . $a.Values.LLM_PROVIDER}} selected{{end}}>{{if eq . "groq"}}Groq (gratis, recomendado){{else if eq . "gemini"}}Google Gemini (capa gratuita usa tus datos){{else if eq . "openrouter"}}OpenRouter{{else}}Otro compatible con OpenAI{{end}}</option>{{end}}
-        </select></label>
-      <label>Dirección (solo «Otro»)<input name="llm_base_url" type="url" value="{{if eq $a.Values.LLM_PROVIDER "custom"}}{{$a.Values.LLM_BASE_URL}}{{end}}" placeholder="https://…/v1"></label>
-      <label>Modelo (vacío: el asistente elige uno adecuado)
+    <fieldset class="group"><legend>Modelo de IA</legend>
+      <div class="row">
+        <label class="field"><span class="field-label">Proveedor</span>
+          <select name="provider">
+            {{range $a.Providers}}<option value="{{.}}"{{if eq . $a.Values.LLM_PROVIDER}} selected{{end}}>{{if eq . "groq"}}Groq (gratis, recomendado){{else if eq . "gemini"}}Google Gemini (capa gratuita usa tus datos){{else if eq . "openrouter"}}OpenRouter{{else}}Otro compatible con OpenAI{{end}}</option>{{end}}
+          </select></label>
+        <label class="field"><span class="field-label">Dirección</span><input name="llm_base_url" type="url" value="{{if eq $a.Values.LLM_PROVIDER "custom"}}{{$a.Values.LLM_BASE_URL}}{{end}}" placeholder="https://…/v1"><span class="hint">Solo para «Otro».</span></label>
+      </div>
+      <label class="field"><span class="field-label">Modelo</span>
         <input name="llm_model" value="{{$a.Values.LLM_MODEL}}" list="asistente-modelos" placeholder="automático">
-        {{with $a.Status}}<datalist id="asistente-modelos">{{range .Models}}<option value="{{.}}">{{end}}</datalist>{{end}}</label>
-      <label>Clave del proveedor{{with $a.Masked.LLM_API_KEY}} · guardada {{.}}{{end}}
-        <input name="llm_key" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.LLM_API_KEY}}Déjala vacía para no cambiarla{{else}}gsk_…{{end}}"></label>
-      <label>Límite de peticiones al día<input name="daily_limit" type="number" min="10" max="5000" value="{{$a.Values.DAILY_LIMIT}}"></label>
+        {{with $a.Status}}<datalist id="asistente-modelos">{{range .Models}}<option value="{{.}}">{{end}}</datalist>{{end}}
+        <span class="hint">Vacío: el asistente elige uno adecuado.</span></label>
+      <div class="row">
+        <label class="field"><span class="field-label">Clave del proveedor{{with $a.Masked.LLM_API_KEY}} <span class="saved">guardada {{.}}</span>{{end}}</span>
+          <input name="llm_key" type="password" autocomplete="new-password" placeholder="{{if $a.Masked.LLM_API_KEY}}Déjala vacía para no cambiarla{{else}}gsk_…{{end}}"></label>
+        <label class="field"><span class="field-label">Límite de peticiones al día</span><input name="daily_limit" type="number" min="10" max="5000" value="{{$a.Values.DAILY_LIMIT}}"></label>
+      </div>
     </fieldset>
-    <fieldset><legend>Búsqueda web</legend>
-      <label>Clave de Brave Search (sin ella no busca en internet; sí lee páginas que le pases){{with $a.Masked.BRAVE_API_KEY}} · guardada {{.}}{{end}}
-        <input name="brave_key" type="password" autocomplete="new-password" placeholder="opcional"></label>
+    <fieldset class="group"><legend>Búsqueda web</legend>
+      <label class="field"><span class="field-label">Clave de Brave Search{{with $a.Masked.BRAVE_API_KEY}} <span class="saved">guardada {{.}}</span>{{end}}</span>
+        <input name="brave_key" type="password" autocomplete="new-password" placeholder="opcional">
+        <span class="hint">Sin ella no busca en internet; sí lee las páginas que le pases.</span></label>
       {{if $a.Masked.BRAVE_API_KEY}}<label class="check"><input type="checkbox" name="clear_brave_key" value="1"> Quitar la clave de Brave</label>{{end}}
     </fieldset>
-    <fieldset><legend>Apps</legend>
-      <label>Usar las apps como
+    <fieldset class="group"><legend>Apps</legend>
+      <label class="field"><span class="field-label">Usar las apps como</span>
         <select name="apps_user"><option value="">Nadie (sin acceso a las apps)</option>
           {{range .Users}}{{if not .Disabled}}<option value="{{.Username}}"{{if eq .Username $a.Values.APPS_USER}} selected{{end}}>{{.Name}} ({{.Username}})</option>{{end}}{{end}}
-        </select></label>
-      <p class="muted small">Se crea un token «asistente» en nombre de esa cuenta, solo para sus apps; lo puedes revocar en Seguridad.</p>
+        </select>
+        <span class="hint">Se crea un token «asistente» en nombre de esa cuenta, solo para sus apps; lo puedes revocar en Seguridad.</span></label>
     </fieldset>
-    <button class="primary">Guardar</button>
+    <div class="form-actions"><button class="primary">Guardar</button></div>
   </form>
   {{if or $a.Masked.TELEGRAM_TOKEN $a.Masked.LLM_API_KEY}}
-  <form method="post" action="/panel/asistente" data-confirm="¿Borrar todas las claves del asistente y revocar su token?">
-    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="clear">
-    <button class="ghost small">Borrar todas las claves</button>
-  </form>
+  <div class="danger-zone">
+    <div><p class="danger-title">Borrar las claves</p><p class="hint">Quita el token del bot y las claves de los proveedores, y revoca el token del asistente.</p></div>
+    <form method="post" action="/panel/asistente" data-confirm="¿Borrar todas las claves del asistente y revocar su token?">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="clear">
+      <button class="danger small">Borrar todas las claves</button>
+    </form>
+  </div>
   {{end}}
 </details>
 {{end}}
+
 {{define "sec-avisos"}}
 {{$v := .Alerts}}{{$c := $v.Config}}
-<h2>Avisos</h2>
-<p class="muted small">Mensajes automáticos por Telegram con el bot del asistente, sin IA. Cada situación avisa una vez al empezar (y, si importa, al acabar); en las horas de silencio llegan sin sonido.</p>
+<header class="sec-head">
+  <div><h2 id="h-avisos">Avisos</h2><p class="sec-desc">Mensajes automáticos por Telegram con el bot del asistente, sin IA. Cada situación avisa una vez al empezar (y, si importa, al acabar); en las horas de silencio llegan sin sonido.</p></div>
+</header>
 <ul class="list">
-  <li><span class="dot {{if and $c.Enabled $v.Bot}}ok{{else}}warn{{end}}" aria-hidden="true"></span>
-    <span class="grow">{{if not $v.Bot}}Falta configurar el bot y tu ID de Telegram en la sección Asistente.{{else if $c.Enabled}}Activados{{else}}Desactivados{{end}}</span>
+  <li class="status-row"><span class="dot {{if and $c.Enabled $v.Bot}}ok{{else}}warn{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{if not $v.Bot}}Falta configurar el bot y tu ID de Telegram en la sección <a href="#asistente">Asistente</a>.{{else if $c.Enabled}}<strong>Activados</strong>{{else}}<strong>Desactivados</strong>{{end}}</span>
     {{if $v.Bot}}<form method="post" action="/panel/avisos"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="test"><button class="ghost small">Enviar prueba</button></form>{{end}}</li>
-  {{range $v.Recent}}<li><span class="dot {{if .Error}}bad{{else}}ok{{end}}" aria-hidden="true"></span><span class="grow small">{{.Text}}{{with .Error}}<br><span class="muted">No se pudo enviar: {{.}}</span>{{end}}</span><span class="muted small">{{date .Time}}</span></li>{{end}}
+  {{range $v.Recent}}<li><span class="dot {{if .Error}}bad{{else}}ok{{end}}" aria-hidden="true"></span><span class="grow small">{{.Text}}{{with .Error}}<br><span class="muted">No se pudo enviar: {{.}}</span>{{end}}</span><span class="muted small nowrap">{{date .Time}}</span></li>{{end}}
 </ul>
-<details>
-  <summary>Configurar</summary>
-  <form method="post" action="/panel/avisos" class="stack" autocomplete="off">
+<details class="disclosure">
+  <summary><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Configurar</summary>
+  <form method="post" action="/panel/avisos" class="form" autocomplete="off">
     <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
-    <label class="check"><input type="checkbox" name="enabled" value="1"{{if $c.Enabled}} checked{{end}}> Enviar avisos</label>
-    <fieldset><legend>Horas de silencio (sin sonido)</legend>
-      <div class="row"><label>Desde<input name="quiet_from" type="time" value="{{$c.QuietFrom}}"></label>
-      <label>Hasta<input name="quiet_to" type="time" value="{{$c.QuietTo}}"></label></div>
-      <p class="muted small">Vacías: siempre con sonido.</p>
+    <div class="group master">
+      <label class="switch"><input type="checkbox" name="enabled" value="1"{{if $c.Enabled}} checked{{end}}><span><strong>Enviar avisos</strong><span class="hint">Interruptor general: si está apagado no sale ninguno.</span></span></label>
+    </div>
+    <fieldset class="group"><legend>Horas de silencio</legend>
+      <p class="hint">Los avisos de esas horas llegan sin sonido. Vacías: siempre con sonido.</p>
+      <div class="row"><label class="field"><span class="field-label">Desde</span><input name="quiet_from" type="time" value="{{$c.QuietFrom}}"></label>
+      <label class="field"><span class="field-label">Hasta</span><input name="quiet_to" type="time" value="{{$c.QuietTo}}"></label></div>
     </fieldset>
-    <fieldset><legend>Cómics</legend>
-      <label class="check"><input type="checkbox" name="chapters" value="1"{{if $c.Chapters.On}} checked{{end}}> Capítulos nuevos de las series que sigues</label>
-      <label class="check"><input type="checkbox" name="chapters_favorites" value="1"{{if $c.Chapters.Favorites}} checked{{end}}> Solo de las favoritas</label>
-      <label>Cuándo
-        <select name="chapters_mode"><option value="now"{{if not $c.Chapters.Daily}} selected{{end}}>Al momento</option><option value="daily"{{if $c.Chapters.Daily}} selected{{end}}>Un resumen al día</option></select></label>
-      <label>Hora del resumen<input name="chapters_at" type="time" value="{{$c.Chapters.DailyAt}}"></label>
-      <label>Cuenta
+    <fieldset class="group"><legend>Cómics</legend>
+      <label class="switch"><input type="checkbox" name="chapters" value="1"{{if $c.Chapters.On}} checked{{end}}><span>Capítulos nuevos de las series que sigues</span></label>
+      <label class="switch"><input type="checkbox" name="chapters_favorites" value="1"{{if $c.Chapters.Favorites}} checked{{end}}><span>Solo de las favoritas</span></label>
+      <div class="row">
+        <label class="field"><span class="field-label">Cuándo</span>
+          <select name="chapters_mode"><option value="now"{{if not $c.Chapters.Daily}} selected{{end}}>Al momento</option><option value="daily"{{if $c.Chapters.Daily}} selected{{end}}>Un resumen al día</option></select></label>
+        <label class="field"><span class="field-label">Hora del resumen</span><input name="chapters_at" type="time" value="{{$c.Chapters.DailyAt}}"></label>
+      </div>
+      <label class="field"><span class="field-label">Cuenta</span>
         <select name="user"><option value="">Ninguna</option>
           {{range .Users}}{{if not .Disabled}}<option value="{{.Username}}"{{if eq .Username $c.User}} selected{{end}}>{{.Name}} ({{.Username}})</option>{{end}}{{end}}
-        </select></label>
+        </select>
+        <span class="hint">De qué cuenta de las apps se leen los cómics y las noticias.</span></label>
     </fieldset>
-    <fieldset><legend>Noticias</legend>
-      <label class="check"><input type="checkbox" name="news" value="1"{{if $c.News.On}} checked{{end}}> Titulares del digest de la app Noticias cada mañana</label>
-      <div class="row"><label>Hora<input name="news_at" type="time" value="{{$c.News.At}}"></label>
-      <label>Titulares por sección<input name="news_per_section" type="number" min="1" max="10" value="{{$c.News.PerSection}}"></label></div>
-      <p class="muted small">De la cuenta elegida en «Cómics», que debe tener la app Noticias.</p>
+    <fieldset class="group"><legend>Noticias</legend>
+      <label class="switch"><input type="checkbox" name="news" value="1"{{if $c.News.On}} checked{{end}}><span>Titulares del digest de la app Noticias cada mañana</span></label>
+      <div class="row"><label class="field"><span class="field-label">Hora</span><input name="news_at" type="time" value="{{$c.News.At}}"></label>
+      <label class="field"><span class="field-label">Titulares por sección</span><input name="news_per_section" type="number" min="1" max="10" value="{{$c.News.PerSection}}"></label></div>
+      <p class="hint">De la cuenta elegida en «Cómics», que debe tener la app Noticias.</p>
     </fieldset>
-    <fieldset><legend>Servidor</legend>
-      <label class="check"><input type="checkbox" name="apps" value="1"{{if $c.Apps.On}} checked{{end}}> Una app deja de funcionar</label>
-      <label>…durante (minutos)<input name="apps_minutes" type="number" min="1" max="600" value="{{$c.Apps.Minutes}}"></label>
-      <label class="check"><input type="checkbox" name="deploys_failed" value="1"{{if $c.Deploys.Failed}} checked{{end}}> Un despliegue falla y se vuelve a la versión anterior</label>
-      <label class="check"><input type="checkbox" name="deploys_ok" value="1"{{if $c.Deploys.OK}} checked{{end}}> Cada despliegue correcto</label>
-      <label class="check"><input type="checkbox" name="network" value="1"{{if $c.Network.On}} checked{{end}}> Cortes de red (se avisa al volver)</label>
-      <label>…de al menos (minutos)<input name="network_minutes" type="number" min="0" max="600" value="{{$c.Network.MinMinutes}}"></label>
-      <label class="check"><input type="checkbox" name="disk" value="1"{{if $c.Disk.On}} checked{{end}}> Poco espacio libre</label>
-      <label>…menos de (GB)<input name="disk_gb" type="number" min="0" max="500" step="0.5" value="{{$c.Disk.MinFreeGB}}"></label>
+    <fieldset class="group"><legend>Servidor</legend>
+      <div class="opt"><label class="switch"><input type="checkbox" name="apps" value="1"{{if $c.Apps.On}} checked{{end}}><span>Una app deja de funcionar</span></label>
+        <label class="mini"><span>durante (min)</span><input name="apps_minutes" type="number" min="1" max="600" value="{{$c.Apps.Minutes}}"></label></div>
+      <label class="switch"><input type="checkbox" name="deploys_failed" value="1"{{if $c.Deploys.Failed}} checked{{end}}><span>Un despliegue falla y se vuelve a la versión anterior</span></label>
+      <label class="switch"><input type="checkbox" name="deploys_ok" value="1"{{if $c.Deploys.OK}} checked{{end}}><span>Cada despliegue correcto</span></label>
+      <div class="opt"><label class="switch"><input type="checkbox" name="network" value="1"{{if $c.Network.On}} checked{{end}}><span>Cortes de red (se avisa al volver)</span></label>
+        <label class="mini"><span>de al menos (min)</span><input name="network_minutes" type="number" min="0" max="600" value="{{$c.Network.MinMinutes}}"></label></div>
+      <div class="opt"><label class="switch"><input type="checkbox" name="disk" value="1"{{if $c.Disk.On}} checked{{end}}><span>Poco espacio libre</span></label>
+        <label class="mini"><span>menos de (GB)</span><input name="disk_gb" type="number" min="0" max="500" step="0.5" value="{{$c.Disk.MinFreeGB}}"></label></div>
     </fieldset>
-    <fieldset><legend>Copias de seguridad</legend>
-      <label class="check"><input type="checkbox" name="backups_failed" value="1"{{if $c.Backups.Failed}} checked{{end}}> Falla la copia nocturna</label>
-      <label>El PC lleva sin recogerlas más de (días; 0 = no avisar)<input name="backups_pc_days" type="number" min="0" max="60" value="{{$c.Backups.PCDays}}"></label>
+    <fieldset class="group"><legend>Copias de seguridad</legend>
+      <label class="switch"><input type="checkbox" name="backups_failed" value="1"{{if $c.Backups.Failed}} checked{{end}}><span>Falla la copia nocturna</span></label>
+      <div class="opt"><span class="opt-text">El PC lleva sin recogerlas más de…</span>
+        <label class="mini"><span>días (0 = no avisar)</span><input name="backups_pc_days" type="number" min="0" max="60" value="{{$c.Backups.PCDays}}"></label></div>
     </fieldset>
-    <fieldset><legend>Móvil</legend>
-      <label class="check"><input type="checkbox" name="battery" value="1"{{if $c.Battery.On}} checked{{end}}> Batería</label>
-      <label class="check"><input type="checkbox" name="battery_unplugged" value="1"{{if $c.Battery.Unplugged}} checked{{end}}> Deja de cargar (corte de luz, cable suelto)</label>
-      <div class="row"><label>Baja, al llegar a (%)<input name="battery_low" type="number" min="0" max="90" value="{{$c.Battery.Low}}"></label>
-      <label>Alta, al pasar de (%; 0 = no)<input name="battery_high" type="number" min="0" max="100" value="{{$c.Battery.High}}"></label></div>
-      <label class="check"><input type="checkbox" name="temp" value="1"{{if $c.Temp.On}} checked{{end}}> Temperatura</label>
-      <div class="row"><label>Batería (°C)<input name="temp_battery" type="number" min="0" max="80" value="{{$c.Temp.Battery}}"></label>
-      <label>Procesador (°C)<input name="temp_cpu" type="number" min="0" max="110" value="{{$c.Temp.CPU}}"></label></div>
+    <fieldset class="group"><legend>Móvil</legend>
+      <label class="switch"><input type="checkbox" name="battery" value="1"{{if $c.Battery.On}} checked{{end}}><span>Batería</span></label>
+      <label class="switch"><input type="checkbox" name="battery_unplugged" value="1"{{if $c.Battery.Unplugged}} checked{{end}}><span>Deja de cargar (corte de luz, cable suelto)</span></label>
+      <div class="row"><label class="field"><span class="field-label">Baja, al llegar a (%)</span><input name="battery_low" type="number" min="0" max="90" value="{{$c.Battery.Low}}"></label>
+      <label class="field"><span class="field-label">Alta, al pasar de (%)</span><input name="battery_high" type="number" min="0" max="100" value="{{$c.Battery.High}}"><span class="hint">0 = no avisar.</span></label></div>
+      <label class="switch"><input type="checkbox" name="temp" value="1"{{if $c.Temp.On}} checked{{end}}><span>Temperatura</span></label>
+      <div class="row"><label class="field"><span class="field-label">Batería (°C)</span><input name="temp_battery" type="number" min="0" max="80" value="{{$c.Temp.Battery}}"></label>
+      <label class="field"><span class="field-label">Procesador (°C)</span><input name="temp_cpu" type="number" min="0" max="110" value="{{$c.Temp.CPU}}"></label></div>
     </fieldset>
-    <button class="primary">Guardar</button>
+    <div class="form-actions sticky"><button class="primary">Guardar</button></div>
   </form>
 </details>
 {{end}}
+
 {{define "sec-copias"}}
 {{$b := .Backups}}
-<h2>Copias de seguridad</h2>
-<p class="muted small">Cada noche el móvil guarda una copia completa cifrada (base de datos, libros, configuración y estado) y el PC la recoge por Tailscale cuando está encendido. Solo tu clave privada puede abrirlas; en el móvil está únicamente la pública.</p>
+<header class="sec-head">
+  <div><h2 id="h-copias">Copias de seguridad</h2><p class="sec-desc">Cada noche el móvil guarda una copia completa cifrada (base de datos, libros, configuración y estado) y el PC la recoge por Tailscale cuando está encendido. Solo tu clave privada puede abrirlas; en el móvil está únicamente la pública.</p></div>
+</header>
 {{if not $b.Config.Recipient}}
-<ul class="list"><li><span class="dot warn" aria-hidden="true"></span><span class="grow">Aún no hay clave: sin ella no se hacen copias.</span></li></ul>
-<form method="post" action="/panel/copias">
-  <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
-  <button class="primary">Crear la clave de las copias</button>
-</form>
+<div class="empty setup">
+  <p class="empty-title">Aún no hay clave: sin ella no se hacen copias.</p>
+  <p>Se genera aquí y la privada se muestra una sola vez para que la guardes.</p>
+  <form method="post" action="/panel/copias">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
+    <button class="primary">Crear la clave de las copias</button>
+  </form>
+</div>
 {{else}}
 <ul class="list">
-  <li><span class="dot {{if $b.Status.Error}}bad{{else if $b.Status.LastOK.IsZero}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
-    <span class="grow">{{if $b.Status.LastOK.IsZero}}Todavía no se ha hecho ninguna copia{{else}}Última copia: {{date $b.Status.LastOK}} · {{$b.Status.Took}}{{end}}{{if $b.Asked}} · <em>copia pedida, en camino</em>{{end}}
-    {{with $b.Status.Error}}<br><span class="small">Falló la última vez ({{date $b.Status.LastTry}}): {{.}}</span>{{end}}</span>
+  <li class="status-row"><span class="dot {{if $b.Status.Error}}bad{{else if $b.Status.LastOK.IsZero}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
+    <span class="grow">{{if $b.Status.LastOK.IsZero}}Todavía no se ha hecho ninguna copia{{else}}Última copia: <strong>{{date $b.Status.LastOK}}</strong> · {{$b.Status.Took}}{{end}}{{if $b.Asked}} · <em>copia pedida, en camino</em>{{end}}
+    {{with $b.Status.Error}}<br><span class="small error-text">Falló la última vez ({{date $b.Status.LastTry}}): {{.}}</span>{{end}}</span>
     <form method="post" action="/panel/copias"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="now"><button class="ghost small">Hacer copia ahora</button></form></li>
   <li><span class="dot {{if $b.PickedUp.IsZero}}warn{{else}}ok{{end}}" aria-hidden="true"></span>
     <span class="grow">{{if $b.PickedUp.IsZero}}El PC aún no ha recogido ninguna copia{{else}}El PC las recogió por última vez {{date $b.PickedUp}}{{end}}</span></li>
-  {{range $b.Files}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small">{{.Size}}</span></li>{{end}}
 </ul>
-<details>
-  <summary>Configurar</summary>
-  <form method="post" action="/panel/copias" class="stack">
+{{with $b.Files}}
+<h3 class="sub">En el móvil</h3>
+<ul class="list compact">{{range .}}<li><span class="grow mono small">{{.Name}}</span><span class="muted small nowrap">{{.Size}}</span></li>{{end}}</ul>
+{{end}}
+<details class="disclosure">
+  <summary><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Configurar</summary>
+  <form method="post" action="/panel/copias" class="form">
     <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="save">
-    <div class="row"><label>Hora de la copia diaria<input name="hour" type="number" min="0" max="23" value="{{$b.Config.Hour}}"></label>
-    <label>Copias diarias que guardar<input name="keep_daily" type="number" min="1" max="60" value="{{$b.Config.KeepDaily}}"></label>
-    <label>Copias semanales que guardar<input name="keep_weekly" type="number" min="0" max="52" value="{{$b.Config.KeepWeekly}}"></label></div>
-    <button class="primary">Guardar</button>
+    <div class="row three"><label class="field"><span class="field-label">Hora de la copia diaria</span><input name="hour" type="number" min="0" max="23" value="{{$b.Config.Hour}}"><span class="hint">De 0 a 23.</span></label>
+    <label class="field"><span class="field-label">Copias diarias que guardar</span><input name="keep_daily" type="number" min="1" max="60" value="{{$b.Config.KeepDaily}}"></label>
+    <label class="field"><span class="field-label">Copias semanales que guardar</span><input name="keep_weekly" type="number" min="0" max="52" value="{{$b.Config.KeepWeekly}}"></label></div>
+    <div class="form-actions"><button class="primary">Guardar</button></div>
   </form>
-  <p class="muted small">Clave pública: <span class="mono">{{$b.Config.Recipient}}</span></p>
-  <form method="post" action="/panel/copias" data-confirm="Las copias nuevas usarán la clave nueva; para abrir las anteriores seguirás necesitando la clave antigua. ¿Seguir?">
-    <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
-    <button class="ghost small">Cambiar la clave</button>
-  </form>
+  <div class="danger-zone">
+    <div><p class="danger-title">Clave de cifrado</p><p class="hint">Pública: <span class="mono break">{{$b.Config.Recipient}}</span></p></div>
+    <form method="post" action="/panel/copias" data-confirm="Las copias nuevas usarán la clave nueva; para abrir las anteriores seguirás necesitando la clave antigua. ¿Seguir?">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="generate">
+      <button class="danger-ghost small">Cambiar la clave</button>
+    </form>
+  </div>
 </details>
 {{end}}
 {{end}}
+
 {{define "sec-users"}}
-<h2>Usuarios de las apps</h2>
-<p class="muted small">Entran en las apps con usuario y contraseña (sin 2FA) y la sesión dura mientras usen la app (90 días sin uso). No tienen acceso a este panel.</p>
-<ul class="list">
+<header class="sec-head">
+  <div><h2 id="h-users">Usuarios de las apps</h2><p class="sec-desc">Entran en las apps con usuario y contraseña (sin 2FA) y la sesión dura mientras usen la app (90 días sin uso). No tienen acceso a este panel.</p></div>
+</header>
+<ul class="list users">
   {{range .Users}}
-  <li>
-    <span class="dot {{if .Disabled}}off{{else}}ok{{end}}" aria-hidden="true"></span>
+  <li{{if .Disabled}} class="is-off"{{end}}>
+    <span class="avatar" aria-hidden="true">{{with .Name}}{{printf "%.1s" .}}{{else}}{{printf "%.1s" .Username}}{{end}}</span>
     <span class="grow">
-      <strong>{{.Name}}</strong> <span class="mono small">{{.Username}}</span> {{if eq .Role "admin"}}<span class="badge">admin</span>{{end}}{{if .Disabled}} <span class="badge">desactivado</span>{{end}}<br>
+      <strong>{{.Name}}</strong> <span class="mono small muted">{{.Username}}</span> {{if eq .Role "admin"}}<span class="badge accent">admin</span>{{end}}{{if .Disabled}} <span class="badge">desactivado</span>{{end}}<br>
       <span class="muted small">{{if .Apps}}{{join .Apps ", "}}{{else}}sin apps{{end}} · {{with .LastLogin}}último acceso {{date .}}{{else}}nunca ha entrado{{end}}</span>
     </span>
     <details class="inline">
       <summary>Gestionar</summary>
-      <form method="post" action="/panel/users" class="stack">
-        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="update">
-        <label>Nombre<input name="name" value="{{.Name}}" maxlength="60"></label>
-        <fieldset><legend>Apps</legend>
-          {{$u := .}}{{range $app := $.AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{$app}}"{{range $u.Apps}}{{if eq . $app}} checked{{end}}{{end}}> {{$app}}</label>{{end}}
-        </fieldset>
-        <label>Rol en las apps
-          <select name="role"><option value="usuario"{{if eq .Role "usuario"}} selected{{end}}>Usuario</option><option value="admin"{{if eq .Role "admin"}} selected{{end}}>Admin (gestiona el contenido de todos)</option></select>
-        </label>
-        <button class="primary">Guardar</button>
-      </form>
-      <div class="actions">
-        <form method="post" action="/panel/users"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="toggle"><button class="ghost small">{{if .Disabled}}Activar{{else}}Desactivar{{end}}</button></form>
-        <form method="post" action="/panel/users" data-confirm="¿Nueva contraseña para {{.Username}}? Se cerrarán sus sesiones."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="reset"><button class="ghost small">Nueva contraseña</button></form>
-        <form method="post" action="/panel/users" data-confirm="¿Borrar la cuenta {{.Username}}? Sus datos en las apps se conservan."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="delete"><button class="ghost small">Borrar</button></form>
+      <div class="inline-body">
+        <form method="post" action="/panel/users" class="form">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="update">
+          <div class="row">
+            <label class="field"><span class="field-label">Nombre</span><input name="name" value="{{.Name}}" maxlength="60"></label>
+            <label class="field"><span class="field-label">Rol en las apps</span>
+              <select name="role"><option value="usuario"{{if eq .Role "usuario"}} selected{{end}}>Usuario</option><option value="admin"{{if eq .Role "admin"}} selected{{end}}>Admin (gestiona el contenido de todos)</option></select>
+            </label>
+          </div>
+          <fieldset class="group"><legend>Apps</legend>
+            <div class="checks">{{$u := .}}{{range $app := $.AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{$app}}"{{range $u.Apps}}{{if eq . $app}} checked{{end}}{{end}}> {{$app}}</label>{{end}}</div>
+          </fieldset>
+          <div class="form-actions"><button class="primary">Guardar</button></div>
+        </form>
+        <div class="danger-zone">
+          <div class="actions">
+            <form method="post" action="/panel/users"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="toggle"><button class="ghost small">{{if .Disabled}}Activar{{else}}Desactivar{{end}}</button></form>
+            <form method="post" action="/panel/users" data-confirm="¿Nueva contraseña para {{.Username}}? Se cerrarán sus sesiones."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="reset"><button class="ghost small">Nueva contraseña</button></form>
+          </div>
+          <form method="post" action="/panel/users" data-confirm="¿Borrar la cuenta {{.Username}}? Sus datos en las apps se conservan."><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="username" value="{{.Username}}"><input type="hidden" name="action" value="delete"><button class="danger-ghost small">Borrar</button></form>
+        </div>
       </div>
     </details>
   </li>
   {{else}}
-  <li class="muted">Todavía no hay usuarios. Crea el tuyo para usar las apps.</li>
+  <li class="empty-row">Todavía no hay usuarios. Crea el tuyo para usar las apps.</li>
   {{end}}
 </ul>
-<details>
-  <summary>Crear usuario</summary>
-  <form method="post" action="/panel/users" class="stack">
+<details class="disclosure">
+  <summary><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear usuario</summary>
+  <form method="post" action="/panel/users" class="form">
     <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="create">
-    <label>Usuario (para entrar)<input name="username" required maxlength="32" pattern="[a-z0-9][a-z0-9._\-]{1,31}" autocapitalize="none" placeholder="maria"></label>
-    <label>Nombre visible<input name="name" maxlength="60" placeholder="María"></label>
-    <fieldset><legend>Apps</legend>
-      {{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}" checked> {{.}}</label>{{end}}
+    <div class="row">
+      <label class="field"><span class="field-label">Usuario (para entrar)</span><input name="username" required maxlength="32" pattern="[a-z0-9][a-z0-9._\-]{1,31}" autocapitalize="none" spellcheck="false" placeholder="maria"><span class="hint">Minúsculas, números, punto o guion.</span></label>
+      <label class="field"><span class="field-label">Nombre visible</span><input name="name" maxlength="60" placeholder="María"></label>
+    </div>
+    <fieldset class="group"><legend>Apps</legend>
+      <div class="checks">{{range .AppNames}}<label class="check"><input type="checkbox" name="apps" value="{{.}}" checked> {{.}}</label>{{end}}</div>
     </fieldset>
-    <label>Rol en las apps
+    <label class="field"><span class="field-label">Rol en las apps</span>
       <select name="role"><option value="usuario">Usuario</option><option value="admin">Admin (gestiona el contenido de todos)</option></select>
     </label>
-    <button class="primary">Crear y generar contraseña</button>
+    <div class="form-actions"><button class="primary">Crear y generar contraseña</button></div>
   </form>
 </details>
 <h3 class="sub">Sesiones en apps</h3>
@@ -470,7 +611,7 @@
     <form method="post" action="/panel/users"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="revoke-session"><input type="hidden" name="id" value="{{.ID}}"><button class="ghost small">Cerrar</button></form>
   </li>
   {{else}}
-  <li class="muted">Ninguna.</li>
+  <li class="empty-row">Ninguna.</li>
   {{end}}
 </ul>
 {{end}}

@@ -2,44 +2,50 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mi cuenta · {{.Title}}</title>
-<meta name="theme-color" content="#0f1115">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/{{.App}}/assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><a class="button ghost" href="/{{.App}}/">← {{.Title}}</a></div>
-  <nav></nav>
-  <form method="post" action="/{{.App}}/_logout"><button class="ghost">Salir</button></form>
+<header class="account-bar">
+  <a class="button ghost small" href="/{{.App}}/"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>{{.Title}}</a>
+  <form method="post" action="/{{.App}}/_logout"><button class="ghost small">Salir</button></form>
 </header>
-<main class="container">
-  {{with .Msg}}<p class="flash" role="status">{{.}}</p>{{end}}
+<main class="account">
+  {{with .Msg}}<div class="flash" role="status"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.4 2.4 4.6-4.9"/></svg><p>{{.}}</p></div>{{end}}
   {{with .Error}}<p class="alert" role="alert">{{.}}</p>{{end}}
-  <section class="panel">
-    <h2>{{.Name}} <span class="muted small">({{.Username}})</span></h2>
-    <h3 class="sub">Cambiar contraseña</h3>
-    <form method="post" class="stack">
+  <div class="account-head">
+    <span class="avatar" aria-hidden="true">{{with .Name}}{{printf "%.1s" .}}{{else}}{{printf "%.1s" $.Username}}{{end}}</span>
+    <div><h1>{{.Name}}</h1><p class="mono">{{.Username}}</p></div>
+  </div>
+  <section class="panel" aria-labelledby="h-pass">
+    <h2 id="h-pass">Cambiar contraseña</h2>
+    <form method="post" class="form">
       <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="password">
       <input type="text" name="username" value="{{.Username}}" autocomplete="username" hidden>
-      <label>Contraseña actual<input type="password" name="current" autocomplete="current-password" required></label>
-      <label>Nueva contraseña (al menos {{.MinLen}} caracteres)<input type="password" name="new" autocomplete="new-password" minlength="{{.MinLen}}" required></label>
-      <label>Repítela<input type="password" name="repeat" autocomplete="new-password" minlength="{{.MinLen}}" required></label>
-      <button class="primary">Cambiar</button>
+      <label class="field"><span class="field-label">Contraseña actual</span><input type="password" name="current" autocomplete="current-password" required></label>
+      <div class="row">
+        <label class="field"><span class="field-label">Nueva contraseña</span><input type="password" name="new" autocomplete="new-password" minlength="{{.MinLen}}" required><span class="hint">Al menos {{.MinLen}} caracteres.</span></label>
+        <label class="field"><span class="field-label">Repítela</span><input type="password" name="repeat" autocomplete="new-password" minlength="{{.MinLen}}" required></label>
+      </div>
+      <div class="form-actions"><button class="primary">Cambiar</button></div>
     </form>
   </section>
-  <section class="panel">
-    <h2>Dispositivos con sesión abierta</h2>
+  <section class="panel" aria-labelledby="h-dev">
+    <h2 id="h-dev">Dispositivos con sesión abierta</h2>
     <ul class="list">
       {{range .Sessions}}
-      <li><span class="grow"><span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>{{if eq .ID $.SessionID}}<span class="badge">este</span>{{end}}</li>
+      <li><span class="grow"><span class="small">{{short .Agent}}</span><br><span class="muted small">{{.IP}} · activa hace {{since .LastSeen}}</span></span>{{if eq .ID $.SessionID}}<span class="pill ok">este</span>{{end}}</li>
       {{end}}
     </ul>
-    <form method="post" data-confirm="¿Cerrar la sesión en los demás dispositivos?">
+    <form method="post" data-confirm="¿Cerrar la sesión en los demás dispositivos?" class="form-actions">
       <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="logout-others">
-      <button class="ghost">Cerrar los demás</button>
+      <button class="ghost small">Cerrar los demás</button>
     </form>
   </section>
 </main>

@@ -52,8 +52,20 @@ type panelData struct {
 
 // sections dice qué datos necesita cada fragmento, para no recoger de más.
 var sections = map[string]func(g *gateway, r *http.Request, d *panelData){
+	// Resumen de arriba: lo esencial de varias secciones, todo local y barato
+	// (el móvil va en caché). En la página completa no repite lo ya leído.
+	"resumen": func(g *gateway, r *http.Request, d *panelData) {
+		if d.Apps == nil {
+			d.Apps = g.appStatuses(r.Context())
+		}
+		d.Phone = g.phone(r.Context())
+		d.Deploys = g.deploys()
+		d.Backups = g.backupView()
+	},
 	"apps": func(g *gateway, r *http.Request, d *panelData) {
-		d.Apps = g.appStatuses(r.Context())
+		if d.Apps == nil {
+			d.Apps = g.appStatuses(r.Context())
+		}
 		d.Services = g.services(r.Context())
 	},
 	"phone": func(g *gateway, r *http.Request, d *panelData) {
