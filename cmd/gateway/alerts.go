@@ -98,7 +98,8 @@ type alertsState struct {
 	Chapters  map[string]float32   `json:"chapters"` // serie → último capítulo avisado
 	Pending   []string             `json:"pending"`  // capítulos para el resumen diario
 	DailySent string               `json:"daily_sent"`
-	Log       []sentAlert          `json:"log"` // últimos avisos, para el panel
+	Log       []sentAlert          `json:"log"`    // últimos avisos, para el panel
+	Outbox    []sentAlert          `json:"outbox"` // avisos que no se pudieron enviar
 }
 
 type alerter struct {
@@ -223,12 +224,30 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 			}
 		}
 	}
+	// Los que fallaron (sin red, Telegram caído) se reintentan durante 2 horas.
+	var retry []sentAlert
+	for _, al := range s.Outbox {
+		if now.Sub(al.Time) > 2*time.Hour {
+			continue
+		}
+		if err := a.send(ctx, al.Text, quiet(c, now)); err != nil {
+			retry = append(retry, al)
+			continue
+		}
+		for i := range s.Log {
+			if s.Log[i].Time.Equal(al.Time) && s.Log[i].Text == al.Text {
+				s.Log[i].Error = ""
+			}
+		}
+	}
+	s.Outbox = retry
 	silent := quiet(c, now)
 	for _, al := range out {
 		al.Silent = silent
 		if err := a.send(ctx, al.Text, silent); err != nil {
 			al.Error = err.Error()
 			g.log.Warn("aviso", "tipo", al.Kind, "err", err)
+			s.Outbox = append(s.Outbox, al)
 		}
 		s.Log = append(s.Log, al)
 	}

@@ -266,3 +266,46 @@ func TestAlertsPanel(t *testing.T) {
 		t.Fatal("prueba sin bot")
 	}
 }
+
+func TestAlertsRetry(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	var mu sync.Mutex
+	down, sent := true, []string{}
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if down {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		var m tgMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		sent = append(sent, m.Text)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+	g.alerts.telegramAPI = tg.URL
+	writeEnvFile(g.assistantPath("claves.env"), map[string]string{"TELEGRAM_TOKEN": "123:abc", "TELEGRAM_USER_ID": "42"})
+	g.apps = map[string]appSpec{}
+	g.alerts.phone = func(context.Context) phoneStatus {
+		return phoneStatus{HasBattery: true, BatteryPct: 95, Plugged: true, DiskFreeGB: 20}
+	}
+	ctx := context.Background()
+	t0 := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	g.checkAlerts(ctx, t0)
+	if r := g.alerts.recentAlerts(1); len(r) != 1 || r[0].Error == "" {
+		t.Fatalf("el fallo no queda a la vista: %+v", r)
+	}
+	mu.Lock()
+	down = false
+	mu.Unlock()
+	g.checkAlerts(ctx, t0.Add(time.Minute))
+	g.checkAlerts(ctx, t0.Add(2*time.Minute))
+	if len(sent) != 1 || !strings.Contains(sent[0], "95 %") {
+		t.Fatalf("reintento: %v", sent)
+	}
+	if r := g.alerts.recentAlerts(1); r[0].Error != "" {
+		t.Fatalf("tras reintentarlo sigue marcado como fallido: %+v", r)
+	}
+}

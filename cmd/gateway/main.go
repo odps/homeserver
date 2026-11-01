@@ -37,6 +37,7 @@ import (
 
 	"golang.org/x/term"
 
+	_ "homeserver/platform/netfix" // DNS en Android: los avisos salen a api.telegram.org
 	"homeserver/platform/version"
 )
 
