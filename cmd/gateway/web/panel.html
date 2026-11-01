@@ -278,7 +278,7 @@
       <label>Límite de peticiones al día<input name="daily_limit" type="number" min="10" max="5000" value="{{$a.Values.DAILY_LIMIT}}"></label>
     </fieldset>
     <fieldset><legend>Búsqueda web</legend>
-      <label>Clave de Brave Search (opcional; sin ella usa DuckDuckGo){{with $a.Masked.BRAVE_API_KEY}} · guardada {{.}}{{end}}
+      <label>Clave de Brave Search (sin ella no busca en internet; sí lee páginas que le pases){{with $a.Masked.BRAVE_API_KEY}} · guardada {{.}}{{end}}
         <input name="brave_key" type="password" autocomplete="new-password" placeholder="opcional"></label>
       {{if $a.Masked.BRAVE_API_KEY}}<label class="check"><input type="checkbox" name="clear_brave_key" value="1"> Quitar la clave de Brave</label>{{end}}
     </fieldset>

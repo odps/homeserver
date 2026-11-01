@@ -156,7 +156,7 @@ func TestAgentConversation(t *testing.T) {
 	for _, tl := range a.tools {
 		names = append(names, tl.def.Function.Name)
 	}
-	if got := strings.Join(names, ","); !strings.Contains(got, "libros_leyendo") || !strings.Contains(got, "notas_guardar") || !strings.Contains(got, "web_buscar") {
+	if got := strings.Join(names, ","); !strings.Contains(got, "libros_leyendo") || !strings.Contains(got, "notas_guardar") || !strings.Contains(got, "web_leer") || strings.Contains(got, "web_buscar") {
 		t.Fatalf("herramientas: %s", got)
 	}
 	// «hola» no tiene MCP: es un problema, pero no impide usar libros.

@@ -16,7 +16,8 @@ import (
 	"time"
 )
 
-// Búsqueda web (Brave si hay clave; si no, DuckDuckGo) y lectura de páginas.
+// Búsqueda web con la API oficial de Brave Search (hace falta su clave) y
+// lectura de páginas.
 // El cliente no se conecta a direcciones de la red local ni del propio móvil,
 // también tras una redirección: una página no puede llevar al asistente a la
 // pasarela, a PostgreSQL ni al router.
@@ -24,7 +25,6 @@ import (
 type webClient struct {
 	http         *http.Client
 	braveURL     string // https://api.search.brave.com
-	ddgURL       string // https://html.duckduckgo.com
 	allowPrivate bool   // solo en los tests
 }
 
@@ -37,7 +37,7 @@ type searchResult struct {
 const webUserAgent = "Mozilla/5.0 (compatible; homeserver-asistente/1.0)"
 
 func newWebClient(allowPrivate bool) *webClient {
-	w := &webClient{braveURL: "https://api.search.brave.com", ddgURL: "https://html.duckduckgo.com", allowPrivate: allowPrivate}
+	w := &webClient{braveURL: "https://api.search.brave.com", allowPrivate: allowPrivate}
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	if !allowPrivate {
 		dialer.Control = func(_, address string, _ syscall.RawConn) error {
@@ -96,14 +96,17 @@ func (w *webClient) get(ctx context.Context, rawURL string, header map[string]st
 }
 
 func (w *webClient) search(ctx context.Context, q, braveKey string) ([]searchResult, error) {
-	if braveKey != "" {
-		res, err := w.brave(ctx, q, braveKey)
-		if err == nil {
-			return res, nil
-		}
-		// Si Brave falla (cuota, red), se prueba con DuckDuckGo.
+	if braveKey == "" {
+		return nil, errors.New("no hay clave de búsqueda web configurada")
 	}
-	return w.duckduckgo(ctx, q)
+	res, err := w.brave(ctx, q, braveKey)
+	if err != nil {
+		return nil, fmt.Errorf("el buscador no responde: %w", err)
+	}
+	if len(res) == 0 {
+		return nil, errors.New("sin resultados")
+	}
+	return res, nil
 }
 
 func (w *webClient) brave(ctx context.Context, q, key string) ([]searchResult, error) {
@@ -127,42 +130,6 @@ func (w *webClient) brave(ctx context.Context, q, key string) ([]searchResult, e
 	var res []searchResult
 	for _, r := range out.Web.Results {
 		res = append(res, searchResult{Title: stripTags(r.Title), URL: r.URL, Snippet: stripTags(r.Description)})
-	}
-	return res, nil
-}
-
-var (
-	ddgResult  = regexp.MustCompile(`(?s)<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>`)
-	ddgSnippet = regexp.MustCompile(`(?s)<a[^>]+class="result__snippet"[^>]*>(.*?)</a>`)
-)
-
-// duckduckgo usa la versión HTML del buscador (no necesita clave).
-func (w *webClient) duckduckgo(ctx context.Context, q string) ([]searchResult, error) {
-	b, _, err := w.get(ctx, w.ddgURL+"/html/?"+url.Values{"q": {q}, "kl": {"es-es"}}.Encode(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("el buscador no responde: %w", err)
-	}
-	page := string(b)
-	links := ddgResult.FindAllStringSubmatch(page, 8)
-	snippets := ddgSnippet.FindAllStringSubmatch(page, 8)
-	var res []searchResult
-	for i, l := range links {
-		href := html.UnescapeString(l[1])
-		// Los enlaces van por un redireccionador: //duckduckgo.com/l/?uddg=<destino>
-		if u, err := url.Parse(href); err == nil && u.Query().Get("uddg") != "" {
-			href = u.Query().Get("uddg")
-		}
-		if !strings.HasPrefix(href, "http") || strings.Contains(href, "duckduckgo.com/y.js") {
-			continue // anuncios
-		}
-		r := searchResult{Title: stripTags(l[2]), URL: href}
-		if i < len(snippets) {
-			r.Snippet = stripTags(snippets[i][1])
-		}
-		res = append(res, r)
-	}
-	if len(res) == 0 {
-		return nil, errors.New("el buscador no ha devuelto resultados (puede que esté limitando las búsquedas)")
 	}
 	return res, nil
 }

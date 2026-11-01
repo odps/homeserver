@@ -24,7 +24,7 @@ type config struct {
 }
 
 func loadConfig(path string) (config, time.Time) {
-	var c config
+	c := config{DailyLimit: 200}
 	st, err := os.Stat(path)
 	if err != nil {
 		return c, time.Time{}
@@ -77,6 +77,9 @@ func (c config) problems() []string {
 	}
 	if c.AppsToken == "" {
 		p = append(p, "Sin cuenta de las apps: no podrá consultar libros ni cómics.")
+	}
+	if c.BraveKey == "" {
+		p = append(p, "Sin clave de Brave Search: no podrá buscar en internet (sí leer páginas).")
 	}
 	return p
 }

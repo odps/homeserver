@@ -45,6 +45,29 @@ func toJSON(v any) string {
 }
 
 func (a *agent) builtinTools() []tool {
+	tools := a.baseTools()
+	if a.cfg().BraveKey != "" {
+		tools = append(tools, a.searchTool())
+	}
+	return tools
+}
+
+// searchTool busca en internet; solo se ofrece si hay clave de Brave.
+func (a *agent) searchTool() tool {
+	return newTool("web_buscar", "Busca en internet. Úsala para noticias, datos actuales o cosas que no sabes con seguridad. Devuelve títulos, enlaces y extractos.",
+		object([]string{"consulta"}, map[string]map[string]any{"consulta": str("Lo que hay que buscar, como en un buscador.")}),
+		func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in struct{ Consulta string }
+			if err := json.Unmarshal(raw, &in); err != nil || strings.TrimSpace(in.Consulta) == "" {
+				return "", fmt.Errorf("falta la consulta")
+			}
+			cfg := a.cfg()
+			res, err := a.web.search(ctx, strings.TrimSpace(in.Consulta), cfg.BraveKey)
+			return toJSON(map[string]any{"resultados": res}), err
+		})
+}
+
+func (a *agent) baseTools() []tool {
 	return []tool{
 		newTool("notas_guardar", "Guarda una nota para recordarla más tarde (ideas, listas, datos que la persona pide apuntar o recordar).",
 			object([]string{"texto"}, map[string]map[string]any{"texto": str("El texto de la nota, completo y claro.")}),
@@ -79,17 +102,6 @@ func (a *agent) builtinTools() []tool {
 					return "", err
 				}
 				return `{"borrada":true}`, nil
-			}),
-		newTool("web_buscar", "Busca en internet. Úsala para noticias, datos actuales o cosas que no sabes con seguridad. Devuelve títulos, enlaces y extractos.",
-			object([]string{"consulta"}, map[string]map[string]any{"consulta": str("Lo que hay que buscar, como en un buscador.")}),
-			func(ctx context.Context, raw json.RawMessage) (string, error) {
-				var in struct{ Consulta string }
-				if err := json.Unmarshal(raw, &in); err != nil || strings.TrimSpace(in.Consulta) == "" {
-					return "", fmt.Errorf("falta la consulta")
-				}
-				cfg := a.cfg()
-				res, err := a.web.search(ctx, strings.TrimSpace(in.Consulta), cfg.BraveKey)
-				return toJSON(map[string]any{"resultados": res}), err
 			}),
 		newTool("web_leer", "Lee el texto de una página web (para resumirla o sacar datos). Úsala con enlaces de una búsqueda o que dé la persona.",
 			object([]string{"url"}, map[string]map[string]any{"url": str("Dirección completa, con https://.")}),

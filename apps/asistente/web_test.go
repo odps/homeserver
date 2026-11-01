@@ -8,13 +8,15 @@ import (
 	"testing"
 )
 
-func TestDuckDuckGoAndRead(t *testing.T) {
+func TestSearchAndRead(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/html/":
-			w.Write([]byte(`<div><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fes.wikipedia.org%2Fwiki%2FGo&amp;rut=x">El lenguaje <b>Go</b></a>
-				<a class="result__snippet" href="#">Go es un lenguaje &amp; más</a></div>
-				<a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Anuncio</a>`))
+		case "/res/v1/web/search":
+			if r.Header.Get("X-Subscription-Token") != "clave" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Write([]byte(`{"web":{"results":[{"title":"El lenguaje <strong>Go</strong>","url":"https://es.wikipedia.org/wiki/Go","description":"Go es un lenguaje &amp; más"}]}}`))
 		case "/pagina":
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(`<html><head><title>Mi &amp; página</title><style>.x{}</style></head><body><nav>menú</nav>
@@ -26,11 +28,14 @@ func TestDuckDuckGoAndRead(t *testing.T) {
 	}))
 	defer srv.Close()
 	w := newWebClient(true)
-	w.ddgURL = srv.URL
+	w.braveURL = srv.URL
 	ctx := context.Background()
-	res, err := w.search(ctx, "go", "")
+	res, err := w.search(ctx, "go", "clave")
 	if err != nil || len(res) != 1 || res[0].URL != "https://es.wikipedia.org/wiki/Go" || res[0].Title != "El lenguaje Go" || res[0].Snippet != "Go es un lenguaje & más" {
-		t.Fatalf("DuckDuckGo: %v %+v", err, res)
+		t.Fatalf("Brave: %v %+v", err, res)
+	}
+	if _, err := w.search(ctx, "go", ""); err == nil {
+		t.Fatal("busca sin clave")
 	}
 	title, text, err := w.read(ctx, srv.URL+"/pagina")
 	if err != nil || title != "Mi & página" || !strings.Contains(text, "Primer párrafo.") || !strings.Contains(text, "Segundo <párrafo>.") ||
