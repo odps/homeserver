@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"homeserver/platform/app"
@@ -72,9 +74,9 @@ type booksOut struct {
 }
 
 type searchIn struct {
-	Texto  string   `json:"texto,omitempty" jsonschema:"palabras del título, autor, género o serie; sin acentos ni mayúsculas que importen (vacío: todos)"`
-	Varios []string `json:"varios,omitempty" jsonschema:"varias búsquedas a la vez, una por libro (p. ej. apellidos de autores); sustituye a texto"`
-	Estado string   `json:"estado,omitempty" jsonschema:"pendiente, leyendo o leido"`
+	Texto  string `json:"texto,omitempty" jsonschema:"palabras del título, autor, género o serie; sin acentos ni mayúsculas que importen (vacío: todos)"`
+	Varios []any  `json:"varios,omitempty" jsonschema:"varias búsquedas a la vez, una por libro, como lista de textos: [\"Clausewitz\", \"Musashi\"]; sustituye a texto"`
+	Estado string `json:"estado,omitempty" jsonschema:"pendiente, leyendo o leido"`
 }
 
 type searchGroup struct {
@@ -86,6 +88,42 @@ type searchOut struct {
 	Libros      []bookSummary `json:"libros,omitempty"`
 	PorBusqueda []searchGroup `json:"por_busqueda,omitempty"`
 	Nota        string        `json:"nota,omitempty"`
+}
+
+// searchSchema es el de searchIn con los elementos de «varios» explícitos
+// (texto u objeto): algunos proveedores validan la llamada antes de enviarla.
+func searchSchema() *jsonschema.Schema {
+	s, err := jsonschema.For[searchIn](nil)
+	if err != nil {
+		panic(err)
+	}
+	v := s.Properties["varios"]
+	v.Type, v.Types = "array", nil
+	v.Items = &jsonschema.Schema{Types: []string{"string", "object"}}
+	return s
+}
+
+// searchText admite cada búsqueda de «varios» como texto o, si el modelo
+// manda objetos ({"titulo": …, "autor": …}), con sus textos juntos.
+func searchText(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var parts []string
+		for _, k := range keys {
+			if s, ok := x[k].(string); ok && s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return fmt.Sprint(v)
 }
 
 const notFoundHint = "Sin resultados. Prueba con el apellido del autor o con una palabra del título en su idioma original. Si quiere conseguirlo, búscalo en las bibliotecas libres con libros_catalogo_buscar."
@@ -142,7 +180,8 @@ func addTools(server *mcp.Server, a *api, ss seriesStore) {
 			books, err := s.list(ctx, who, listQuery{Status: "leyendo", Sort: "recent", Limit: 20})
 			return nil, toOut(books, false), err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "libros_buscar", Description: "Busca en la biblioteca de la persona por palabras (todas deben aparecer en título, autor, género o serie) y/o estado. Con «varios» comprueba varios libros en una sola llamada."},
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_buscar", Description: "Busca en la biblioteca de la persona por palabras (todas deben aparecer en título, autor, género o serie) y/o estado. Con «varios» comprueba varios libros en una sola llamada.",
+		InputSchema: searchSchema()},
 		func(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, searchOut, error) {
 			who, err := identity(req)
 			if err != nil {
@@ -157,7 +196,8 @@ func addTools(server *mcp.Server, a *api, ss seriesStore) {
 				}
 				var out searchOut
 				found := false
-				for _, t := range in.Varios {
+				for _, v := range in.Varios {
+					t := searchText(v)
 					books, err := s.list(ctx, who, listQuery{Text: t, Status: in.Estado, Sort: "recent", Limit: 5})
 					if err != nil {
 						return nil, searchOut{}, err

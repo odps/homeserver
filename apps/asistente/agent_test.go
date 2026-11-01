@@ -83,7 +83,15 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			reply["tool_calls"] = []map[string]any{{"id": "c1", "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
 		}
 		text, _ := last.Content.(string)
+		// Como Groq: una llamada que no cumple el esquema se rechaza con un 400.
+		if strings.Contains(text, "esquema") && last.Role == "user" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":{"message":"tool call validation failed: /varios/0: expected string, but got object","code":"tool_use_failed"}}`))
+			return
+		}
 		switch {
+		case last.Role == "system" && strings.Contains(text, "no era válida"):
+			reply["content"] = "Corregido."
 		case last.Role == "tool":
 			reply["content"] = "Según tu biblioteca: " + text
 		case strings.Contains(text, "leyendo"):
@@ -197,8 +205,14 @@ func TestAgentConversation(t *testing.T) {
 	if !strings.Contains(tgf.last(), "Recuerdo 2 mensajes") {
 		t.Fatalf("tras /nuevo: %q", tgf.last())
 	}
-	// Uso: 2 peticiones por pregunta con herramienta, 1 por las demás.
-	if u, _ := a.store.usageToday(ctx); u.Requests != 6 || u.PromptTokens != 600 {
+	// Una llamada rechazada por el proveedor se corrige en vez de fallar.
+	a.handle(ctx, tg, c, msg(42, "algo que rompe el esquema"))
+	if tgf.last() != "Corregido." {
+		t.Fatalf("llamada rechazada: %q", tgf.last())
+	}
+	// Uso: 2 peticiones por pregunta con herramienta, 1 por las demás; la rechazada
+	// también cuenta como petición (sin tokens).
+	if u, _ := a.store.usageToday(ctx); u.Requests != 8 || u.PromptTokens != 700 {
 		t.Fatalf("uso: %+v", u)
 	}
 	// Límite diario.

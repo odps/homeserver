@@ -377,6 +377,7 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string) (
 	msgs = append(msgs, chatMessage{Role: "user", Content: text})
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
+	fixed := false
 	for round := 0; round < maxRounds; round++ {
 		if round > 0 {
 			if used, _ := a.store.today(ctx); used >= c.DailyLimit {
@@ -391,6 +392,14 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string) (
 		}
 		reply, usage, err := l.chat(ctx, msgs, defs, choice)
 		a.store.addUsage(ctx, usage.PromptTokens, usage.CompletionTokens)
+		var bad badToolCall
+		if errors.As(err, &bad) && !fixed {
+			// Una vez por mensaje: se le explica el error y lo vuelve a intentar.
+			fixed = true
+			a.log.Warn("llamada a herramienta rechazada", "err", bad.msg)
+			msgs = append(msgs, chatMessage{Role: "system", Content: "Tu última llamada a una herramienta no era válida y no se ejecutó: " + bad.msg + "\nRevisa el esquema de parámetros y vuelve a llamarla bien."})
+			continue
+		}
 		if err != nil {
 			return "", err
 		}

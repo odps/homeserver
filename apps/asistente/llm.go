@@ -53,6 +53,10 @@ type llm struct {
 	http             *http.Client
 }
 
+type badToolCall struct{ msg string }
+
+func (e badToolCall) Error() string { return "llamada a herramienta no válida: " + e.msg }
+
 var errRateLimited = errors.New("el proveedor del modelo está limitando las peticiones; prueba en un rato")
 
 func (l llm) text(m chatMessage) string {
@@ -126,6 +130,7 @@ func (l llm) do(req *http.Request, out any) error {
 		var e struct {
 			Error struct {
 				Message string `json:"message"`
+				Code    string `json:"code"`
 			} `json:"error"`
 		}
 		json.Unmarshal(data, &e)
@@ -133,8 +138,13 @@ func (l llm) do(req *http.Request, out any) error {
 		if msg == "" {
 			msg = strings.TrimSpace(string(data))
 		}
-		if len(msg) > 300 {
-			msg = msg[:300]
+		if len(msg) > 600 {
+			msg = msg[:600]
+		}
+		// El proveedor rechaza una llamada a herramienta mal formada (Groq la
+		// valida contra el esquema): el modelo puede corregirla.
+		if resp.StatusCode == http.StatusBadRequest && (e.Error.Code == "tool_use_failed" || strings.Contains(strings.ToLower(msg), "tool call")) {
+			return badToolCall{msg}
 		}
 		return fmt.Errorf("el proveedor del modelo respondió %s: %s", resp.Status, msg)
 	}

@@ -85,6 +85,11 @@ func TestMCPCatalogTools(t *testing.T) {
 	if len(many.PorBusqueda) != 2 || len(many.PorBusqueda[0].Libros) != 1 || len(many.PorBusqueda[1].Libros) != 0 || many.Nota != "" {
 		t.Fatalf("varios: %+v", many)
 	}
+	// Algunos modelos mandan objetos en vez de textos.
+	call("libros_buscar", map[string]any{"varios": []any{map[string]any{"titulo": "Quijote", "autor": "Cervantes"}, "Maquiavelo"}}, &many)
+	if len(many.PorBusqueda) != 2 || many.PorBusqueda[0].Texto != "Cervantes Quijote" || len(many.PorBusqueda[0].Libros) != 1 {
+		t.Fatalf("varios con objetos: %+v", many)
+	}
 
 	// Un libro con copyright no se puede añadir.
 	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "libros_anadir", Arguments: map[string]any{"fuente": "gutenberg", "id": "9"}})
