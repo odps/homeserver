@@ -326,7 +326,7 @@ func (g *gateway) alertPhone(ctx context.Context, c alertsConfig, s *alertsState
 		cond("bateria_baja", b.On && b.Low > 0, p.BatteryPct <= b.Low, p.BatteryPct >= b.Low+5,
 			fmt.Sprintf("Batería baja: %d %% (%s).", p.BatteryPct, strings.ToLower(p.BatteryStatus)), "")
 		cond("bateria_alta", b.On && b.High > 0, p.BatteryPct >= b.High, p.BatteryPct <= b.High-5,
-			fmt.Sprintf("La batería está al %d %%: el límite de carga no está funcionando.", p.BatteryPct), "")
+			fmt.Sprintf("La batería está al %d %%: revisa el límite de carga (Ajustes → Batería → Control de carga).", p.BatteryPct), "")
 		cond("desenchufado", b.On && b.Unplugged, !p.Plugged, p.Plugged,
 			fmt.Sprintf("El móvil no está cargando (batería al %d %%). ¿Se ha ido la luz o se ha soltado el cable?", p.BatteryPct),
 			fmt.Sprintf("El móvil vuelve a cargar (batería al %d %%).", p.BatteryPct))
