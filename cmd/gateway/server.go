@@ -124,7 +124,7 @@ func (g *gateway) handler() http.Handler {
 	mux.Handle("POST /panel/copias", g.session(g.csrf(http.HandlerFunc(g.backupAction))))
 	mux.Handle("/{app}", g.appAuth(http.HandlerFunc(g.addSlash)))
 	mux.HandleFunc("/{app}/", g.appRoutes)
-	return deadlines(securityHeaders(limitInflight(64, sameOrigin(mux))))
+	return deadlines(securityHeaders(limitInflight(128, sameOrigin(mux))))
 }
 
 func cacheStatic(next http.Handler) http.Handler {

@@ -14,8 +14,19 @@ self.addEventListener('install', event => {
     const resp = await fetch('precache.json', { cache: 'no-store' })
     const { files } = await resp.json()
     const cache = await caches.open(`${SHELL}-${VERSION}`)
+    // Por tandas y sin que un fallo suelto lo pare todo: con cache.addAll
+    // bastaba un fichero que no llegase (pasarela ocupada, red móvil) para que
+    // la versión nueva no se instalase nunca. Lo que falte se pide a la red.
     // cache: 'reload' evita copias viejas de la caché HTTP del navegador.
-    await cache.addAll(files.map(f => new Request(f, { cache: 'reload' })))
+    const get = async f => {
+      for (let i = 0; i < 2; i++) {
+        try {
+          const resp = await fetch(new Request(f, { cache: 'reload' }))
+          if (resp.ok) return cache.put(f, resp)
+        } catch {}
+      }
+    }
+    for (let i = 0; i < files.length; i += 8) await Promise.all(files.slice(i, i + 8).map(get))
     await self.skipWaiting()
   })())
 })
