@@ -68,7 +68,7 @@ func (l llm) text(m chatMessage) string {
 // chat pide la siguiente respuesta. choice es «auto» o «none» (contestar ya,
 // sin más herramientas).
 func (l llm) chat(ctx context.Context, msgs []chatMessage, tools []toolDef, choice string) (chatMessage, llmUsage, error) {
-	req := map[string]any{"model": l.model, "messages": msgs, "max_tokens": 2048, "temperature": 0.3}
+	req := map[string]any{"model": l.model, "messages": msgs, "max_completion_tokens": 2048, "temperature": 0.3}
 	if len(tools) > 0 {
 		req["tools"], req["tool_choice"] = tools, choice
 	}
@@ -81,6 +81,14 @@ func (l llm) chat(ctx context.Context, msgs []chatMessage, tools []toolDef, choi
 	}
 	for attempt := 0; ; attempt++ {
 		err := l.post(ctx, "/chat/completions", req, &out)
+		// Los modelos de razonamiento de OpenAI (gpt-5…, Azure incluido) solo
+		// aceptan max_completion_tokens; si un proveedor solo conoce max_tokens,
+		// se repite con ese.
+		if n, ok := req["max_completion_tokens"]; ok && err != nil && strings.Contains(err.Error(), "max_completion_tokens") {
+			delete(req, "max_completion_tokens")
+			req["max_tokens"] = n
+			continue
+		}
 		var rl rateLimit
 		// Los límites por minuto de las capas gratuitas se pasan esperando un poco
 		// (Telegram sigue mostrando «escribiendo…»); los diarios, no.

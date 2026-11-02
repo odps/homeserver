@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,5 +90,31 @@ func TestPickModel(t *testing.T) {
 	s := schemaFor(map[string]any{"type": "object", "$schema": "x"})
 	if _, ok := s["properties"]; !ok || s["$schema"] != nil {
 		t.Fatalf("esquema: %v", s)
+	}
+}
+
+// Azure/OpenAI (gpt-5…) piden max_completion_tokens; algún proveedor
+// compatible solo conoce max_tokens: se repite con ese.
+func TestMaxTokensParam(t *testing.T) {
+	for _, accepts := range []string{"max_completion_tokens", "max_tokens"} {
+		var sent []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			_, ok := body[accepts]
+			sent = append(sent, fmt.Sprint(ok))
+			if !ok {
+				w.WriteHeader(400)
+				w.Write([]byte(`{"error":{"message":"Unsupported parameter: 'max_completion_tokens'"}}`))
+				return
+			}
+			w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hola"}}]}`))
+		}))
+		l := llm{base: srv.URL, model: "m", http: srv.Client()}
+		m, _, err := l.chat(context.Background(), []chatMessage{{Role: "user", Content: "hola"}}, nil, "auto")
+		srv.Close()
+		if err != nil || l.text(m) != "hola" {
+			t.Fatalf("%s: %v %q (peticiones %v)", accepts, err, l.text(m), sent)
+		}
 	}
 }

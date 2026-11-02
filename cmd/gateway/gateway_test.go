@@ -613,6 +613,7 @@ func TestAssistantConfig(t *testing.T) {
 	for _, bad := range []url.Values{
 		{"action": {"save"}, "telegram_token": {"no-es-un-token"}, "provider": {"groq"}, "daily_limit": {"200"}},
 		{"action": {"save"}, "provider": {"custom"}, "llm_base_url": {"http://interno:8080"}, "daily_limit": {"200"}},
+		{"action": {"save"}, "provider": {"custom"}, "llm_base_url": {"https://r.openai.azure.com/openai/responses?api-version=2025-04-01-preview"}, "daily_limit": {"200"}},
 		{"action": {"save"}, "provider": {"groq"}, "telegram_user": {"abc"}, "daily_limit": {"200"}},
 		{"action": {"save"}, "provider": {"groq"}, "llm_key": {"con espacio dentro"}, "daily_limit": {"200"}},
 		{"action": {"save"}, "provider": {"groq"}, "daily_limit": {"200"}, "apps_user": {"nadie"}},

@@ -386,7 +386,7 @@
           <select name="provider">
             {{range $a.Providers}}<option value="{{.}}"{{if eq . $a.Values.LLM_PROVIDER}} selected{{end}}>{{if eq . "groq"}}Groq (gratis, recomendado){{else if eq . "gemini"}}Google Gemini (capa gratuita usa tus datos){{else if eq . "openrouter"}}OpenRouter{{else}}Otro compatible con OpenAI{{end}}</option>{{end}}
           </select></label>
-        <label class="field"><span class="field-label">Dirección</span><input name="llm_base_url" type="url" value="{{if eq $a.Values.LLM_PROVIDER "custom"}}{{$a.Values.LLM_BASE_URL}}{{end}}" placeholder="https://…/v1"><span class="hint">Solo para «Otro».</span></label>
+        <label class="field"><span class="field-label">Dirección</span><input name="llm_base_url" type="url" value="{{if eq $a.Values.LLM_PROVIDER "custom"}}{{$a.Values.LLM_BASE_URL}}{{end}}" placeholder="https://…/v1"><span class="hint">Solo para «Otro». La base de la API, sin ?api-version. Azure: https://RECURSO.openai.azure.com/openai/v1 y, en Modelo, el nombre de la implementación.</span></label>
       </div>
       <label class="field"><span class="field-label">Modelo</span>
         <input name="llm_model" value="{{$a.Values.LLM_MODEL}}" list="asistente-modelos" placeholder="automático">

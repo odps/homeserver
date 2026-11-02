@@ -228,6 +228,11 @@ func applyAssistantForm(m map[string]string, f url.Values) ([]string, error) {
 		if u, err := url.Parse(base); err != nil || u.Scheme != "https" || u.Host == "" {
 			return nil, errors.New("la dirección del proveedor debe ser https://…")
 		}
+		// Se pega a menudo la URL completa de una petición (p. ej. la de Azure,
+		// …/openai/responses?api-version=…); el asistente añade él las rutas.
+		if u, _ := url.Parse(base); u.RawQuery != "" || strings.HasSuffix(u.Path, "/responses") || strings.HasSuffix(u.Path, "/chat/completions") {
+			return nil, errors.New("pon solo la base de la API, sin ?api-version ni /responses (en Azure: https://RECURSO.openai.azure.com/openai/v1)")
+		}
 	} else if !ok {
 		return nil, errors.New("proveedor no válido")
 	}
