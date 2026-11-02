@@ -45,7 +45,7 @@ func toJSON(v any) string {
 }
 
 func (a *agent) builtinTools() []tool {
-	tools := a.baseTools()
+	tools := append(a.baseTools(), a.geoTools()...)
 	if a.cfg().BraveKey != "" {
 		tools = append(tools, a.searchTool())
 	}

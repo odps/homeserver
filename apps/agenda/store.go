@@ -54,6 +54,27 @@ type prefs struct {
 	// se ignoran (cuentan como comerciales: no van a la IA si no se pide).
 	MailImportant []string `json:"mail_important,omitempty"`
 	MailIgnore    []string `json:"mail_ignore,omitempty"`
+	// Ciudad del tiempo en el resumen; vacía: la de la dirección de casa.
+	WeatherCity string `json:"weather_city,omitempty"`
+}
+
+// weatherCity es la ciudad del tiempo: la elegida o la última parte de la
+// dirección de casa sin números («Calle Mayor 3, 28013 Madrid» → «Madrid»).
+// A Open-Meteo solo va este nombre, nunca la dirección.
+func (p prefs) weatherCity() string {
+	if c := strings.TrimSpace(p.WeatherCity); c != "" {
+		return c
+	}
+	parts := strings.Split(p.Home, ",")
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return -1
+		}
+		return r
+	}, parts[len(parts)-1]))
 }
 
 func defaultPrefs() prefs {

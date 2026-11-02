@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"homeserver/platform/app"
+	"homeserver/platform/geo"
 	sealpkg "homeserver/platform/seal"
 )
 
@@ -43,7 +44,7 @@ func setup(env *app.Env, box *sealpkg.Box) error {
 		return err
 	}
 	st := store{env.DB, box}
-	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant), now: time.Now}
+	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant), now: time.Now, geo: geo.New()}
 	go svc.run(context.Background())
 	(&web{svc: svc, dav: newDAV(st)}).routes(env.Mux)
 	addTools(env.MCP, svc)

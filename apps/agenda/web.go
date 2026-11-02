@@ -797,6 +797,7 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 		p.DefaultMin = n
 	}
 	p.Home = strings.TrimSpace(r.FormValue("casa"))
+	p.WeatherCity = strings.TrimSpace(r.FormValue("ciudad_tiempo"))
 	if err := w.svc.store.savePrefs(r.Context(), who.User, p); err != nil {
 		w.settingsPage(rw, r, who, err.Error())
 		return

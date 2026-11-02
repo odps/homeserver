@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"homeserver/platform/geo"
 )
 
 type agent struct {
@@ -21,6 +23,7 @@ type agent struct {
 	keysPath   string
 	statusPath string
 	web        *webClient
+	geo        *geo.Client
 	apps       *appTools
 	telegramAt string // https://api.telegram.org (sustituible en los tests)
 	httpClient *http.Client
@@ -43,7 +46,7 @@ const (
 )
 
 func newAgent(s store, log *slog.Logger, keysPath, statusPath, gateway string) *agent {
-	a := &agent{store: s, log: log, keysPath: keysPath, statusPath: statusPath, web: newWebClient(false),
+	a := &agent{store: s, log: log, keysPath: keysPath, statusPath: statusPath, web: newWebClient(false), geo: geo.New(),
 		apps: &appTools{gateway: gateway, log: log}, telegramAt: "https://api.telegram.org",
 		httpClient: &http.Client{Timeout: 90 * time.Second}, strangers: map[int64]time.Time{}}
 	a.config.Store(&config{})
@@ -210,6 +213,10 @@ func (a *agent) poll(ctx context.Context, c config) {
 			if u.Message != nil {
 				a.handle(ctx, tg, c, u.Message)
 			}
+			// Ubicación en tiempo real: se actualiza sin contestar.
+			if e := u.Edited; e != nil && e.Location != nil && e.Chat.Type == "private" && e.From.ID == c.TelegramUser && c.TelegramUser != 0 {
+				a.gotLocation(ctx, tg, e.Chat.ID, e, true)
+			}
 		}
 	}
 }
@@ -219,6 +226,8 @@ const help = `Hola, soy tu asistente del homeserver. Puedes preguntarme por tus 
 Órdenes:
 /nuevo — empezar una conversación nueva (olvido lo anterior)
 /notas — ver tus últimas notas
+/ubicacion — qué ubicación tengo tuya (compártela con el clip → Ubicación)
+/sinubicacion — borrar tu ubicación
 /uso — peticiones al modelo de hoy
 /ayuda — este mensaje`
 
@@ -232,9 +241,13 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 		a.stranger(ctx, tg, c, m)
 		return
 	}
+	if m.Location != nil {
+		a.gotLocation(ctx, tg, chat, m, false)
+		return
+	}
 	text := strings.TrimSpace(m.Text)
 	if text == "" {
-		tg.send(ctx, chat, "De momento solo entiendo mensajes de texto.")
+		tg.send(ctx, chat, "De momento entiendo mensajes de texto y la ubicación que compartas.")
 		return
 	}
 	cmd := strings.ToLower(strings.SplitN(text, " ", 2)[0])
@@ -262,6 +275,13 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 			fmt.Fprintf(&b, "\n%d. %s _(%s)_", n.ID, n.Text, n.CreatedAt.In(madrid).Format("02/01"))
 		}
 		tg.send(ctx, chat, b.String())
+		return
+	case "/ubicacion", "/ubicación":
+		tg.send(ctx, chat, a.locationStatus(ctx, chat))
+		return
+	case "/sinubicacion", "/sinubicación":
+		a.store.forgetLocation(ctx, chat)
+		tg.send(ctx, chat, "He borrado tu ubicación.")
 		return
 	case "/uso":
 		u, _ := a.store.usageToday(ctx)
@@ -353,6 +373,7 @@ Cómo trabajas:
 - El correo llega clasificado sin IA: personal, importante (seguridad, condiciones, pagos, citas, trámites), notificacion y comercial. correo_buscar devuelve por defecto solo personal e importante, y cuenta los demás en «ocultos». Pide notificacion o comercial solo si la persona lo pide expresamente: si no, di cuántos hay. Si te dice que un remitente le importa o que lo ignores, usa correo_remitente.
 - Rutinas (trabajo, club, prácticas, clases: lo que ocupa una franja cada semana): créalas con rutinas_crear; para quitar un día suelto, agenda_saltar. Para proponer cuándo hacer algo o quedar, mira agenda_huecos, que ya descuenta eventos y rutinas. En agenda_ver salen marcadas como rutina: no las enumeres una a una salvo que lo pida.
 - Los datos personales te llegan como etiquetas: «TEL_1», «DIR_2:Madrid» (la localidad es una pista), «EMAIL_3», «IBAN_1», «DNI_1», «CUMPLE_1», «ENLACE_1»… Úsalas tal cual, con las comillas, al contestar y al llamar a herramientas: el sistema pone el dato real y la persona lo ve completo. No digas que están ocultas, no las expliques ni intentes adivinar qué contienen.
+- Para «cerca de mí», dónde está o cómo llegar: lugares_cerca, mi_ubicacion y como_llegar, que usan la ubicación que la persona comparte en Telegram (tú solo ves la zona). Si no la tienes, pídele que la comparta con el clip → Ubicación. Para el tiempo, la herramienta tiempo. No uses la búsqueda en internet para esto.
 - Ajustes de cada app (resumen y avisos de la agenda, noticias, lectura…): usa sus herramientas *_ajustes_ver y *_ajustes_cambiar, y cambia solo lo que haya pedido. Las cuentas, claves y contraseñas no se tocan desde aquí: se configuran en la web.
 - Para la dirección o el teléfono de alguien, contactos_buscar; para ir a un sitio, el enlace «ruta» del evento o mapa_ruta.
 - Escribes en un chat: texto plano, sin Markdown. Nada de tablas, títulos, negritas, cursivas ni enlaces entre corchetes; si das un enlace, pon la dirección tal cual. Para enumerar, una línea por elemento empezando por «• ». Respuestas breves y fáciles de leer en el móvil.`

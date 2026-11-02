@@ -13,6 +13,7 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-vcard"
 
+	"homeserver/platform/geo"
 	sealpkg "homeserver/platform/seal"
 )
 
@@ -23,6 +24,7 @@ type service struct {
 	mail       *mailer
 	log        *slog.Logger
 	summarizer func(ctx context.Context, prompt string) (string, error) // nil: sin resumen de la IA
+	geo        *geo.Client                                              // nil: sin el tiempo en el resumen
 	now        func() time.Time
 	summaries  sync.Map // usuario → día cuyo resumen se está preparando
 }
@@ -459,6 +461,9 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 	today := dayStart(local)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Tu día, %s.\n", longDate(local))
+	if line := s.weatherLine(ctx, owner, local); line != "" {
+		b.WriteString(line + "\n")
+	}
 	events, err := s.agenda(ctx, owner, today, today.AddDate(0, 0, 1))
 	if err != nil {
 		return "", err
@@ -617,6 +622,32 @@ func (s *service) markSender(ctx context.Context, owner, addr, as string) error 
 		return fmt.Errorf("«%s»: usa importante, ignorar o nada", as)
 	}
 	return s.setMailRules(ctx, owner, imp, ign)
+}
+
+// weatherLine es el tiempo de hoy en la ciudad de la persona, o nada si no se
+// sabe la ciudad o el servicio no responde.
+func (s *service) weatherLine(ctx context.Context, owner string, day time.Time) string {
+	if s.geo == nil {
+		return ""
+	}
+	p, _ := s.store.prefs(ctx, owner)
+	city := p.weatherCity()
+	if city == "" {
+		return ""
+	}
+	wctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	lat, lon, label, err := s.geo.City(wctx, city)
+	if err != nil {
+		s.log.Warn("tiempo", "err", err)
+		return ""
+	}
+	f, err := s.geo.Weather(wctx, lat, lon, 1)
+	if err != nil || len(f.Days) == 0 {
+		s.log.Warn("tiempo", "err", err)
+		return ""
+	}
+	return "Tiempo en " + label + ": " + f.Days[0].Line() + "."
 }
 
 func senderName(m message) string {

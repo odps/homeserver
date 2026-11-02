@@ -49,6 +49,7 @@ type settingsView struct {
 	Avisos          bool     `json:"avisos"`
 	AvisoPorDefecto int      `json:"aviso_por_defecto_min"`
 	Casa            string   `json:"casa"`
+	CiudadTiempo    string   `json:"ciudad_tiempo"`
 	Importantes     []string `json:"remitentes_importantes"`
 	Ignorados       []string `json:"remitentes_ignorados"`
 	Cuentas         []string `json:"cuentas_correo"`
@@ -62,6 +63,7 @@ type settingsIn struct {
 	Avisos          *bool     `json:"avisos,omitempty" jsonschema:"avisos de eventos y tareas por Telegram"`
 	AvisoPorDefecto *int      `json:"aviso_por_defecto_min,omitempty" jsonschema:"minutos de antelación al crear un evento; 0 sin aviso"`
 	Casa            *string   `json:"casa,omitempty" jsonschema:"dirección de casa, origen de las rutas; vacío para quitarla"`
+	CiudadTiempo    *string   `json:"ciudad_tiempo,omitempty" jsonschema:"ciudad del tiempo en el resumen de la mañana; vacío: la de la dirección de casa"`
 	Importantes     *[]string `json:"remitentes_importantes,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios siempre importantes (sustituye a la actual)"`
 	Ignorados       *[]string `json:"remitentes_ignorados,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios a ignorar (sustituye a la actual)"`
 }
@@ -194,7 +196,7 @@ func (s *service) settingsView(ctx context.Context, owner string) (settingsView,
 		return settingsView{}, err
 	}
 	v := settingsView{ResumenManana: p.SummaryOn, ResumenHora: p.SummaryAt, ResumenConIA: p.SummaryAI, Avisos: p.RemindersOn,
-		AvisoPorDefecto: p.DefaultMin, Casa: p.Home, Importantes: orNoStrings(p.MailImportant), Ignorados: orNoStrings(p.MailIgnore),
+		AvisoPorDefecto: p.DefaultMin, Casa: p.Home, CiudadTiempo: p.weatherCity(), Importantes: orNoStrings(p.MailImportant), Ignorados: orNoStrings(p.MailIgnore),
 		Cuentas: []string{}, Calendarios: []string{}}
 	accts, _ := s.store.accounts(ctx, owner)
 	for _, a := range accts {
@@ -241,6 +243,9 @@ func (s *service) changeSettings(ctx context.Context, owner string, in settingsI
 		if src != nil {
 			*dst = *src
 		}
+	}
+	if in.CiudadTiempo != nil {
+		p.WeatherCity = strings.TrimSpace(*in.CiudadTiempo)
 	}
 	if in.Casa != nil {
 		p.Home = *in.Casa

@@ -34,12 +34,20 @@ type tgMessage struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
-	Text string `json:"text"`
+	Text     string      `json:"text"`
+	Location *tgLocation `json:"location"`
+}
+
+type tgLocation struct {
+	Latitude   float64 `json:"latitude"`
+	Longitude  float64 `json:"longitude"`
+	LivePeriod int     `json:"live_period"` // segundos; 0 si no es en tiempo real
 }
 
 type tgUpdate struct {
 	UpdateID int64      `json:"update_id"`
 	Message  *tgMessage `json:"message"`
+	Edited   *tgMessage `json:"edited_message"` // la ubicación en tiempo real llega así
 }
 
 var errUnauthorized = errors.New("Telegram rechaza el token del bot")
@@ -82,7 +90,7 @@ func (t telegram) me(ctx context.Context) (tgUser, error) {
 
 func (t telegram) updates(ctx context.Context, offset int64, wait time.Duration) ([]tgUpdate, error) {
 	var u []tgUpdate
-	err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message"}}, &u)
+	err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message", "edited_message"}}, &u)
 	return u, err
 }
 

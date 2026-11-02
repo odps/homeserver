@@ -67,6 +67,9 @@ func (s store) addTurns(ctx context.Context, chat int64, turns ...turn) error {
 		if err := s.prunePseudonyms(ctx, tx); err != nil {
 			return err
 		}
+		if err := pruneLocations(ctx, tx); err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `INSERT INTO chats (chat_id, reset_at, last_at) VALUES ($1, '-infinity', now())
 			ON CONFLICT (chat_id) DO UPDATE SET last_at = now()`, chat)
 		return err

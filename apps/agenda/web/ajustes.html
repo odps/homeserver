@@ -33,6 +33,8 @@
   </div>
   <label class="field">Tu dirección (origen de las rutas) <span class="help">Para los enlaces «Cómo llegar». Vacía: Google Maps usa dónde estés.</span>
     <input name="casa" value="{{.Prefs.Home}}" autocomplete="street-address" placeholder="p. ej. Calle Mayor 3, Madrid"></label>
+  <label class="field">Ciudad para el tiempo <span class="help">Sale en el resumen de la mañana (Open-Meteo; solo se envía el nombre de la ciudad). Vacía: la de tu dirección.</span>
+    <input name="ciudad_tiempo" value="{{.Prefs.WeatherCity}}" autocomplete="address-level2" placeholder="p. ej. Madrid"></label>
   <div class="actions"><button class="btn primary">Guardar</button></div>
 </form>
 

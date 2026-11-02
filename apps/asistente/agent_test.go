@@ -111,6 +111,8 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			call("notas_guardar", string(b))
 		case strings.Contains(text, "Lucía"):
 			call("contactos_buscar", `{"texto":"Lucía"}`)
+		case strings.Contains(text, "farmacia"):
+			call("lugares_cerca", `{"que":"farmacia"}`)
 		default:
 			reply["content"] = "**Hola**, ¿qué tal? Recuerdo " + itoa(len(req.Messages)) + " mensajes."
 		}
