@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
@@ -537,7 +538,32 @@ func fromIMAP(account int64, h *imapclient.FetchMessageBuffer, raw []byte) messa
 	if msg.Date.IsZero() {
 		msg.Date = time.Now()
 	}
+	for _, f := range []*string{&msg.Subject, &msg.FromName, &msg.FromAddr, &msg.To, &msg.Cc, &msg.Body, &msg.Refs, &msg.MessageID} {
+		*f = validText(*f)
+	}
+	for i := range msg.Attachments {
+		msg.Attachments[i] = validText(msg.Attachments[i])
+	}
 	return msg
+}
+
+// validText arregla el texto que no es UTF-8: cabeceras con 8 bits sin
+// declarar (un «Ñ» en ISO-8859-1, típico de programas antiguos). Se lee como
+// Latin-1, que es lo habitual; así no sale «�».
+func validText(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	r := make([]rune, 0, len(s))
+	for i := 0; i < len(s); {
+		c, size := utf8.DecodeRuneInString(s[i:])
+		if c == utf8.RuneError && size == 1 {
+			c = rune(s[i]) // byte suelto: Latin-1
+		}
+		r = append(r, c)
+		i += size
+	}
+	return string(r)
 }
 
 // parseBody saca el texto (el text/plain o, si no hay, el HTML pasado a
