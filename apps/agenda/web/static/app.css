@@ -323,3 +323,17 @@ code { font: 500 .88rem/1.4 var(--mono); }
   .card { padding: 1rem; }
   .facts > div, .msg-meta > div { grid-template-columns: 1fr; gap: .1rem; }
 }
+
+/* Categorías del correo */
+.cats { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 .25rem; }
+.cats a { font: 600 .82rem/1 var(--sans); color: var(--ink-2); text-decoration: none; padding: .45rem .7rem; border-radius: 999px; background: var(--rule-soft); }
+.cats a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+.cats .n { font-weight: 500; opacity: .75; margin-left: .2rem; }
+.tag.cat-importante { color: var(--accent); background: var(--accent-soft); }
+.tag.cat-comercial, .tag.cat-notificacion { opacity: .8; }
+.sender-rule { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .75rem; }
+
+/* Rutinas: se ven, pero apagadas */
+.item.routine .title { color: var(--ink-2); font-weight: 550; }
+.days { display: flex; flex-wrap: wrap; gap: .5rem 1rem; border: 0; padding: 0; }
+.days legend { padding: 0; margin-bottom: .35rem; }

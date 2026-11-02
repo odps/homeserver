@@ -10,13 +10,13 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-vcard"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/text/unicode/norm"
+
+	sealpkg "homeserver/platform/seal"
 )
 
 var (
@@ -24,9 +24,22 @@ var (
 	errConflict = errors.New("ha cambiado mientras tanto")
 )
 
+// store guarda los datos personales cifrados (platform/seal): el texto de
+// eventos, contactos, correos, avisos y ajustes va en columnas "sealed" y, para
+// buscar, quedan huellas de las palabras en "tokens".
 type store struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	box *sealpkg.Box
 }
+
+// Contextos de cifrado: lo de una columna no se descifra como otra.
+const (
+	sealPrefs   = "agenda/prefs"
+	sealObject  = "agenda/objects"
+	sealCard    = "agenda/contacts"
+	sealNotice  = "agenda/notices"
+	sealMessage = "agenda/messages"
+)
 
 // prefs son los ajustes de cada cuenta.
 type prefs struct {
@@ -37,6 +50,10 @@ type prefs struct {
 	DefaultMin  int    `json:"default_min"`  // aviso por defecto al crear un evento (0: sin aviso)
 	Home        string `json:"home"`         // dirección de casa, origen de las rutas
 	OutlookApp  string `json:"outlook_app"`  // ID de la app de Azure para Outlook
+	// Remitentes (direcciones o dominios) que siempre son importantes o que
+	// se ignoran (cuentan como comerciales: no van a la IA si no se pide).
+	MailImportant []string `json:"mail_important,omitempty"`
+	MailIgnore    []string `json:"mail_ignore,omitempty"`
 }
 
 func defaultPrefs() prefs {
@@ -44,15 +61,7 @@ func defaultPrefs() prefs {
 }
 
 // fold pasa a minúsculas y quita las tildes, para buscar.
-func fold(s string) string {
-	var b strings.Builder
-	for _, r := range norm.NFD.String(strings.ToLower(s)) {
-		if !unicode.Is(unicode.Mn, r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+func fold(s string) string { return sealpkg.Fold(s) }
 
 func etagOf(data string) string {
 	h := sha256.Sum256([]byte(data))
@@ -62,8 +71,8 @@ func etagOf(data string) string {
 // ensureUser da de alta la cuenta con su calendario y su libreta.
 func (s store) ensureUser(ctx context.Context, user string) error {
 	var created bool
-	err := s.db.QueryRow(ctx, `INSERT INTO users (username, prefs) VALUES ($1, $2)
-		ON CONFLICT (username) DO NOTHING RETURNING true`, user, mustJSON(defaultPrefs())).Scan(&created)
+	err := s.db.QueryRow(ctx, `INSERT INTO users (username, prefs_sealed) VALUES ($1, $2)
+		ON CONFLICT (username) DO NOTHING RETURNING true`, user, s.box.Seal(sealPrefs, mustJSON(defaultPrefs()))).Scan(&created)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -90,15 +99,15 @@ func (s store) users(ctx context.Context) ([]string, error) {
 func (s store) prefs(ctx context.Context, user string) (prefs, error) {
 	p := defaultPrefs()
 	var raw []byte
-	if err := s.db.QueryRow(ctx, `SELECT prefs FROM users WHERE username = $1`, user).Scan(&raw); err != nil {
+	if err := s.db.QueryRow(ctx, `SELECT prefs_sealed FROM users WHERE username = $1`, user).Scan(&raw); err != nil {
 		return p, err
 	}
-	err := json.Unmarshal(raw, &p)
+	err := s.box.OpenJSON(sealPrefs, raw, &p)
 	return p, err
 }
 
 func (s store) savePrefs(ctx context.Context, user string, p prefs) error {
-	_, err := s.db.Exec(ctx, `UPDATE users SET prefs = $2 WHERE username = $1`, user, mustJSON(p))
+	_, err := s.db.Exec(ctx, `UPDATE users SET prefs_sealed = $2 WHERE username = $1`, user, s.box.Seal(sealPrefs, mustJSON(p)))
 	return err
 }
 
@@ -159,11 +168,23 @@ type object struct {
 	Updated  time.Time
 }
 
-const objectCols = `o.id, o.collection_id, c.slug, o.name, o.data, o.etag, o.updated_at`
+const objectCols = `o.id, o.collection_id, c.slug, o.name, o.sealed, o.etag, o.updated_at`
+
+// scanObject lee objectCols (y dest, detrás) y descifra el iCalendar.
+func (s store) scanObject(r pgx.CollectableRow, dest ...any) (object, error) {
+	var o object
+	var sealed []byte
+	if err := r.Scan(append([]any{&o.ID, &o.CollID, &o.Calendar, &o.Name, &sealed, &o.ETag, &o.Updated}, dest...)...); err != nil {
+		return o, err
+	}
+	var err error
+	o.Data, err = s.box.OpenString(sealObject, sealed)
+	return o, err
+}
 
 func (s store) objects(ctx context.Context, where string, args ...any) ([]object, error) {
 	rows, _ := s.db.Query(ctx, `SELECT `+objectCols+` FROM objects o JOIN collections c ON c.id = o.collection_id WHERE `+where, args...)
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[object])
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (object, error) { return s.scanObject(r) })
 }
 
 func (s store) object(ctx context.Context, where string, args ...any) (object, error) {
@@ -200,24 +221,11 @@ func (s store) openTasks(ctx context.Context, owner string) ([]object, error) {
 	return s.objects(ctx, `c.owner = $1 AND o.comp = 'VTODO' AND NOT o.done ORDER BY o.starts_at NULLS LAST, o.id`, owner)
 }
 
-func (s store) searchObjects(ctx context.Context, owner string, words []string, limit int) ([]object, error) {
-	where, args := wordFilter("o.search", words, 2)
-	return s.objects(ctx, `c.owner = $1 AND c.kind = 'cal'`+where+` ORDER BY o.starts_at DESC NULLS LAST LIMIT `+fmt.Sprint(limit), append([]any{owner}, args...)...)
-}
-
-// wordFilter exige que la columna contenga todas las palabras.
-func wordFilter(col string, words []string, first int) (string, []any) {
-	var b strings.Builder
-	var args []any
-	for i, w := range words {
-		fmt.Fprintf(&b, ` AND %s LIKE $%d`, col, first+i)
-		args = append(args, "%"+strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(w)+"%")
-	}
-	return b.String(), args
-}
-
-func words(s string) []string {
-	return strings.FieldsFunc(fold(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '@' && r != '.' })
+// searchObjects busca por huellas: cada palabra, entera o como comienzo de
+// palabra (desde 3 letras), en el título, el lugar o la descripción.
+func (s store) searchObjects(ctx context.Context, owner, q string, limit int) ([]object, error) {
+	return s.objects(ctx, `c.owner = $1 AND c.kind = 'cal' AND o.tokens @> $2 ORDER BY o.starts_at DESC NULLS LAST LIMIT `+fmt.Sprint(limit),
+		owner, s.box.Query("t", q))
 }
 
 // putObject guarda un evento o tarea. ifMatch (etag) evita pisar cambios
@@ -261,15 +269,15 @@ func (s store) putObject(ctx context.Context, collID int64, name string, cal *ic
 		}
 	}
 	var o object
-	err = tx.QueryRow(ctx, `INSERT INTO objects (collection_id, name, uid, comp, data, etag, summary, location, description,
-			starts_at, ends_at, all_day, recurring, done, next_alarm_at, search, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-		ON CONFLICT (collection_id, name) DO UPDATE SET uid = $3, comp = $4, data = $5, etag = $6, summary = $7,
-			location = $8, description = $9, starts_at = $10, ends_at = $11, all_day = $12, recurring = $13, done = $14,
-			next_alarm_at = $15, search = $16, updated_at = $17
+	err = tx.QueryRow(ctx, `INSERT INTO objects (collection_id, name, uid, comp, sealed, etag,
+			starts_at, ends_at, all_day, recurring, done, next_alarm_at, tokens, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		ON CONFLICT (collection_id, name) DO UPDATE SET uid = $3, comp = $4, sealed = $5, etag = $6,
+			starts_at = $7, ends_at = $8, all_day = $9, recurring = $10, done = $11,
+			next_alarm_at = $12, tokens = $13, updated_at = $14
 		RETURNING id, updated_at`,
-		collID, name, d.UID, d.Comp, data, etag, d.Summary, d.Location, d.Description,
-		d.Start, d.End, d.AllDay, d.Recurring, d.Done, next, fold(d.Summary+" "+d.Location+" "+d.Description), now).Scan(&o.ID, &o.Updated)
+		collID, name, d.UID, d.Comp, s.box.SealString(sealObject, data), etag,
+		d.Start, d.End, d.AllDay, d.Recurring, d.Done, next, objectTokens(s.box, d.Summary, d.Location, d.Description), now).Scan(&o.ID, &o.Updated)
 	if err != nil {
 		return object{}, err
 	}
@@ -307,7 +315,8 @@ func (s store) dueAlarms(ctx context.Context, now time.Time) ([]dueAlarm, error)
 		WHERE o.next_alarm_at <= $1 ORDER BY o.next_alarm_at`, now)
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (dueAlarm, error) {
 		var a dueAlarm
-		err := r.Scan(&a.ID, &a.CollID, &a.Calendar, &a.Name, &a.Data, &a.ETag, &a.Updated, &a.Owner, &a.Next)
+		var err error
+		a.object, err = s.scanObject(r, &a.Owner, &a.Next)
 		return a, err
 	})
 }
@@ -333,11 +342,36 @@ type cardRow struct {
 	Updated time.Time
 }
 
-const cardCols = `k.id, k.collection_id, k.name, k.data, k.etag, k.updated_at`
+const cardCols = `k.id, k.collection_id, k.name, k.sealed, k.etag, k.updated_at`
 
 func (s store) cards(ctx context.Context, where string, args ...any) ([]cardRow, error) {
 	rows, _ := s.db.Query(ctx, `SELECT `+cardCols+` FROM contacts k JOIN collections c ON c.id = k.collection_id WHERE `+where, args...)
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[cardRow])
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (cardRow, error) {
+		var c cardRow
+		var sealed []byte
+		if err := r.Scan(&c.ID, &c.CollID, &c.Name, &sealed, &c.ETag, &c.Updated); err != nil {
+			return c, err
+		}
+		var err error
+		c.Data, err = s.box.OpenString(sealCard, sealed)
+		return c, err
+	})
+}
+
+// byName ordena contactos por su nombre (va cifrado: se ordena aquí, no en
+// SQL) y se queda con los limit primeros (0: todos).
+func byName(list []cardRow, limit int) []cardRow {
+	key := make(map[int64]string, len(list))
+	for _, r := range list {
+		if c, err := decodeCard(r.Data); err == nil {
+			key[r.ID] = fold(viewContact(r.ID, c).Name)
+		}
+	}
+	sort.SliceStable(list, func(i, j int) bool { return key[list[i].ID] < key[list[j].ID] })
+	if limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return list
 }
 
 func (s store) card(ctx context.Context, where string, args ...any) (cardRow, error) {
@@ -366,12 +400,26 @@ func (s store) listCards(ctx context.Context, collID int64) ([]cardRow, error) {
 // searchCards busca contactos que tengan todas las palabras (en el nombre,
 // la empresa, correos, teléfonos, direcciones o notas). Sin palabras, todos.
 func (s store) searchCards(ctx context.Context, owner, q string, limit int) ([]cardRow, error) {
-	where, args := wordFilter("k.search", words(q), 2)
-	return s.cards(ctx, `c.owner = $1`+where+` ORDER BY k.fn LIMIT `+fmt.Sprint(limit), append([]any{owner}, args...)...)
+	list, err := s.cards(ctx, `c.owner = $1 AND k.tokens @> $2`, owner, s.box.Query("t", q))
+	return byName(list, limit), err
 }
 
 func (s store) birthdays(ctx context.Context, owner, mmdd string) ([]cardRow, error) {
-	return s.cards(ctx, `c.owner = $1 AND right(k.birthday, 5) = $2 ORDER BY k.fn`, owner, mmdd)
+	list, err := s.cards(ctx, `c.owner = $1 AND k.birthday_token = $2`, owner, s.box.Token("cumple", mmdd))
+	return byName(list, 0), err
+}
+
+// birthdayToken es la huella del día y mes ("MM-DD") de un cumpleaños.
+func birthdayToken(box *sealpkg.Box, birthday string) *int64 {
+	if len(birthday) < 5 {
+		return nil
+	}
+	t := box.Token("cumple", birthday[len(birthday)-5:])
+	return &t
+}
+
+func objectTokens(box *sealpkg.Box, summary, location, description string) []int64 {
+	return box.Index(nil, "t", summary+" "+location+" "+description)
 }
 
 func (s store) putCard(ctx context.Context, collID int64, name string, c vcard.Card, ifMatch string, ifNoneMatch bool, now time.Time) (cardRow, error) {
@@ -404,11 +452,12 @@ func (s store) putCard(ctx context.Context, collID int64, name string, c vcard.C
 		return cardRow{}, errConflict
 	}
 	r := cardRow{CollID: collID, Name: name, Data: data, ETag: etag}
-	err = tx.QueryRow(ctx, `INSERT INTO contacts (collection_id, name, uid, data, etag, fn, birthday, search, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		ON CONFLICT (collection_id, name) DO UPDATE SET uid = $3, data = $4, etag = $5, fn = $6, birthday = $7,
-			search = $8, updated_at = $9
-		RETURNING id, updated_at`, collID, name, uid, data, etag, v.Name, v.Birthday, contactSearch(v), now).Scan(&r.ID, &r.Updated)
+	err = tx.QueryRow(ctx, `INSERT INTO contacts (collection_id, name, uid, sealed, etag, birthday_token, tokens, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (collection_id, name) DO UPDATE SET uid = $3, sealed = $4, etag = $5, birthday_token = $6,
+			tokens = $7, updated_at = $8
+		RETURNING id, updated_at`, collID, name, uid, s.box.SealString(sealCard, data), etag, birthdayToken(s.box, v.Birthday),
+		s.box.Index(nil, "t", contactSearch(v)), now).Scan(&r.ID, &r.Updated)
 	if err != nil {
 		return cardRow{}, err
 	}
@@ -435,7 +484,8 @@ func (s store) deleteCard(ctx context.Context, collID int64, name, ifMatch strin
 // ---- Avisos para Telegram ----
 
 func (s store) addNotice(ctx context.Context, owner, kind, text string, at time.Time) error {
-	_, err := s.db.Exec(ctx, `INSERT INTO notices (owner, kind, text, created_at) VALUES ($1, $2, $3, $4)`, owner, kind, text, at)
+	_, err := s.db.Exec(ctx, `INSERT INTO notices (owner, kind, sealed, created_at) VALUES ($1, $2, $3, $4)`,
+		owner, kind, s.box.SealString(sealNotice, text), at)
 	return err
 }
 
@@ -449,14 +499,19 @@ type notice struct {
 func (s store) takeNotices(ctx context.Context, owner string, now time.Time) ([]notice, error) {
 	rows, _ := s.db.Query(ctx, `UPDATE notices SET delivered_at = $2
 		WHERE owner = $1 AND delivered_at IS NULL AND created_at > $2::timestamptz - interval '1 day'
-		RETURNING kind, text, created_at`, owner, now)
+		RETURNING kind, sealed, created_at`, owner, now)
 	type row struct {
 		notice
 		at time.Time
 	}
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
 		var x row
-		err := r.Scan(&x.Kind, &x.Text, &x.at)
+		var sealed []byte
+		if err := r.Scan(&x.Kind, &sealed, &x.at); err != nil {
+			return x, err
+		}
+		var err error
+		x.Text, err = s.box.OpenString(sealNotice, sealed)
 		return x, err
 	})
 	if err != nil {

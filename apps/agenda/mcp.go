@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,8 +46,9 @@ func parseWhen(s string) (time.Time, bool, error) {
 func ptr[T any](v T) *T { return &v }
 
 type rangeIn struct {
-	Desde string `json:"desde,omitempty" jsonschema:"primer día (AAAA-MM-DD); por defecto, hoy"`
-	Hasta string `json:"hasta,omitempty" jsonschema:"último día incluido (AAAA-MM-DD); por defecto, 7 días después de desde"`
+	Desde      string `json:"desde,omitempty" jsonschema:"primer día (AAAA-MM-DD); por defecto, hoy"`
+	Hasta      string `json:"hasta,omitempty" jsonschema:"último día incluido (AAAA-MM-DD); por defecto, 7 días después de desde"`
+	SinRutinas bool   `json:"sin_rutinas,omitempty" jsonschema:"true para no incluir las rutinas (trabajo, club…), que salen marcadas con rutina"`
 }
 
 type entriesOut struct {
@@ -112,15 +114,17 @@ type contactIn struct {
 }
 
 type mailSearchIn struct {
-	Texto    string `json:"texto,omitempty" jsonschema:"palabras en el remitente, asunto o texto"`
-	De       string `json:"de,omitempty" jsonschema:"nombre o dirección del remitente"`
-	NoLeidos bool   `json:"no_leidos,omitempty"`
-	Dias     int    `json:"dias,omitempty" jsonschema:"solo los de los últimos N días"`
+	Texto      string   `json:"texto,omitempty" jsonschema:"palabras en el remitente, asunto o texto"`
+	De         string   `json:"de,omitempty" jsonschema:"nombre o dirección del remitente"`
+	NoLeidos   bool     `json:"no_leidos,omitempty"`
+	Dias       int      `json:"dias,omitempty" jsonschema:"solo los de los últimos N días"`
+	Categorias []string `json:"categorias,omitempty" jsonschema:"personal, importante, notificacion o comercial. Por defecto personal e importante; las otras, solo si la persona lo pide expresamente"`
 }
 
 type mailListOut struct {
-	Correos []message `json:"correos"`
-	Cuentas []string  `json:"cuentas"`
+	Correos []message      `json:"correos"`
+	Ocultos map[string]int `json:"ocultos,omitempty" jsonschema:"cuántos de las otras categorías encajan con la búsqueda y no se han devuelto"`
+	Cuentas []string       `json:"cuentas"`
 }
 
 type draftIn struct {
@@ -153,6 +157,7 @@ type summaryOut struct {
 }
 
 func addTools(server *mcp.Server, svc *service) {
+	addMoreTools(server, svc)
 	mcp.AddTool(server, &mcp.Tool{Name: "agenda_ver", Description: "Eventos (cada repetición por separado) y tareas con vencimiento entre dos días, por orden, con lugar, enlace a Maps y avisos"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in rangeIn) (*mcp.CallToolResult, entriesOut, error) {
 			who, err := identity(req)
@@ -179,6 +184,9 @@ func addTools(server *mcp.Server, svc *service) {
 				return nil, entriesOut{}, errors.New("el intervalo debe ir hacia delante y durar menos de un año")
 			}
 			l, err := svc.agenda(ctx, who.User, from, to)
+			if in.SinRutinas {
+				l = slices.DeleteFunc(l, func(e entry) bool { return e.Routine })
+			}
 			return nil, entriesOut{Elementos: orEmpty(l)}, err
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "agenda_buscar", Description: "Busca eventos y tareas (pasados o futuros) por palabras del título, lugar o notas"},
@@ -338,13 +346,22 @@ func addTools(server *mcp.Server, svc *service) {
 			c, err := svc.removeContact(ctx, who.User, in.ID)
 			return nil, c, err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "correo_buscar", Description: "Busca en el correo recibido (bandeja de entrada de los últimos meses). Devuelve id, remitente, asunto, fecha, si está leído y el principio del texto"},
+	mcp.AddTool(server, &mcp.Tool{Name: "correo_buscar", Description: "Busca en el correo recibido (bandeja de entrada de los últimos meses), clasificado sin IA por sus metadatos: personal, importante (seguridad, condiciones, pagos, citas, trámites aunque vengan de listas), notificacion y comercial. Por defecto solo devuelve personal e importante y cuenta los demás en «ocultos»; pide notificacion o comercial solo si la persona lo pide expresamente. Busca palabras enteras o por su comienzo (desde 3 letras). Devuelve id, remitente, asunto, fecha, categoría, si está leído y el principio del texto"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in mailSearchIn) (*mcp.CallToolResult, mailListOut, error) {
 			who, err := identity(req)
 			if err != nil {
 				return nil, mailListOut{}, err
 			}
-			q := mailQuery{Text: in.Texto, From: in.De, UnreadOnly: in.NoLeidos, Limit: 25}
+			q := mailQuery{Text: in.Texto, From: in.De, UnreadOnly: in.NoLeidos, Limit: 25, Categories: []string{catPersonal, catImportant}}
+			if len(in.Categorias) > 0 {
+				q.Categories = nil
+				for _, c := range in.Categorias {
+					if !slices.Contains(allCategories, c) {
+						return nil, mailListOut{}, fmt.Errorf("categoría desconocida %q: usa %s", c, strings.Join(allCategories, ", "))
+					}
+					q.Categories = append(q.Categories, c)
+				}
+			}
 			if in.Dias > 0 {
 				q.Since = svc.now().AddDate(0, 0, -in.Dias)
 			}
@@ -352,6 +369,7 @@ func addTools(server *mcp.Server, svc *service) {
 			if err != nil {
 				return nil, mailListOut{}, err
 			}
+			counts, _ := svc.store.countMessages(ctx, who.User, q)
 			for i := range l {
 				l[i].Body = truncate(l[i].Body, 300)
 			}
@@ -359,6 +377,14 @@ func addTools(server *mcp.Server, svc *service) {
 			out := mailListOut{Correos: l, Cuentas: []string{}}
 			if out.Correos == nil {
 				out.Correos = []message{}
+			}
+			for c, n := range counts {
+				if !slices.Contains(q.Categories, c) {
+					if out.Ocultos == nil {
+						out.Ocultos = map[string]int{}
+					}
+					out.Ocultos[c] = n
+				}
 			}
 			for _, a := range accts {
 				out.Cuentas = append(out.Cuentas, a.Address)

@@ -17,9 +17,9 @@ import (
 // cada cuenta a su hora (con el resumen del asistente, si lo quiere).
 
 type service struct {
-	store      store
-	fetch      *fetcher
-	log        *slog.Logger
+	store       store
+	fetch       *fetcher
+	log         *slog.Logger
 	summarizer  func(ctx context.Context, prompt string) (string, error) // nil: sin resumen
 	redditPause time.Duration                                            // entre subforos
 	mu          sync.Mutex                                               // una recogida a la vez
@@ -69,6 +69,9 @@ func (s *service) collect(ctx context.Context) {
 	if err := s.store.prune(ctx); err != nil {
 		s.log.Warn("limpiar noticias", "err", err)
 	}
+	if err := s.store.dropOtherFeeds(ctx, urls); err != nil {
+		s.log.Warn("limpiar feeds sin uso", "err", err)
+	}
 }
 
 func (s *service) collectOne(ctx context.Context, u string) {
@@ -116,7 +119,7 @@ func (s *service) prepare(ctx context.Context, user string, now time.Time) (dige
 			if err != nil {
 				s.log.Warn("resumen del día", "usuario", user, "err", err)
 			} else {
-				d.Summary = text
+				d.Blocks = parseBlocks(text)
 			}
 		}
 	}

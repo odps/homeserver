@@ -1,0 +1,48 @@
+{{define "rutinas.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Rutinas</p>
+  <h1 class="date">Lo de cada semana</h1>
+  <div class="hero-meta">
+    <span>Trabajo, club, prácticas: franjas que se repiten</span>
+    <span>Van en el calendario «Rutinas» y cuentan como ocupado al buscar huecos</span>
+  </div>
+</section>
+
+{{with .Tasks}}
+<ul class="list">
+  {{range .}}
+  <li class="row routine"><a class="row-main" href="{{$.Base}}/evento/{{.ID}}">
+    <span class="title">{{.Title}}</span>
+    <span class="meta">{{with .Repeat}}<span><span aria-hidden="true">↻</span> {{.}}</span>{{end}}{{if .Start}}<span>{{hm .Start}}{{with .End}}–{{hm .}}{{end}}</span>{{end}}{{with .Location}}<span class="loc">{{.}}</span>{{end}}</span>
+  </a></li>
+  {{end}}
+</ul>
+<p class="help">Para cambiar una o quitar un día suelto, ábrela o díselo al asistente («este viernes no hay entreno»).</p>
+{{else}}
+<section class="empty"><p class="big">Aún no hay rutinas.</p><p>Añade tu horario de trabajo o tus entrenamientos y el asistente sabrá cuándo estás ocupado.</p></section>
+{{end}}
+
+<form class="panel" method="post" action="{{.Base}}/rutinas">
+  <header class="panel-head"><h2>Nueva rutina</h2></header>
+  <label class="field">Qué <input name="titulo" required maxlength="200" placeholder="p. ej. Trabajo"></label>
+  <fieldset class="field days"><legend>Días</legend>
+    <label class="chk"><input type="checkbox" name="dias" value="lunes"> Lun</label>
+    <label class="chk"><input type="checkbox" name="dias" value="martes"> Mar</label>
+    <label class="chk"><input type="checkbox" name="dias" value="miercoles"> Mié</label>
+    <label class="chk"><input type="checkbox" name="dias" value="jueves"> Jue</label>
+    <label class="chk"><input type="checkbox" name="dias" value="viernes"> Vie</label>
+    <label class="chk"><input type="checkbox" name="dias" value="sabado"> Sáb</label>
+    <label class="chk"><input type="checkbox" name="dias" value="domingo"> Dom</label>
+  </fieldset>
+  <div class="pair">
+    <label class="field">De <input type="time" name="inicio" required></label>
+    <label class="field">A <input type="time" name="fin" required></label>
+  </div>
+  <div class="pair">
+    <label class="field">Desde <input type="date" name="desde" value="{{.From}}"></label>
+    <label class="field">Hasta <span class="help">Vacío si no acaba</span><input type="date" name="hasta"></label>
+  </div>
+  <label class="field">Dónde <input name="lugar" autocomplete="off"></label>
+  <div class="actions"><button class="btn primary">Crear rutina</button></div>
+</form>
+{{template "foot" .}}{{end}}

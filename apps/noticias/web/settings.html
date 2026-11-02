@@ -92,7 +92,7 @@
     <label class="field">En el mundo<input name="world_count" type="number" min="3" max="30" value="{{.Prefs.WorldCount}}"></label>
     <label class="field">Por sección<input name="topic_count" type="number" min="1" max="15" value="{{.Prefs.TopicCount}}"></label>
   </div>
-  <label class="switch wide"><input type="checkbox" name="ai_summary" value="1"{{if .Prefs.AISummary}} checked{{end}}><span class="switch-name">Resumen del día</span><span class="meta">Un párrafo escrito por el asistente (IA)</span></label>
+  <label class="switch wide"><input type="checkbox" name="ai_summary" value="1"{{if .Prefs.AISummary}} checked{{end}}><span class="switch-name">Resumen del día</span><span class="meta">Por bloques (España, el mundo y tus intereses), escrito por el asistente (IA)</span></label>
   <div class="actions"><button class="btn primary">Guardar</button></div>
 </form>
 {{template "foot" .}}{{end}}

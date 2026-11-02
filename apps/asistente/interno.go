@@ -59,10 +59,14 @@ func (a *agent) summarize(r *http.Request, prompt string) (string, error) {
 	if l.model == "" {
 		return "", errors.New("el asistente no tiene modelo elegido")
 	}
-	reply, usage, err := l.chat(ctx, []chatMessage{{Role: "system", Content: summarySystem}, {Role: "user", Content: prompt}}, nil, "auto")
+	// Lo que se resume (correos, noticias) va con los datos personales como
+	// etiquetas, que solo viven en esta petición.
+	p := newPseudonyms(a.store, 0, true)
+	reply, usage, err := l.chat(ctx, []chatMessage{{Role: "system", Content: summarySystem + " Los datos personales vienen como etiquetas («TEL_1», «EMAIL_2»…): si los necesitas, cópialas tal cual."},
+		{Role: "user", Content: p.hideText(ctx, prompt)}}, nil, "auto")
 	a.store.addUsage(ctx, usage.PromptTokens, usage.CompletionTokens)
 	if err != nil {
 		return "", err
 	}
-	return plainText(l.text(reply)), nil
+	return p.reveal(ctx, plainText(l.text(reply))), nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,13 +21,33 @@ type migration struct {
 	sql     string
 }
 
+// Step es una migración en Go que acompaña al fichero NNN del mismo número:
+// corre en su misma transacción, después del SQL (por ejemplo, para cifrar lo
+// que ya hay guardado). Vacuum son las tablas que, al terminar, se reescriben
+// con VACUUM FULL para que no queden en disco las versiones antiguas de las
+// filas.
+type Step struct {
+	Run    func(ctx context.Context, tx pgx.Tx) error
+	Vacuum []string
+}
+
 // Migrate aplica en orden los ficheros "NNN_descripcion.sql" de dir que aún no
 // constan en <schema>.schema_migrations. Cada migración va en su transacción.
 // El schema debe existir: lo crea el aprovisionamiento con el rol de la app.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string, files fs.FS, dir string) error {
+	return MigrateSteps(ctx, pool, schema, files, dir, nil)
+}
+
+// MigrateSteps es Migrate con pasos en Go (ver Step).
+func MigrateSteps(ctx context.Context, pool *pgxpool.Pool, schema string, files fs.FS, dir string, steps map[int]Step) error {
 	migs, err := load(files, dir)
 	if err != nil {
 		return err
+	}
+	for v := range steps {
+		if !slices.ContainsFunc(migs, func(m migration) bool { return m.version == v }) {
+			return fmt.Errorf("el paso %03d no tiene su fichero de migración", v)
+		}
 	}
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
@@ -63,6 +84,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string, files fs.FS
 		return err
 	}
 
+	var vacuum []string
 	for _, m := range migs {
 		if applied[m.version] {
 			continue
@@ -71,11 +93,26 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string, files fs.FS
 			if _, err := tx.Exec(ctx, m.sql); err != nil {
 				return err
 			}
+			if st, ok := steps[m.version]; ok && st.Run != nil {
+				if err := st.Run(ctx, tx); err != nil {
+					return err
+				}
+			}
 			_, err := tx.Exec(ctx, "INSERT INTO "+table+" (version, name) VALUES ($1, $2)", m.version, m.name)
 			return err
 		})
 		if err != nil {
 			return fmt.Errorf("migración %s: %w", m.name, err)
+		}
+		for _, t := range steps[m.version].Vacuum {
+			if !slices.Contains(vacuum, t) {
+				vacuum = append(vacuum, t)
+			}
+		}
+	}
+	for _, t := range vacuum {
+		if _, err := conn.Exec(ctx, "VACUUM FULL "+pgx.Identifier{schema, t}.Sanitize()); err != nil {
+			return fmt.Errorf("compactar %s: %w", t, err)
 		}
 	}
 	return nil

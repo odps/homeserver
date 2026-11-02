@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"homeserver/platform/dbtest"
+	"homeserver/platform/seal"
 )
 
 func rss(title string, items ...string) string {
@@ -129,8 +130,9 @@ func newHarness(t *testing.T) *harness {
 	presets = []preset{{"tecnologia", "Tecnología", "tema", feeds(news.URL + "/tec.xml"), ""}, {"hackernews", "Hacker News", "redes", feeds(news.URL + "/hn.xml"), ""}}
 	t.Cleanup(func() { generalSources, googleNewsRoot, presets, redditRoot = oldGeneral, oldGN, oldPresets, oldReddit })
 
-	pool := dbtest.Migrated(t, migrations)
-	svc := &service{store: store{pool}, fetch: newFetcher(true), log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	box, _ := seal.Load("")
+	pool := dbtest.MigratedSteps(t, migrations, steps(box))
+	svc := &service{store: store{pool, box}, fetch: newFetcher(true), log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		summarizer: func(ctx context.Context, prompt string) (string, error) {
 			if !strings.Contains(prompt, "vivienda") {
 				return "", fmt.Errorf("prompt sin noticias: %s", prompt)
@@ -202,7 +204,7 @@ func TestDigestFlow(t *testing.T) {
 	}
 	// El texto para Telegram.
 	_, text := h.do(t, "GET", "/api/digest/texto?por_seccion=3", nil)
-	if !strings.HasPrefix(text, "Hoy destaca") || !strings.Contains(text, "• Sale Go 1.27 con mejoras (Blog Go)") || !strings.Contains(text, "y 2 más") {
+	if !strings.HasPrefix(text, "• Hoy destaca") || !strings.Contains(text, "TITULARES") || !strings.Contains(text, "• Sale Go 1.27 con mejoras (Blog Go)") || !strings.Contains(text, "y 2 más") {
 		t.Fatalf("texto: %s", text)
 	}
 	// Ajustes, por partes: sin resumen de IA, sin el medio A, categorías y subforos.

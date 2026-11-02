@@ -18,6 +18,7 @@
   <div class="quick">
     <a class="btn primary" href="{{.Base}}/evento/nuevo"><span aria-hidden="true">+</span> Nuevo evento</a>
     <a class="btn" href="{{.Base}}/evento/nuevo?tipo=tarea"><span aria-hidden="true">+</span> Nueva tarea</a>
+    <a class="btn ghost" href="{{.Base}}/rutinas">Rutinas</a>
   </div>
 </div>
 
@@ -34,7 +35,7 @@
       {{with .Items}}
       <ul class="items">
         {{range .}}
-        <li class="item {{.Kind}}{{if .Done}} done{{end}}{{if .Overdue}} overdue{{end}}">
+        <li class="item {{.Kind}}{{if .Routine}} routine{{end}}{{if .Done}} done{{end}}{{if .Overdue}} overdue{{end}}">
           <div class="when">
             {{if eq .Kind "tarea"}}{{if or .AllDay (not .Start)}}<span class="t">Tarea</span>{{else}}<span class="t">{{hm .Start}}</span>{{end}}
             {{else if .AllDay}}<span class="t">Todo el día</span>
@@ -44,6 +45,7 @@
             <a class="title" href="{{$.Base}}/evento/{{.ID}}">{{.Title}}</a>
             <p class="meta">
               {{if .Overdue}}<span class="tag danger">Vencida</span>{{end}}
+              {{if .Routine}}<span class="tag">Rutina</span>{{end}}
               {{if .Done}}<span class="tag">Hecha</span>{{end}}
               {{if .AllDay}}{{if eq .Kind "evento"}}<span>{{.When}}</span>{{end}}{{else if .Start}}{{if ne (.Start.Format "2006-01-02") $d.Date}}<span>{{.When}}</span>{{end}}{{end}}
               {{if .Location}}<span class="loc">{{.Location}}</span>{{if .Route}}<a class="go" href="{{.Route}}" target="_blank" rel="noopener">Cómo llegar</a>{{end}}{{end}}

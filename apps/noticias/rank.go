@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -140,7 +141,7 @@ func (s store) buildDigest(ctx context.Context, user string, now time.Time) (dig
 	// section junta las noticias de unos feeds. Por cobertura: agrupa y van
 	// antes las que cuentan más medios. Por orden de la red (byRank): tal
 	// cual vienen, sin agrupar.
-	section := func(title string, urls []string, since time.Duration, limit int, byRank bool) error {
+	section := func(title, kind string, urls []string, since time.Duration, limit int) error {
 		if len(urls) == 0 || limit <= 0 {
 			return nil
 		}
@@ -148,9 +149,8 @@ func (s store) buildDigest(ctx context.Context, user string, now time.Time) (dig
 		if err != nil {
 			return err
 		}
-		sec := digestSection{Title: title}
-		if byRank {
-			sec.Kind = "red"
+		sec := digestSection{Title: title, Kind: kind}
+		if kind == "red" {
 			for _, it := range items { // ya vienen por «fecha» = posición, de más a menos
 				if len(sec.Items) >= limit {
 					break
@@ -198,13 +198,13 @@ func (s store) buildDigest(ctx context.Context, user string, now time.Time) (dig
 		enabled[k] = true
 	}
 	var errs []error
-	errs = append(errs, section("Lo más importante", spain, 30*time.Hour, p.TopCount, false))
+	errs = append(errs, section("Lo más importante", "espana", spain, 30*time.Hour, p.TopCount))
 	if p.World {
-		errs = append(errs, section("En el mundo", world, 30*time.Hour, p.WorldCount, false))
+		errs = append(errs, section("En el mundo", "mundo", world, 30*time.Hour, p.WorldCount))
 	}
 	for _, pr := range presets {
 		if pr.Group == "tema" && enabled[pr.Key] {
-			errs = append(errs, section(pr.Name, pr.Feeds(), 36*time.Hour, p.TopicCount, false))
+			errs = append(errs, section(pr.Name, "tema", pr.Feeds(), 36*time.Hour, p.TopicCount))
 		}
 	}
 	for _, t := range topics {
@@ -215,43 +215,165 @@ func (s store) buildDigest(ctx context.Context, user string, now time.Time) (dig
 		for _, f := range t.Feeds {
 			urls = append(urls, f.URL)
 		}
-		errs = append(errs, section(t.Name, urls, 48*time.Hour, p.TopicCount, false))
+		errs = append(errs, section(t.Name, "interes", urls, 48*time.Hour, p.TopicCount))
 	}
 	for _, pr := range presets {
 		if pr.Group == "redes" && enabled[pr.Key] {
-			errs = append(errs, section(pr.Name, pr.Feeds(), 6*time.Hour, p.TopicCount, true))
+			errs = append(errs, section(pr.Name, "red", pr.Feeds(), 6*time.Hour, p.TopicCount))
 		}
 	}
 	for _, r := range p.Reddit {
-		errs = append(errs, section("r/"+r, []string{redditFeedURL(r)}, 6*time.Hour, p.TopicCount, true))
+		errs = append(errs, section("r/"+r, "red", []string{redditFeedURL(r)}, 6*time.Hour, p.TopicCount))
 	}
 	return d, errors.Join(errs...)
 }
 
-// summaryPrompt es lo que se le pasa al modelo para el resumen del día.
+// Bloques del resumen del día: la marca que se le pide al modelo, el título
+// que se enseña y su icono en Telegram.
+var summaryParts = []struct{ mark, title, icon string }{
+	{"ESPAÑA", "España", "🗞"},
+	{"MUNDO", "En el mundo", "🌍"},
+	{"INTERESES", "Tus intereses", "⭐"},
+}
+
+// summaryPrompt es lo que se le pasa al modelo para el resumen del día: las
+// noticias de España, del mundo y de cada interés (y categoría elegida), para
+// que lo devuelva en bloques separados. Vacío si no hay nada.
 func summaryPrompt(d digest) string {
-	var b strings.Builder
-	b.WriteString("Escribe un resumen de 4 o 5 frases de las noticias más importantes de hoy, de más a menos relevante. Estas son, con el número de medios que las cuentan:\n\n")
-	if len(d.Sections) == 0 {
+	var spain, world, mine strings.Builder
+	for _, sec := range d.Sections {
+		switch sec.Kind {
+		case "espana":
+			for i, it := range sec.Items {
+				if i == 8 {
+					break
+				}
+				fmt.Fprintf(&spain, "- %s (%d medios). %s\n", it.Title, len(it.Others)+1, it.Summary)
+			}
+		case "mundo":
+			for i, it := range sec.Items {
+				if i == 6 {
+					break
+				}
+				fmt.Fprintf(&world, "- %s (%d medios). %s\n", it.Title, len(it.Others)+1, it.Summary)
+			}
+		case "interes", "tema":
+			if mine.Len() > 6000 || len(sec.Items) == 0 {
+				continue
+			}
+			fmt.Fprintf(&mine, "[%s]\n", sec.Title)
+			for i, it := range sec.Items {
+				if i == 3 {
+					break
+				}
+				fmt.Fprintf(&mine, "- %s. %s\n", it.Title, truncate(it.Summary, 200))
+			}
+		}
+	}
+	if spain.Len()+world.Len()+mine.Len() == 0 {
 		return ""
 	}
-	for i, it := range d.Sections[0].Items {
-		if i == 8 {
-			break
+	var b strings.Builder
+	b.WriteString("Resume las noticias de hoy en bloques separados, con este formato exacto: la marca del bloque sola en una línea " +
+		"(ESPAÑA, MUNDO, INTERESES) y debajo una línea por noticia que empiece por «• », de la más a la menos relevante. " +
+		"ESPAÑA: de 3 a 5 líneas. MUNDO: de 2 a 4. INTERESES: una línea por interés con noticias, que empiece por su nombre " +
+		"y dos puntos (por ejemplo «• Salud mental: …»). Cada línea, una o dos frases claras. Omite el bloque que no tenga " +
+		"noticias. Usa solo lo que hay aquí debajo.\n")
+	for _, part := range []struct {
+		mark string
+		text *strings.Builder
+	}{{"ESPAÑA", &spain}, {"MUNDO", &world}, {"INTERESES", &mine}} {
+		if part.text.Len() > 0 {
+			fmt.Fprintf(&b, "\n== %s ==\n%s", part.mark, part.text.String())
 		}
-		fmt.Fprintf(&b, "- %s (%d medios). %s\n", it.Title, len(it.Others)+1, it.Summary)
 	}
 	return b.String()
 }
 
-// plainDigest es el digest en texto para Telegram o el asistente.
+// parseBlocks lee la respuesta del modelo en bloques. Si no trae las marcas,
+// todo va en un bloque sin título.
+func parseBlocks(text string) []summaryBlock {
+	var out []summaryBlock
+	cur := -1
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		head := strings.ToUpper(strings.Trim(line, " =#*:-_[]()"))
+		head = strings.TrimSpace(strings.TrimLeftFunc(head, func(r rune) bool { return !unicode.IsLetter(r) }))
+		found := false
+		for _, part := range summaryParts {
+			if head == part.mark || head == strings.ToUpper(part.title) || (part.mark == "ESPAÑA" && head == "ESPANA") {
+				out = append(out, summaryBlock{Title: part.title})
+				cur, found = len(out)-1, true
+			}
+		}
+		if found {
+			continue
+		}
+		if cur < 0 {
+			out = append(out, summaryBlock{})
+			cur = 0
+		}
+		line = strings.TrimSpace(strings.TrimLeft(line, "•-*·"))
+		if line != "" {
+			out[cur].Lines = append(out[cur].Lines, line)
+		}
+	}
+	return slices.DeleteFunc(out, func(b summaryBlock) bool { return len(b.Lines) == 0 })
+}
+
+func truncate(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
+// sectionIcon distingue en Telegram de qué es cada sección.
+func sectionIcon(kind string) string {
+	switch kind {
+	case "espana":
+		return "🗞"
+	case "mundo":
+		return "🌍"
+	case "interes", "tema":
+		return "⭐"
+	case "red":
+		return "💬"
+	}
+	return "▪"
+}
+
+// plainDigest es el digest en texto para Telegram o el asistente: primero
+// el resumen por bloques y, tras una raya, los titulares de cada sección,
+// cada cosa con su título y separada por una línea en blanco.
 func plainDigest(d digest, perSection int) string {
 	var b strings.Builder
 	if d.Summary != "" {
 		b.WriteString(d.Summary + "\n\n")
 	}
+	for _, blk := range d.Blocks {
+		if blk.Title != "" {
+			icon := ""
+			for _, part := range summaryParts {
+				if part.title == blk.Title {
+					icon = part.icon + " "
+				}
+			}
+			b.WriteString(icon + strings.ToUpper(blk.Title) + "\n")
+		}
+		for _, l := range blk.Lines {
+			b.WriteString("• " + l + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if (d.Summary != "" || len(d.Blocks) > 0) && len(d.Sections) > 0 {
+		b.WriteString("━━━━━━━━━━\nTITULARES\n\n")
+	}
 	for _, sec := range d.Sections {
-		b.WriteString(sec.Title + "\n")
+		b.WriteString(sectionIcon(sec.Kind) + " " + sec.Title + "\n")
 		for i, it := range sec.Items {
 			if i == perSection {
 				break

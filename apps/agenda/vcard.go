@@ -168,6 +168,20 @@ func contactSearch(c contact) string {
 			parts = append(parts, v.Value, strings.ReplaceAll(v.Value, " ", ""))
 		}
 	}
+	// Se busca por huellas de palabras (enteras o por su comienzo): el
+	// teléfono va también en cifras seguidas y sin el prefijo del país.
+	for _, v := range c.Phones {
+		d := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, v.Value)
+		parts = append(parts, d)
+		if len(d) > 9 {
+			parts = append(parts, d[len(d)-9:])
+		}
+	}
 	return fold(strings.Join(parts, " "))
 }
 

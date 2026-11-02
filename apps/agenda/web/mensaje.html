@@ -10,7 +10,16 @@
       {{with $m.Cc}}<div><dt>Cc</dt><dd>{{.}}</dd></div>{{end}}
       {{if not $m.Date.IsZero}}<div><dt>Fecha</dt><dd>{{longDate $m.Date}}, {{clock $m.Date}} <span class="quiet">· {{ago $m.Date}}</span></dd></div>{{end}}
       {{with $m.Account}}<div><dt>Cuenta</dt><dd>{{.}}</dd></div>{{end}}
+      <div><dt>Tipo</dt><dd><span class="tag cat-{{$m.Category}}">{{catName $m.Category}}</span>{{with $m.Reason}} <span class="quiet">· {{.}}</span>{{end}}</dd></div>
     </dl>
+    {{if $m.ID}}
+    <form class="sender-rule" method="post" action="{{.Base}}/correo/{{$m.ID}}/remitente">
+      <span class="help">Este remitente, siempre:</span>
+      <button class="btn small ghost" name="como" value="importante">Importante</button>
+      <button class="btn small ghost" name="como" value="ignorar">Ignorar</button>
+      <button class="btn small ghost" name="como" value="">Automático</button>
+    </form>
+    {{end}}
     {{with $m.Attachments}}
     <div class="attach">
       <h2 class="label">{{len .}} adjunto{{if gt (len .) 1}}s{{end}}</h2>

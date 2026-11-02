@@ -8,20 +8,32 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"os"
 	"time"
 
 	"homeserver/platform/app"
+	sealpkg "homeserver/platform/seal"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
 func main() {
-	app.Run(app.App{Name: "agenda", Title: "Agenda", Migrations: migrations, Setup: setup})
+	dir := os.Getenv("DATA_DIR")
+	if dir == "" {
+		dir = "data"
+	}
+	box, err := sealpkg.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agenda: clave de datos:", err)
+		os.Exit(1)
+	}
+	app.Run(app.App{Name: "agenda", Title: "Agenda", Migrations: migrations, Steps: steps(box),
+		Setup: func(env *app.Env) error { return setup(env, box) }})
 }
 
-func setup(env *app.Env) error {
+func setup(env *app.Env, box *sealpkg.Box) error {
 	assistant := os.Getenv("ASSISTANT_URL")
 	if assistant == "" {
 		assistant = "http://127.0.0.1:8103"
@@ -30,7 +42,7 @@ func setup(env *app.Env) error {
 	if err != nil {
 		return err
 	}
-	st := store{env.DB}
+	st := store{env.DB, box}
 	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant), now: time.Now}
 	go svc.run(context.Background())
 	(&web{svc: svc, dav: newDAV(st)}).routes(env.Mux)

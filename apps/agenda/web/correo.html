@@ -28,6 +28,15 @@
   </form>
 </div>
 
+<nav class="cats" aria-label="Categorías del correo">
+  {{$q := .Query}}{{$u := .UnreadOnly}}
+  <a href="{{.Base}}/correo?q={{$q}}{{if $u}}&amp;no_leidos=1{{end}}"{{if not .Category}} aria-current="page"{{end}}>Todo</a>
+  {{range $c := cats}}
+  <a href="{{$.Base}}/correo?cat={{$c}}&amp;q={{$q}}{{if $u}}&amp;no_leidos=1{{end}}"{{if eq $.Category $c}} aria-current="page"{{end}}>{{catName $c}} <span class="n">{{index $.Counts $c}}</span></a>
+  {{end}}
+</nav>
+<p class="help">Clasificado sin IA, por las cabeceras, el remitente y el asunto. A la IA solo van, sin pedirlo, los personales e importantes.</p>
+
 <ul class="accts" aria-label="Estado de las cuentas">
   {{range .Accounts}}
   <li{{if .Error}} class="bad"{{end}}><span class="addr">{{.Address}}</span>
@@ -43,7 +52,7 @@
     <span class="from">{{if not .Seen}}<span class="vh">Sin leer. </span>{{end}}{{if .FromName}}{{.FromName}}{{else}}{{.FromAddr}}{{end}}</span>
     <span class="ago">{{ago .Date}}</span>
     <span class="subj">{{with .Subject}}{{.}}{{else}}(sin asunto){{end}}</span>
-    <span class="info">{{if .Flagged}}<span class="tag accent">★ Destacado</span>{{end}}{{with .Attachments}}<span class="tag">{{len .}} adjunto{{if gt (len .) 1}}s{{end}}</span>{{end}}<span class="acct">{{.Account}}</span></span>
+    <span class="info"><span class="tag cat-{{.Category}}"{{with .Reason}} title="{{.}}"{{end}}>{{catName .Category}}{{if and (eq .Category "importante") .Reason}} · {{.Reason}}{{end}}</span>{{if .Flagged}}<span class="tag accent">★ Destacado</span>{{end}}{{with .Attachments}}<span class="tag">{{len .}} adjunto{{if gt (len .) 1}}s{{end}}</span>{{end}}<span class="acct">{{.Account}}</span></span>
   </a></li>
   {{end}}
 </ul>

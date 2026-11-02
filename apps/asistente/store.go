@@ -8,9 +8,20 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"homeserver/platform/seal"
 )
 
-type store struct{ db *pgxpool.Pool }
+// store guarda conversaciones y notas cifradas (platform/seal); de las notas
+// quedan además huellas de sus palabras para buscar.
+type store struct {
+	db  *pgxpool.Pool
+	box *seal.Box
+}
+
+// keepTurns es lo que se conserva de las conversaciones: el asistente solo
+// usa los últimos turnos y no hace falta guardar más.
+const keepTurns = 30 * 24 * time.Hour
 
 type turn struct {
 	Role    string
@@ -20,14 +31,23 @@ type turn struct {
 // history devuelve los últimos turnos desde el último /nuevo, del más antiguo
 // al más reciente.
 func (s store) history(ctx context.Context, chat int64, limit int) ([]turn, error) {
-	rows, err := s.db.Query(ctx, `SELECT role, content FROM (
-			SELECT m.id, m.role, m.content FROM messages m LEFT JOIN chats c ON c.chat_id = m.chat_id
+	rows, err := s.db.Query(ctx, `SELECT role, sealed FROM (
+			SELECT m.id, m.role, m.sealed FROM messages m LEFT JOIN chats c ON c.chat_id = m.chat_id
 			WHERE m.chat_id = $1 AND m.created_at > coalesce(c.reset_at, '-infinity')
 			ORDER BY m.id DESC LIMIT $2) t ORDER BY id`, chat, limit)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[turn])
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (turn, error) {
+		var t turn
+		var sealed []byte
+		if err := r.Scan(&t.Role, &sealed); err != nil {
+			return t, err
+		}
+		var err error
+		t.Content, err = s.box.OpenString(sealTurn, sealed)
+		return t, err
+	})
 }
 
 func (s store) addTurns(ctx context.Context, chat int64, turns ...turn) error {
@@ -37,9 +57,15 @@ func (s store) addTurns(ctx context.Context, chat int64, turns ...turn) error {
 			if len(c) > 20000 {
 				c = c[:20000]
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3)`, chat, t.Role, c); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO messages (chat_id, role, sealed) VALUES ($1, $2, $3)`, chat, t.Role, s.box.SealString(sealTurn, c)); err != nil {
 				return err
 			}
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM messages WHERE created_at < $1`, time.Now().Add(-keepTurns)); err != nil {
+			return err
+		}
+		if err := s.prunePseudonyms(ctx, tx); err != nil {
+			return err
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO chats (chat_id, reset_at, last_at) VALUES ($1, '-infinity', now())
 			ON CONFLICT (chat_id) DO UPDATE SET last_at = now()`, chat)
@@ -71,19 +97,33 @@ type note struct {
 }
 
 func (s store) addNote(ctx context.Context, text string) (note, error) {
-	var n note
-	err := s.db.QueryRow(ctx, `INSERT INTO notes (text) VALUES ($1) RETURNING id, text, created_at`, text).Scan(&n.ID, &n.Text, &n.CreatedAt)
+	if l := len([]rune(text)); l < 1 || l > 4000 {
+		return note{}, errors.New("la nota debe tener entre 1 y 4000 caracteres")
+	}
+	n := note{Text: text}
+	err := s.db.QueryRow(ctx, `INSERT INTO notes (sealed, tokens) VALUES ($1, $2) RETURNING id, created_at`,
+		s.box.SealString(sealNote, text), s.box.Index(nil, "t", text)).Scan(&n.ID, &n.CreatedAt)
 	return n, err
 }
 
-// notes busca en las notas (sin texto: las más recientes).
+// notes busca en las notas por palabras, enteras o por su comienzo (sin
+// texto: las más recientes).
 func (s store) notes(ctx context.Context, q string, limit int) ([]note, error) {
-	rows, err := s.db.Query(ctx, `SELECT id, text, created_at FROM notes
-		WHERE $1 = '' OR text ILIKE '%' || $1 || '%' ORDER BY id DESC LIMIT $2`, q, limit)
+	rows, err := s.db.Query(ctx, `SELECT id, sealed, created_at FROM notes
+		WHERE tokens @> $1 ORDER BY id DESC LIMIT $2`, s.box.Query("t", q), limit)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[note])
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (note, error) {
+		var n note
+		var sealed []byte
+		if err := r.Scan(&n.ID, &sealed, &n.CreatedAt); err != nil {
+			return n, err
+		}
+		var err error
+		n.Text, err = s.box.OpenString(sealNote, sealed)
+		return n, err
+	})
 }
 
 func (s store) deleteNote(ctx context.Context, id int64) error {

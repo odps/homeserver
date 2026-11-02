@@ -36,6 +36,8 @@ type App struct {
 	Title string
 	// Migrations contiene los ficheros migrations/NNN_*.sql.
 	Migrations embed.FS
+	// Steps son migraciones en Go que acompañan a los ficheros (db.Step).
+	Steps map[int]db.Step
 	// Setup registra las rutas HTTP y las tools MCP.
 	Setup func(*Env) error
 }
@@ -75,7 +77,7 @@ func run(a App, log *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
-	if err := db.Migrate(ctx, pool, a.Name, a.Migrations, "migrations"); err != nil {
+	if err := db.MigrateSteps(ctx, pool, a.Name, a.Migrations, "migrations", a.Steps); err != nil {
 		return err
 	}
 

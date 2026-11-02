@@ -52,8 +52,14 @@ func Schema(t *testing.T) (string, *pgxpool.Pool) {
 // Migrated es Schema más las migraciones de la app ya aplicadas.
 func Migrated(t *testing.T, files fs.FS) *pgxpool.Pool {
 	t.Helper()
+	return MigratedSteps(t, files, nil)
+}
+
+// MigratedSteps es Migrated con los pasos en Go de la app.
+func MigratedSteps(t *testing.T, files fs.FS, steps map[int]db.Step) *pgxpool.Pool {
+	t.Helper()
 	name, pool := Schema(t)
-	if err := db.Migrate(context.Background(), pool, name, files, "migrations"); err != nil {
+	if err := db.MigrateSteps(context.Background(), pool, name, files, "migrations", steps); err != nil {
 		t.Fatal(err)
 	}
 	return pool

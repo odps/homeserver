@@ -191,7 +191,7 @@ func (w *web) renderSettings(rw http.ResponseWriter, r *http.Request, who app.Id
 	ctx := r.Context()
 	p, err1 := w.svc.store.prefs(ctx, who.User)
 	topics, err2 := w.svc.store.topics(ctx, who.User)
-	states, err3 := w.svc.store.feedStates(ctx)
+	states, err3 := w.svc.store.feedStates(ctx, knownFeeds(topics))
 	data := pageData{Name: who.Name, Tab: "ajustes", Prefs: p, Topics: topics, Feeds: states, Flash: flash(r), Error: errMsg}
 	if err := errors.Join(err1, err2, err3); err != nil && errMsg == "" {
 		data.Error = err.Error()
@@ -239,21 +239,12 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 				p.Presets = append(p.Presets, pr.Key)
 			}
 		}
-		p.Reddit = []string{}
-		var bad []string
-		for _, f := range strings.FieldsFunc(r.FormValue("reddit"), func(c rune) bool { return c == ',' || unicode.IsSpace(c) }) {
-			if sub := cleanSubreddit(f); sub != "" {
-				if !slices.Contains(p.Reddit, sub) && len(p.Reddit) < 10 {
-					p.Reddit = append(p.Reddit, sub)
-				}
-			} else {
-				bad = append(bad, f)
-			}
-		}
+		subs, bad := subreddits(strings.FieldsFunc(r.FormValue("reddit"), func(c rune) bool { return c == ',' || unicode.IsSpace(c) }))
 		if len(bad) > 0 {
 			w.renderSettings(rw, r, who, "Estos subforos no tienen un nombre válido: "+strings.Join(bad, ", "))
 			return
 		}
+		p.Reddit = subs[:min(len(subs), maxSubreddits)]
 		p.World = r.FormValue("world") != ""
 	case "medios":
 		p.Disabled = []string{}
@@ -263,16 +254,20 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 			}
 		}
 	default:
-		at := strings.TrimSpace(r.FormValue("digest_at"))
-		top, err1 := strconv.Atoi(r.FormValue("top_count"))
-		world, err2 := strconv.Atoi(r.FormValue("world_count"))
-		per, err3 := strconv.Atoi(r.FormValue("topic_count"))
-		t, err := time.Parse("15:04", at)
-		if err != nil || errors.Join(err1, err2, err3) != nil || top < 3 || top > 30 || world < 3 || world > 30 || per < 1 || per > 15 {
-			w.renderSettings(rw, r, who, "Revisa los ajustes: la hora como 07:00, de 3 a 30 noticias generales y del mundo, y de 1 a 15 por sección.")
+		var err1, err2, err3 error
+		p.DigestAt = r.FormValue("digest_at")
+		p.TopCount, err1 = strconv.Atoi(r.FormValue("top_count"))
+		p.WorldCount, err2 = strconv.Atoi(r.FormValue("world_count"))
+		p.TopicCount, err3 = strconv.Atoi(r.FormValue("topic_count"))
+		p.AISummary = r.FormValue("ai_summary") != ""
+		if errors.Join(err1, err2, err3) != nil {
+			w.renderSettings(rw, r, who, errPrefs.Error())
 			return
 		}
-		p.DigestAt, p.TopCount, p.WorldCount, p.TopicCount, p.AISummary = t.Format("15:04"), top, world, per, r.FormValue("ai_summary") != ""
+	}
+	if err := p.check(); err != nil {
+		w.renderSettings(rw, r, who, err.Error())
+		return
 	}
 	if err := w.svc.store.savePrefs(r.Context(), who.User, p); err != nil {
 		w.renderSettings(rw, r, who, err.Error())
@@ -281,28 +276,11 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 	back(rw, r, "/ajustes", "ajustes")
 }
 
-func topicInput(r *http.Request) (string, string, error) {
-	name := cleanText(r.FormValue("name"), 60)
-	query := cleanText(r.FormValue("query"), 120)
-	if name == "" {
-		return "", "", errors.New("ponle un nombre al interés")
-	}
-	return name, query, nil
-}
-
 func (w *web) addTopic(rw http.ResponseWriter, r *http.Request, who app.Identity) {
-	name, query, err := topicInput(r)
-	if err == nil {
-		err = w.svc.store.addTopic(r.Context(), who.User, name, query)
-		if err != nil && strings.Contains(err.Error(), "duplicate") {
-			err = errors.New("ya tienes un interés con ese nombre")
-		}
-	}
-	if err != nil {
+	if _, err := w.svc.addTopic(r.Context(), who.User, r.FormValue("name"), r.FormValue("query")); err != nil {
 		w.renderSettings(rw, r, who, err.Error())
 		return
 	}
-	go w.svc.collect(context.WithoutCancel(r.Context())) // para tener ya sus noticias
 	back(rw, r, "/ajustes", "tema")
 }
 
@@ -313,41 +291,16 @@ func (w *web) editTopic(rw http.ResponseWriter, r *http.Request, who app.Identit
 		back(rw, r, "/ajustes", "borrado")
 		return
 	}
-	name, query, err := topicInput(r)
-	if err == nil {
-		err = w.svc.store.updateTopic(r.Context(), who.User, id, name, query)
-	}
-	if err != nil {
+	if err := w.svc.updateTopic(r.Context(), who.User, id, r.FormValue("name"), r.FormValue("query")); err != nil {
 		w.renderSettings(rw, r, who, err.Error())
 		return
 	}
-	go w.svc.collect(context.WithoutCancel(r.Context()))
 	back(rw, r, "/ajustes", "tema")
 }
 
 func (w *web) addFeed(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	u, err := validFeedURL(r.FormValue("url"), w.svc.fetch.allowHTTP)
-	if err == nil {
-		// Se comprueba antes de guardarlo: mejor saber ya que no es un feed.
-		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
-		var f parsedFeed
-		f, err = w.svc.fetch.fetch(ctx, u)
-		cancel()
-		if err != nil {
-			err = fmt.Errorf("no se ha podido leer el feed: %v", err)
-		} else {
-			w.svc.store.feedChecked(r.Context(), u, f.Title, nil)
-			for i := range f.Items {
-				if f.Items[i].Source == "" {
-					f.Items[i].Source = f.Title
-				}
-			}
-			w.svc.store.saveItems(r.Context(), u, f.Items)
-			err = w.svc.store.addOwnFeed(r.Context(), who.User, id, u)
-		}
-	}
-	if err != nil {
+	if _, err := w.svc.addFeed(r.Context(), who.User, id, r.FormValue("url")); err != nil {
 		w.renderSettings(rw, r, who, err.Error())
 		return
 	}

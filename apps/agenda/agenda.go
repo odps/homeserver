@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-vcard"
+
+	sealpkg "homeserver/platform/seal"
 )
 
 // service junta la agenda, los contactos y el correo para la web, el
@@ -41,6 +44,7 @@ type entry struct {
 	RRule    string     `json:"-"`
 	Alarms   []int      `json:"avisos_min,omitempty"`
 	Calendar string     `json:"calendario"`
+	Routine  bool       `json:"rutina,omitempty"` // del calendario de rutinas
 	Done     bool       `json:"hecha,omitempty"`
 	Overdue  bool       `json:"vencida,omitempty"`
 }
@@ -91,7 +95,7 @@ func (s *service) entryFrom(o object, cal *ical.Calendar, occ *occurrence, home 
 		c = occ.Comp
 	}
 	e := entry{ID: o.ID, Kind: "evento", Title: text(c, ical.PropSummary), Location: text(c, ical.PropLocation),
-		Notes: text(c, ical.PropDescription), Calendar: o.Calendar, Alarms: alarmMinutes(c)}
+		Notes: text(c, ical.PropDescription), Calendar: o.Calendar, Alarms: alarmMinutes(c), Routine: o.Calendar == routinesSlug}
 	if m.Name == ical.CompToDo {
 		e.Kind = "tarea"
 		d, _ := derive(cal)
@@ -204,11 +208,10 @@ func (s *service) entry(ctx context.Context, owner string, id int64) (entry, err
 }
 
 func (s *service) searchEntries(ctx context.Context, owner, q string) ([]entry, error) {
-	w := words(q)
-	if len(w) == 0 {
+	if len(sealpkg.Words(q)) == 0 {
 		return nil, errors.New("faltan las palabras a buscar")
 	}
-	objs, err := s.store.searchObjects(ctx, owner, w, 30)
+	objs, err := s.store.searchObjects(ctx, owner, q, 30)
 	if err != nil {
 		return nil, err
 	}
@@ -461,8 +464,13 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		return "", err
 	}
 	var evs []entry
+	var routine []string
 	for _, e := range events {
-		if e.Kind == "evento" {
+		switch {
+		case e.Kind != "evento":
+		case e.Routine && !e.AllDay && e.Start != nil && e.End != nil:
+			routine = append(routine, e.Title+" "+e.Start.Format("15:04")+"–"+e.End.Format("15:04"))
+		default:
 			evs = append(evs, e)
 		}
 	}
@@ -483,6 +491,9 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			}
 			b.WriteString(line + "\n")
 		}
+	}
+	if len(routine) > 0 {
+		b.WriteString("Rutina: " + strings.Join(routine, " · ") + "\n")
 	}
 	tasks, err := s.tasks(ctx, owner)
 	if err != nil {
@@ -517,17 +528,28 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			}
 		}
 	}
-	mails, err := s.store.searchMessages(ctx, owner, mailQuery{UnreadOnly: true, Since: now.Add(-24 * time.Hour), Limit: 50})
-	if err == nil && len(mails) > 0 {
-		fmt.Fprintf(&b, "\nCorreo sin leer de las últimas 24 h: %d\n", len(mails))
+	// Solo lo personal y lo importante se lista y pasa por la IA; de lo
+	// demás (notificaciones y comerciales), el número.
+	unread := mailQuery{UnreadOnly: true, Since: now.Add(-24 * time.Hour), Limit: 50, Categories: []string{catPersonal, catImportant}}
+	mails, err := s.store.searchMessages(ctx, owner, unread)
+	counts, _ := s.store.countMessages(ctx, owner, unread)
+	if err == nil && (len(mails) > 0 || counts[catNotice]+counts[catBulk] > 0) {
+		fmt.Fprintf(&b, "\nCorreo sin leer de las últimas 24 h: %d\n", len(mails)+counts[catNotice]+counts[catBulk])
 		for i, m := range mails {
 			if i == 8 {
 				fmt.Fprintf(&b, "• y %d más\n", len(mails)-8)
 				break
 			}
-			b.WriteString("• " + senderName(m) + ": " + orNone(m.Subject) + "\n")
+			line := "• " + senderName(m) + ": " + orNone(m.Subject)
+			if m.Category == catImportant {
+				line += " [" + m.Reason + "]"
+			}
+			b.WriteString(line + "\n")
 		}
-		if withAI && s.summarizer != nil {
+		if n, c := counts[catNotice], counts[catBulk]; n+c > 0 {
+			fmt.Fprintf(&b, "• Además: %s y %s (no pasan por la IA)\n", plural(n, "notificación", "notificaciones"), plural(c, "comercial", "comerciales"))
+		}
+		if withAI && s.summarizer != nil && len(mails) > 0 {
 			sctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 			text, err := s.summarizer(sctx, mailPrompt(mails))
 			cancel()
@@ -552,6 +574,51 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 	return strings.TrimSpace(b.String()), nil
 }
 
+// setMailRules guarda los remitentes importantes y a ignorar y reclasifica.
+func (s *service) setMailRules(ctx context.Context, owner string, important, ignore []string) error {
+	for _, l := range [][]string{important, ignore} {
+		for _, e := range l {
+			if strings.ContainsAny(e, " <>\"") || !strings.Contains(e, ".") {
+				return fmt.Errorf("«%s» no es una dirección ni un dominio (p. ej. ana@empresa.es o empresa.es)", e)
+			}
+		}
+	}
+	p, err := s.store.prefs(ctx, owner)
+	if err != nil {
+		return err
+	}
+	p.MailImportant, p.MailIgnore = important, ignore
+	if err := s.store.savePrefs(ctx, owner, p); err != nil {
+		return err
+	}
+	return s.store.reclassify(ctx, owner)
+}
+
+// markSender pone una dirección en una de las listas ("importante",
+// "ignorar") o la quita de las dos ("").
+func (s *service) markSender(ctx context.Context, owner, addr, as string) error {
+	addr = strings.ToLower(strings.TrimSpace(addr))
+	if addr == "" {
+		return errors.New("el correo no tiene remitente")
+	}
+	p, err := s.store.prefs(ctx, owner)
+	if err != nil {
+		return err
+	}
+	drop := func(l []string) []string { return slices.DeleteFunc(l, func(e string) bool { return e == addr }) }
+	imp, ign := drop(p.MailImportant), drop(p.MailIgnore)
+	switch as {
+	case "importante":
+		imp = append(imp, addr)
+	case "ignorar":
+		ign = append(ign, addr)
+	case "":
+	default:
+		return fmt.Errorf("«%s»: usa importante, ignorar o nada", as)
+	}
+	return s.setMailRules(ctx, owner, imp, ign)
+}
+
 func senderName(m message) string {
 	if m.FromName != "" {
 		return m.FromName
@@ -570,8 +637,9 @@ func mailPrompt(mails []message) string {
 	var b strings.Builder
 	b.WriteString("Estos son los correos sin leer de las últimas 24 horas de una persona. Escribe en español de España, " +
 		"en texto plano sin Markdown, entre 3 y 6 líneas que empiecen por «• » con lo importante: qué requiere respuesta o " +
-		"una acción, y cualquier cita, fecha o plazo que convenga apuntar en la agenda. Ignora publicidad y boletines " +
-		"salvo que sean relevantes. No inventes nada.\n\n")
+		"una acción, y cualquier cita, fecha o plazo que convenga apuntar en la agenda. Los de tipo Importante vienen de " +
+		"servicios (seguridad, condiciones, pagos, citas, trámites): di en una línea qué cambia o qué hay que hacer. " +
+		"No inventes nada.\n\n")
 	for i, m := range mails {
 		// El modelo gratuito admite pocos tokens por minuto: unos 16 000
 		// caracteres de correo como mucho.
@@ -579,8 +647,12 @@ func mailPrompt(mails []message) string {
 			fmt.Fprintf(&b, "(Y %d correos más sin incluir.)\n", len(mails)-i)
 			break
 		}
-		fmt.Fprintf(&b, "--- Correo %d\nDe: %s <%s>\nAsunto: %s\nFecha: %s\n\n%s\n\n", i+1, m.FromName, m.FromAddr,
-			m.Subject, m.Date.In(madrid).Format("02/01 15:04"), truncate(m.Body, 2000))
+		kind := categoryName(m.Category)
+		if m.Reason != "" {
+			kind += " (" + m.Reason + ")"
+		}
+		fmt.Fprintf(&b, "--- Correo %d\nDe: %s <%s>\nAsunto: %s\nFecha: %s\nTipo: %s\n\n%s\n\n", i+1, m.FromName, m.FromAddr,
+			m.Subject, m.Date.In(madrid).Format("02/01 15:04"), kind, truncate(m.Body, 2000))
 	}
 	return b.String()
 }

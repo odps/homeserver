@@ -12,33 +12,38 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"homeserver/platform/app"
+	"homeserver/platform/seal"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
 func main() {
-	app.Run(app.App{Name: "asistente", Title: "Asistente", Migrations: migrations, Setup: setup})
-}
-
-func setup(env *app.Env) error {
 	dir := os.Getenv("DATA_DIR")
 	if dir == "" {
 		dir = "data"
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+	box, err := seal.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "asistente: clave de datos:", err)
+		os.Exit(1)
 	}
+	app.Run(app.App{Name: "asistente", Title: "Asistente", Migrations: migrations, Steps: steps(box),
+		Setup: func(env *app.Env) error { return setup(env, dir, box) }})
+}
+
+func setup(env *app.Env, dir string, box *seal.Box) error {
 	gateway := os.Getenv("GATEWAY_URL")
 	if gateway == "" {
 		gateway = "http://127.0.0.1:8100"
 	}
-	a := newAgent(store{env.DB}, env.Log, filepath.Join(dir, "claves.env"), filepath.Join(dir, "estado.json"), gateway)
+	a := newAgent(store{env.DB, box}, env.Log, filepath.Join(dir, "claves.env"), filepath.Join(dir, "estado.json"), gateway)
 	go a.run(context.Background())
 	env.Mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

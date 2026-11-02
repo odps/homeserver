@@ -18,12 +18,22 @@
 </nav>
 {{end}}
 
-{{with $d.Summary}}
+{{if $d.Blocks}}
+<section class="brief" aria-labelledby="brief-h">
+  <h2 id="brief-h" class="label">En resumen</h2>
+  {{range $d.Blocks}}
+  <div class="brief-block">
+    {{with .Title}}<h3>{{.}}</h3>{{end}}
+    <ul>{{range .Lines}}<li>{{.}}</li>{{end}}</ul>
+  </div>
+  {{end}}
+</section>
+{{else}}{{with $d.Summary}}
 <section class="brief" aria-labelledby="brief-h">
   <h2 id="brief-h" class="label">En resumen</h2>
   <p>{{.}}</p>
 </section>
-{{end}}
+{{end}}{{end}}
 
 {{range $i, $s := $d.Sections}}
 <section class="sec{{if eq $s.Kind "red"}} sec-red{{end}}{{if eq $i 0}} sec-top{{end}}" id="s{{$i}}" aria-labelledby="h{{$i}}">

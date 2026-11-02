@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ var webFS embed.FS
 
 var pages = template.Must(template.New("").Funcs(template.FuncMap{
 	"ago":      ago,
+	"catName":  categoryName,
+	"cats":     func() []string { return allCategories },
 	"hm":       func(t *time.Time) string { return t.In(madrid).Format("15:04") },
 	"clock":    func(t time.Time) string { return t.In(madrid).Format("15:04") },
 	"day":      func(t time.Time) string { return dayLabel(t) },
@@ -69,6 +72,8 @@ type pageData struct {
 	// Correo
 	Mails      []message
 	Mail       message
+	Category   string         // filtro de categoría ("" todas)
+	Counts     map[string]int // por categoría, con los filtros de la página
 	UnreadOnly bool
 	Unread     int // sin leer en la última semana (agenda)
 
@@ -151,6 +156,8 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /evento/{id}", w.user(w.saveEntry))
 	mux.HandleFunc("POST /evento/{id}/borrar", w.user(w.deleteEntry))
 	mux.HandleFunc("GET /tareas", w.user(w.tasksPage))
+	mux.HandleFunc("GET /rutinas", w.user(w.routinesPage))
+	mux.HandleFunc("POST /rutinas", w.user(w.createRoutine))
 	mux.HandleFunc("POST /tareas/{id}/hecha", w.user(w.toggleTask))
 	mux.HandleFunc("GET /contactos", w.user(w.contactsPage))
 	mux.HandleFunc("GET /contactos/nuevo", w.user(w.newContact))
@@ -161,6 +168,8 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /correo", w.user(w.mailPage))
 	mux.HandleFunc("GET /correo/{id}", w.user(w.mailMessage))
 	mux.HandleFunc("POST /correo/{id}/borrador", w.user(w.mailDraft))
+	mux.HandleFunc("POST /correo/{id}/remitente", w.user(w.mailSender))
+	mux.HandleFunc("POST /ajustes/correo", w.user(w.saveMailRules))
 	mux.HandleFunc("POST /correo/sincronizar", w.user(w.mailSync))
 	mux.HandleFunc("GET /ajustes", w.user(w.settings))
 	mux.HandleFunc("POST /ajustes", w.user(w.savePrefs))
@@ -204,7 +213,7 @@ var flashes = map[string]string{
 	"evento": "Evento guardado.", "tarea": "Tarea guardada.", "borrado": "Borrado.", "contacto": "Contacto guardado.",
 	"ajustes": "Ajustes guardados.", "cuenta": "Cuenta conectada: el correo llegará en unos minutos.",
 	"borrador": "Borrador guardado en tu correo. No se ha enviado.", "sincronizado": "Correo al día.",
-	"hecha": "Tarea marcada.",
+	"hecha": "Tarea marcada.", "rutina": "Rutina creada.", "clasificacion": "Clasificación guardada: el correo ya se ha reordenado.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }
@@ -469,6 +478,41 @@ func (w *web) tasksPage(rw http.ResponseWriter, r *http.Request, who app.Identit
 	w.render(rw, r, "tareas.html", data)
 }
 
+func (w *web) routinesPage(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	w.routinesWith(rw, r, who, "")
+}
+
+func (w *web) routinesWith(rw http.ResponseWriter, r *http.Request, who app.Identity, errMsg string) {
+	list, err := w.svc.routines(r.Context(), who.User)
+	data := pageData{Name: who.Name, Tab: "agenda", Tasks: list, Flash: flash(r), Error: errMsg,
+		From: time.Now().In(madrid).Format("2006-01-02")}
+	if err != nil && errMsg == "" {
+		data.Error = err.Error()
+	}
+	w.render(rw, r, "rutinas.html", data)
+}
+
+func (w *web) createRoutine(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	r.ParseForm()
+	in := routineInput{Title: strings.TrimSpace(r.FormValue("titulo")), Days: r.Form["dias"], Start: r.FormValue("inicio"),
+		End: r.FormValue("fin"), Location: strings.TrimSpace(r.FormValue("lugar"))}
+	if t, err := time.ParseInLocation("2006-01-02", r.FormValue("desde"), madrid); err == nil {
+		in.From = t
+	}
+	if t, err := time.ParseInLocation("2006-01-02", r.FormValue("hasta"), madrid); err == nil {
+		in.Until = &t
+	}
+	if in.Title == "" {
+		w.routinesWith(rw, r, who, "Falta qué es.")
+		return
+	}
+	if _, err := w.svc.createRoutine(r.Context(), who.User, in); err != nil {
+		w.routinesWith(rw, r, who, err.Error())
+		return
+	}
+	back(rw, r, "/rutinas", "rutina")
+}
+
 func (w *web) toggleTask(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 	done := r.FormValue("hecha") != "0"
 	if _, err := w.svc.update(r.Context(), who.User, pathID(r), eventInput{Done: &done}); err != nil && !notFound(err) {
@@ -570,9 +614,19 @@ func (w *web) deleteContact(rw http.ResponseWriter, r *http.Request, who app.Ide
 func (w *web) mailPage(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	unread := r.URL.Query().Get("no_leidos") != ""
-	list, err := w.svc.store.searchMessages(r.Context(), who.User, mailQuery{Text: q, UnreadOnly: unread, Limit: 100})
+	cat := r.URL.Query().Get("cat")
+	if !slices.Contains(allCategories, cat) {
+		cat = ""
+	}
+	mq := mailQuery{Text: q, UnreadOnly: unread, Limit: 100}
+	counts, _ := w.svc.store.countMessages(r.Context(), who.User, mq)
+	if cat != "" {
+		mq.Categories = []string{cat}
+	}
+	list, err := w.svc.store.searchMessages(r.Context(), who.User, mq)
 	accts, _ := w.accounts(r.Context(), who.User)
-	data := pageData{Name: who.Name, Tab: "correo", Query: q, UnreadOnly: unread, Mails: list, Accounts: accts, Flash: flash(r)}
+	data := pageData{Name: who.Name, Tab: "correo", Query: q, UnreadOnly: unread, Category: cat, Counts: counts,
+		Mails: list, Accounts: accts, Flash: flash(r)}
 	if err != nil {
 		data.Error = err.Error()
 	}
@@ -590,6 +644,42 @@ func (w *web) mailMessage(rw http.ResponseWriter, r *http.Request, who app.Ident
 		data.Error = err.Error()
 	}
 	w.render(rw, r, "mensaje.html", data)
+}
+
+// mailSender fija el remitente de un correo como importante o a ignorar (o lo
+// quita de ambas listas).
+func (w *web) mailSender(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	m, err := w.svc.store.messageByID(r.Context(), who.User, pathID(r))
+	if notFound(err) {
+		http.NotFound(rw, r)
+		return
+	}
+	if err == nil {
+		err = w.svc.markSender(r.Context(), who.User, m.FromAddr, r.FormValue("como"))
+	}
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	back(rw, r, fmt.Sprintf("/correo/%d", m.ID), "clasificacion")
+}
+
+func (w *web) saveMailRules(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	if err := w.svc.setMailRules(r.Context(), who.User, senderList(r.FormValue("importantes")), senderList(r.FormValue("ignorar"))); err != nil {
+		w.settingsPage(rw, r, who, err.Error())
+		return
+	}
+	back(rw, r, "/ajustes#clasificacion", "clasificacion")
+}
+
+func senderList(s string) []string {
+	var out []string
+	for _, l := range strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == ',' || r == ';' }) {
+		if l = strings.ToLower(strings.TrimSpace(l)); l != "" && !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 func (w *web) mailDraft(rw http.ResponseWriter, r *http.Request, who app.Identity) {

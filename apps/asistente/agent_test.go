@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"homeserver/platform/dbtest"
+	"homeserver/platform/seal"
 )
 
 // fakeTelegram guarda lo que el bot envía.
@@ -60,6 +62,10 @@ func (f *fakeTelegram) last() string {
 
 // fakeLLM imita la API de chat: pide una herramienta según la pregunta y, con
 // su resultado, contesta.
+// llmSaw es todo lo que ha recibido el modelo falso (para comprobar que no
+// le llegan datos personales).
+var llmSaw strings.Builder
+
 func fakeLLM(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer gsk_prueba" {
@@ -75,7 +81,9 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			Messages []chatMessage `json:"messages"`
 			Tools    []toolDef     `json:"tools"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		raw, _ := io.ReadAll(r.Body)
+		llmSaw.Write(raw)
+		json.Unmarshal(raw, &req)
 		last := req.Messages[len(req.Messages)-1]
 		reply := map[string]any{"role": "assistant"}
 		call := func(name, args string) {
@@ -98,6 +106,11 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			call("libros_leyendo", "{}")
 		case strings.Contains(text, "apunta"):
 			call("notas_guardar", `{"texto":"comprar pan"}`)
+		case strings.Contains(text, "guarda el número"):
+			b, _ := json.Marshal(map[string]string{"texto": text})
+			call("notas_guardar", string(b))
+		case strings.Contains(text, "Lucía"):
+			call("contactos_buscar", `{"texto":"Lucía"}`)
 		default:
 			reply["content"] = "**Hola**, ¿qué tal? Recuerdo " + itoa(len(req.Messages)) + " mensajes."
 		}
@@ -117,6 +130,16 @@ func fakeGateway(t *testing.T) *httptest.Server {
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{"libros": []string{"Crimen y castigo"}}, nil
 		})
+	mcp.AddTool(server, &mcp.Tool{Name: "contactos_buscar", Description: "Contactos"},
+		func(ctx context.Context, req *mcp.CallToolRequest, _ struct {
+			Texto string `json:"texto"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"contactos": []map[string]any{{"nombre": "Lucía Pérez",
+				"telefonos":   []map[string]string{{"etiqueta": "móvil", "valor": "+34 600 111 222"}},
+				"correos":     []map[string]string{{"valor": "lucia@example.com"}},
+				"direcciones": []map[string]string{{"valor": "Calle Pez 3, 28013 Madrid", "mapa": "https://www.google.com/maps/search/?api=1&query=Calle+Pez+3"}},
+				"notas":       "Su IBAN es ES91 2100 0418 4502 0005 1332"}}}, nil
+		})
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer hs_token" {
@@ -135,11 +158,12 @@ func fakeGateway(t *testing.T) *httptest.Server {
 
 func newTestAgent(t *testing.T) (*agent, *fakeTelegram, config) {
 	t.Helper()
-	pool := dbtest.Migrated(t, migrations)
+	box, _ := seal.Load("")
+	pool := dbtest.MigratedSteps(t, migrations, steps(box))
 	dir := t.TempDir()
 	tg := &fakeTelegram{}
 	tgSrv, llmSrv, gw := tg.server(t), fakeLLM(t), fakeGateway(t)
-	a := newAgent(store{pool}, slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(dir, "claves.env"), filepath.Join(dir, "estado.json"), gw.URL)
+	a := newAgent(store{pool, box}, slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(dir, "claves.env"), filepath.Join(dir, "estado.json"), gw.URL)
 	a.telegramAt = tgSrv.URL
 	c := config{TelegramToken: "TOKEN", TelegramUser: 42, Provider: "groq", BaseURL: llmSrv.URL, APIKey: "gsk_prueba",
 		AppsToken: "hs_token", AppsUser: "ana", Apps: []string{"libros", "hola"}, DailyLimit: 50}
@@ -210,9 +234,37 @@ func TestAgentConversation(t *testing.T) {
 	if tgf.last() != "Corregido." {
 		t.Fatalf("llamada rechazada: %q", tgf.last())
 	}
+	// Datos personales: el modelo solo ve etiquetas; la persona, los datos.
+	llmSaw.Reset()
+	a.handle(ctx, tg, c, msg(42, "¿cuál es el teléfono de Lucía?"))
+	got := tgf.last()
+	for _, want := range []string{"+34 600 111 222", "Calle Pez 3, 28013 Madrid", "lucia@example.com", "ES91 2100 0418 4502 0005 1332", "https://www.google.com/maps/search"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("a la persona le falta %q: %s", want, got)
+		}
+	}
+	a.handle(ctx, tg, c, msg(42, "guarda el número 612 345 678 del fontanero"))
+	if ns, _ := a.store.notes(ctx, "fontanero", 5); len(ns) != 1 || !strings.Contains(ns[0].Text, "612 345 678") {
+		t.Fatalf("la nota debe guardar el dato real: %+v", ns)
+	}
+	if !strings.Contains(tgf.last(), "612 345 678") {
+		t.Errorf("respuesta de la nota: %q", tgf.last())
+	}
+	saw := llmSaw.String()
+	for _, leak := range []string{"600 111", "Calle Pez", "lucia@", "ES91", "612 345", "google.com/maps"} {
+		if strings.Contains(saw, leak) {
+			t.Errorf("al modelo le ha llegado %q", leak)
+		}
+	}
+	if !strings.Contains(saw, "TEL_1") || !strings.Contains(saw, "DIR_1:Madrid") {
+		t.Errorf("al modelo no le han llegado las etiquetas: %s", saw)
+	}
+	if h, _ := a.store.history(ctx, 42, 20); strings.Contains(fmt.Sprint(h), "612 345") {
+		t.Errorf("el historial guarda el dato real: %v", h)
+	}
 	// Uso: 2 peticiones por pregunta con herramienta, 1 por las demás; la rechazada
 	// también cuenta como petición (sin tokens).
-	if u, _ := a.store.usageToday(ctx); u.Requests != 8 || u.PromptTokens != 700 {
+	if u, _ := a.store.usageToday(ctx); u.Requests != 12 || u.PromptTokens != 1100 {
 		t.Fatalf("uso: %+v", u)
 	}
 	// Límite diario.

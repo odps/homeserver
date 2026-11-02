@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -289,6 +290,108 @@ func addTools(server *mcp.Server, a *api, ss seriesStore) {
 			return nil, summarize(b, false), err
 		})
 	addSeriesTools(server, ss)
+	addSettingsTools(server, s)
+}
+
+// settingsView son los ajustes de la persona: los del lector (iguales en
+// todos sus dispositivos) y las preferencias de la app.
+type settingsView struct {
+	TemaLector     string  `json:"tema_lector"`
+	TamanoLetra    int     `json:"tamano_letra"`
+	Interlineado   float64 `json:"interlineado"`
+	Margenes       string  `json:"margenes"`
+	Justificar     bool    `json:"justificar"`
+	Modo           string  `json:"modo"`
+	Letra          string  `json:"letra"`
+	IdiomaBusqueda string  `json:"idioma_busqueda"`
+	FuenteComics   string  `json:"fuente_comics"`
+	Visibilidad    string  `json:"visibilidad"`
+	TemaApp        string  `json:"tema_app"`
+}
+
+type settingsIn struct {
+	TemaLector     *string  `json:"tema_lector,omitempty" jsonschema:"colores del lector: light (claro), sepia o dark (oscuro)"`
+	TamanoLetra    *int     `json:"tamano_letra,omitempty" jsonschema:"tamaño de la letra en %, de 70 a 200"`
+	Interlineado   *float64 `json:"interlineado,omitempty" jsonschema:"espacio entre líneas, de 1 a 2.5"`
+	Margenes       *string  `json:"margenes,omitempty" jsonschema:"narrow (estrechos), normal o wide (anchos)"`
+	Justificar     *bool    `json:"justificar,omitempty" jsonschema:"texto justificado"`
+	Modo           *string  `json:"modo,omitempty" jsonschema:"paginated (por páginas) o scrolled (desplazamiento continuo)"`
+	Letra          *string  `json:"letra,omitempty" jsonschema:"original (la del libro), serif o sans"`
+	IdiomaBusqueda *string  `json:"idioma_busqueda,omitempty" jsonschema:"idioma al buscar en las bibliotecas libres: es, en, fr, de, it, pt o ca; vacío para todos"`
+	FuenteComics   *string  `json:"fuente_comics,omitempty" jsonschema:"dónde buscar cómics: todas, asura o flame"`
+	Visibilidad    *string  `json:"visibilidad,omitempty" jsonschema:"visibilidad de los libros que se añadan: privado o compartido"`
+	TemaApp        *string  `json:"tema_app,omitempty" jsonschema:"colores de la app: system (los del dispositivo), light o dark"`
+}
+
+func viewSettings(d settingsDoc) settingsView {
+	r, p := d.Reader, d.Prefs
+	return settingsView{TemaLector: r.Theme, TamanoLetra: r.Size, Interlineado: r.Spacing, Margenes: r.Margin, Justificar: r.Justify,
+		Modo: r.Flow, Letra: r.Font, IdiomaBusqueda: p.SearchLang, FuenteComics: p.ComicSource, Visibilidad: p.Visibility, TemaApp: p.Theme}
+}
+
+// set cambia *dst si v trae algo y dice si lo ha hecho.
+func set[T any](dst *T, v *T) bool {
+	if v == nil {
+		return false
+	}
+	*dst = *v
+	return true
+}
+
+func addSettingsTools(server *mcp.Server, s store) {
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_ajustes_ver", Description: "Ajustes de esta persona: los del lector (colores, letra, márgenes, modo; iguales en todos sus dispositivos) y las preferencias de la app (idioma de búsqueda, fuente de cómics, visibilidad al añadir, tema)"},
+		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, settingsView, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, settingsView{}, err
+			}
+			d, err := s.settings(ctx, who)
+			return nil, viewSettings(d), err
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "libros_ajustes_cambiar", Description: "Cambia los ajustes del lector o las preferencias de la app. Cambia solo lo que la persona ha pedido de forma explícita; lo que no se indica se queda como está. Devuelve los ajustes como quedan; los dispositivos los toman al abrir el lector."},
+		func(ctx context.Context, req *mcp.CallToolRequest, in settingsIn) (*mcp.CallToolResult, settingsView, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, settingsView{}, err
+			}
+			d, err := s.settings(ctx, who)
+			if err != nil {
+				return nil, settingsView{}, err
+			}
+			r, p := d.Reader, d.Prefs
+			reader := false
+			for _, ch := range []bool{set(&r.Theme, in.TemaLector), set(&r.Size, in.TamanoLetra), set(&r.Spacing, in.Interlineado),
+				set(&r.Margin, in.Margenes), set(&r.Justify, in.Justificar), set(&r.Flow, in.Modo), set(&r.Font, in.Letra)} {
+				reader = reader || ch
+			}
+			prefs := false
+			for _, ch := range []bool{set(&p.SearchLang, in.IdiomaBusqueda), set(&p.ComicSource, in.FuenteComics),
+				set(&p.Visibility, in.Visibilidad), set(&p.Theme, in.TemaApp)} {
+				prefs = prefs || ch
+			}
+			if reader && !r.valid() {
+				return nil, settingsView{}, errors.New("ajustes del lector no válidos: tema light, sepia o dark; tamaño de 70 a 200; interlineado de 1 a 2.5; márgenes narrow, normal o wide; modo paginated o scrolled; letra original, serif o sans")
+			}
+			if prefs && !p.valid() {
+				return nil, settingsView{}, errors.New("preferencias no válidas: idioma es, en, fr, de, it, pt, ca o vacío (todos); cómics todas, asura o flame; visibilidad privado o compartido; tema de la app system, light o dark")
+			}
+			if reader {
+				// Más reciente que lo guardado, aunque un dispositivo vaya adelantado.
+				at := time.Now()
+				if d.UpdatedAt != nil && !at.After(*d.UpdatedAt) {
+					at = d.UpdatedAt.Add(time.Millisecond)
+				}
+				if d, err = s.saveSettings(ctx, who, r, at); err != nil {
+					return nil, settingsView{}, err
+				}
+			}
+			if prefs {
+				if d, err = s.savePrefs(ctx, who, p); err != nil {
+					return nil, settingsView{}, err
+				}
+			}
+			return nil, viewSettings(d), nil
+		})
 }
 
 type seriesSummary struct {

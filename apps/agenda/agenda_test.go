@@ -25,6 +25,7 @@ import (
 	"github.com/emersion/go-webdav/carddav"
 
 	"homeserver/platform/dbtest"
+	sealpkg "homeserver/platform/seal"
 )
 
 func ics(lines ...string) string {
@@ -97,8 +98,12 @@ func TestRecurrence(t *testing.T) {
 }
 
 func newTestService(t *testing.T) *service {
-	pool := dbtest.Migrated(t, migrations)
-	st := store{pool}
+	box, err := sealpkg.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := dbtest.MigratedSteps(t, migrations, steps(box))
+	st := store{pool, box}
 	seal, err := loadSealer("")
 	if err != nil {
 		t.Fatal(err)

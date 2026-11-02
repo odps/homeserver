@@ -6,7 +6,7 @@
 </section>
 
 <nav class="toc" aria-label="Partes de los ajustes">
-  <a href="#resumen">Resumen y avisos</a><a href="#correo">Correo</a><a href="#movil">En el móvil</a><a href="#asistente">Con el asistente</a>
+  <a href="#resumen">Resumen y avisos</a><a href="#correo">Correo</a><a href="#clasificacion">Clasificación</a><a href="#movil">En el móvil</a><a href="#asistente">Con el asistente</a>
 </nav>
 
 <form id="resumen" class="panel" method="post" action="{{.Base}}/ajustes">
@@ -34,6 +34,18 @@
   <label class="field">Tu dirección (origen de las rutas) <span class="help">Para los enlaces «Cómo llegar». Vacía: Google Maps usa dónde estés.</span>
     <input name="casa" value="{{.Prefs.Home}}" autocomplete="street-address" placeholder="p. ej. Calle Mayor 3, Madrid"></label>
   <div class="actions"><button class="btn primary">Guardar</button></div>
+</form>
+
+<form id="clasificacion" class="panel" method="post" action="{{.Base}}/ajustes/correo">
+  <header class="panel-head"><h2>Clasificación del correo</h2>
+    <p>Cada correo se clasifica sin IA, por sus cabeceras, el remitente y el asunto: <strong>personal</strong> (lo escribe una persona), <strong>importante</strong> (de un servicio, pero sobre seguridad, condiciones, pagos, citas, tu cuenta o trámites), <strong>notificación</strong> y <strong>comercial</strong>. Solo los personales e importantes pasan por la IA sin que lo pidas.</p></header>
+  <label class="field">Siempre importantes <span class="help">Una dirección o un dominio por línea (p. ej. banco.es).</span>
+    <textarea name="importantes" rows="3" autocomplete="off">{{range .Prefs.MailImportant}}{{.}}
+{{end}}</textarea></label>
+  <label class="field">Ignorar <span class="help">Cuentan como comerciales: se guardan, pero no van a la IA ni al resumen.</span>
+    <textarea name="ignorar" rows="3" autocomplete="off">{{range .Prefs.MailIgnore}}{{.}}
+{{end}}</textarea></label>
+  <div class="actions"><button class="btn primary">Guardar y reclasificar</button></div>
 </form>
 
 <section id="correo" class="panel" aria-labelledby="correo-h">

@@ -2,17 +2,29 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"homeserver/platform/seal"
 )
 
-type store struct{ db *pgxpool.Pool }
+// store guarda las noticias recogidas (públicas, en claro) y lo de cada
+// persona. Sus intereses, feeds propios y digests van cifrados
+// (platform/seal): de los nombres y direcciones solo queda una huella para no
+// repetirlos.
+type store struct {
+	db  *pgxpool.Pool
+	box *seal.Box
+}
 
-var errNotFound = errors.New("no encontrado")
+var (
+	errNotFound    = errors.New("no encontrado")
+	errTopicExists = errors.New("ya tienes un interés con ese nombre")
+)
 
 type item struct {
 	ID        int64     `json:"id"`
@@ -33,9 +45,10 @@ func (s store) saveItems(ctx context.Context, feed string, items []feedItem) (in
 	if ranked(feed) {
 		conflict = "DO UPDATE SET published = excluded.published, title = excluded.title, summary = excluded.summary"
 	}
+	key := feedKey(s.box, feed)
 	for _, it := range items {
-		tag, err := s.db.Exec(ctx, `INSERT INTO items (feed, source, link, title, summary, published)
-			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (feed, link) `+conflict, feed, it.Source, it.Link, it.Title, it.Summary, it.Published)
+		tag, err := s.db.Exec(ctx, `INSERT INTO items (feed_key, source, link, title, summary, published)
+			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (feed_key, link) `+conflict, key, it.Source, it.Link, it.Title, it.Summary, it.Published)
 		if err != nil {
 			return n, err
 		}
@@ -52,9 +65,20 @@ func (s store) feedChecked(ctx context.Context, url, title string, err error) {
 			msg = msg[:300]
 		}
 	}
-	s.db.Exec(ctx, `INSERT INTO feeds (url, title, checked_at, ok_at, error) VALUES ($1, $2, now(), CASE WHEN $3 = '' THEN now() END, $3)
-		ON CONFLICT (url) DO UPDATE SET title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE feeds.title END,
-			checked_at = now(), ok_at = coalesce(excluded.ok_at, feeds.ok_at), error = excluded.error`, url, title, msg)
+	key := feedKey(s.box, url)
+	if title == "" { // se conserva el último título conocido
+		var old []byte
+		if s.db.QueryRow(ctx, `SELECT sealed FROM feeds WHERE key = $1`, key).Scan(&old) == nil {
+			var prev feedData
+			if s.box.OpenJSON(sealFeedState, old, &prev) == nil {
+				title = prev.Title
+			}
+		}
+	}
+	sealed, _ := s.box.SealJSON(sealFeedState, feedData{Title: title, Error: msg})
+	s.db.Exec(ctx, `INSERT INTO feeds (key, sealed, checked_at, ok_at) VALUES ($1, $2, now(), CASE WHEN $3 THEN now() END)
+		ON CONFLICT (key) DO UPDATE SET sealed = excluded.sealed, checked_at = now(), ok_at = coalesce(excluded.ok_at, feeds.ok_at)`,
+		key, sealed, msg == "")
 }
 
 type feedState struct {
@@ -63,22 +87,51 @@ type feedState struct {
 	Error string
 }
 
-func (s store) feedStates(ctx context.Context) (map[string]feedState, error) {
-	rows, err := s.db.Query(ctx, `SELECT url, title, ok_at, error FROM feeds`)
+// feedStates es el estado de los feeds pedidos, por URL (en la base solo
+// están sus huellas).
+func (s store) feedStates(ctx context.Context, urls []string) (map[string]feedState, error) {
+	byKey := make(map[int64]string, len(urls))
+	keys := make([]int64, 0, len(urls))
+	for _, u := range urls {
+		k := feedKey(s.box, u)
+		byKey[k] = u
+		keys = append(keys, k)
+	}
+	rows, err := s.db.Query(ctx, `SELECT key, sealed, ok_at FROM feeds WHERE key = ANY($1)`, keys)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]feedState{}
 	for rows.Next() {
-		var u string
+		var k int64
+		var sealed []byte
 		var f feedState
-		if err := rows.Scan(&u, &f.Title, &f.OKAt, &f.Error); err != nil {
+		if err := rows.Scan(&k, &sealed, &f.OKAt); err != nil {
 			return nil, err
 		}
-		out[u] = f
+		var d feedData
+		if err := s.box.OpenJSON(sealFeedState, sealed, &d); err != nil {
+			return nil, err
+		}
+		f.Title, f.Error = d.Title, d.Error
+		out[byKey[k]] = f
 	}
 	return out, rows.Err()
+}
+
+// dropOtherFeeds borra el estado y las noticias de los feeds que ya no lee
+// nadie (intereses y feeds propios quitados): no se guarda lo que no hace falta.
+func (s store) dropOtherFeeds(ctx context.Context, urls []string) error {
+	keys := make([]int64, 0, len(urls))
+	for _, u := range urls {
+		keys = append(keys, feedKey(s.box, u))
+	}
+	if _, err := s.db.Exec(ctx, `DELETE FROM items WHERE feed_key <> ALL($1)`, keys); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(ctx, `DELETE FROM feeds WHERE key <> ALL($1)`, keys)
+	return err
 }
 
 func (s store) prune(ctx context.Context) error {
@@ -121,37 +174,46 @@ func (s store) feedURLs(ctx context.Context) ([]string, error) {
 	for _, r := range subs {
 		add(redditFeedURL(r))
 	}
-	rows, err := s.db.Query(ctx, `SELECT DISTINCT query FROM topics WHERE query <> ''`)
+	// Búsquedas y feeds propios van cifrados: se descifran todos y add quita
+	// los repetidos.
+	rows, _ := s.db.Query(ctx, `SELECT sealed FROM topics ORDER BY id`)
+	sealed, err := pgx.CollectRows(rows, pgx.RowTo[[]byte])
 	if err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		var q string
-		if err := rows.Scan(&q); err != nil {
-			rows.Close()
+	for _, b := range sealed {
+		t, err := s.openTopic(b)
+		if err != nil {
 			return nil, err
 		}
-		add(topicFeedURL(q))
+		if t.Query != "" {
+			add(topicFeedURL(t.Query))
+		}
 	}
-	rows.Close()
-	rows, err = s.db.Query(ctx, `SELECT DISTINCT url FROM own_feeds`)
-	if err != nil {
+	rows, _ = s.db.Query(ctx, `SELECT sealed FROM own_feeds ORDER BY id`)
+	if sealed, err = pgx.CollectRows(rows, pgx.RowTo[[]byte]); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var u string
-		if err := rows.Scan(&u); err != nil {
+	for _, b := range sealed {
+		u, err := s.box.OpenString(sealFeed, b)
+		if err != nil {
 			return nil, err
 		}
 		add(u)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s store) itemsSince(ctx context.Context, feeds []string, since time.Time) ([]item, error) {
-	rows, err := s.db.Query(ctx, `SELECT id, feed, source, link, title, summary, published FROM items
-		WHERE feed = ANY($1) AND published >= $2 ORDER BY published DESC LIMIT 3000`, feeds, since)
+	byKey := make(map[int64]string, len(feeds))
+	keys := make([]int64, 0, len(feeds))
+	for _, u := range feeds {
+		k := feedKey(s.box, u)
+		byKey[k] = u
+		keys = append(keys, k)
+	}
+	rows, err := s.db.Query(ctx, `SELECT id, feed_key, source, link, title, summary, published FROM items
+		WHERE feed_key = ANY($1) AND published >= $2 ORDER BY published DESC LIMIT 3000`, keys, since)
 	if err != nil {
 		return nil, err
 	}
@@ -159,9 +221,11 @@ func (s store) itemsSince(ctx context.Context, feeds []string, since time.Time) 
 	var out []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.ID, &it.Feed, &it.Source, &it.Link, &it.Title, &it.Summary, &it.Published); err != nil {
+		var k int64
+		if err := rows.Scan(&it.ID, &k, &it.Source, &it.Link, &it.Title, &it.Summary, &it.Published); err != nil {
 			return nil, err
 		}
+		it.Feed = byKey[k]
 		out = append(out, it)
 	}
 	return out, rows.Err()
@@ -241,8 +305,20 @@ type ownFeed struct {
 	URL string
 }
 
+func (s store) openTopic(sealed []byte) (topicData, error) {
+	var t topicData
+	return t, s.box.OpenJSON(sealTopic, sealed, &t)
+}
+
+func (s store) sealTopic(name, query string) []byte {
+	b, _ := s.box.SealJSON(sealTopic, topicData{Name: name, Query: query}) // dos textos: no puede fallar
+	return b
+}
+
+// topics devuelve los intereses en su orden (posición, que va en claro) con
+// sus feeds propios.
 func (s store) topics(ctx context.Context, user string) ([]topic, error) {
-	rows, err := s.db.Query(ctx, `SELECT t.id, t.name, t.query, coalesce(f.id, 0), coalesce(f.url, '')
+	rows, err := s.db.Query(ctx, `SELECT t.id, t.sealed, coalesce(f.id, 0), f.sealed
 		FROM topics t LEFT JOIN own_feeds f ON f.topic_id = t.id
 		WHERE t.username = $1 ORDER BY t.position, t.id, f.id`, user)
 	if err != nil {
@@ -253,35 +329,60 @@ func (s store) topics(ctx context.Context, user string) ([]topic, error) {
 	for rows.Next() {
 		var t topic
 		var f ownFeed
-		if err := rows.Scan(&t.ID, &t.Name, &t.Query, &f.ID, &f.URL); err != nil {
+		var ts, fs []byte
+		if err := rows.Scan(&t.ID, &ts, &f.ID, &fs); err != nil {
 			return nil, err
 		}
 		if len(out) == 0 || out[len(out)-1].ID != t.ID {
+			d, err := s.openTopic(ts)
+			if err != nil {
+				return nil, err
+			}
+			t.Name, t.Query = d.Name, d.Query
 			out = append(out, t)
 		}
 		if f.ID != 0 {
+			if f.URL, err = s.box.OpenString(sealFeed, fs); err != nil {
+				return nil, err
+			}
 			out[len(out)-1].Feeds = append(out[len(out)-1].Feeds, f)
 		}
 	}
 	return out, rows.Err()
 }
 
-func (s store) addTopic(ctx context.Context, user, name, query string) error {
-	_, err := s.db.Exec(ctx, `INSERT INTO topics (username, name, query, position)
-		VALUES ($1, $2, $3, (SELECT coalesce(max(position), 0) + 1 FROM topics WHERE username = $1))`, user, name, query)
-	return err
-}
-
-func (s store) updateTopic(ctx context.Context, user string, id int64, name, query string) error {
-	tag, err := s.db.Exec(ctx, `UPDATE topics SET name = $3, query = $4 WHERE id = $2 AND username = $1`, user, id, name, query)
-	if err == nil && tag.RowsAffected() == 0 {
-		return errNotFound
+// uniqueTopic traduce el choque de nombres (la huella ya existe) a un error
+// que se puede enseñar.
+func uniqueTopic(err error) error {
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "23505" {
+		return errTopicExists
 	}
 	return err
 }
 
+func (s store) addTopic(ctx context.Context, user, name, query string) (int64, error) {
+	var id int64
+	err := s.db.QueryRow(ctx, `INSERT INTO topics (username, sealed, name_token, position)
+		VALUES ($1, $2, $3, (SELECT coalesce(max(position), 0) + 1 FROM topics WHERE username = $1)) RETURNING id`,
+		user, s.sealTopic(name, query), topicToken(s.box, name)).Scan(&id)
+	return id, uniqueTopic(err)
+}
+
+func (s store) updateTopic(ctx context.Context, user string, id int64, name, query string) error {
+	tag, err := s.db.Exec(ctx, `UPDATE topics SET sealed = $3, name_token = $4 WHERE id = $2 AND username = $1`,
+		user, id, s.sealTopic(name, query), topicToken(s.box, name))
+	if err == nil && tag.RowsAffected() == 0 {
+		return errNotFound
+	}
+	return uniqueTopic(err)
+}
+
 func (s store) deleteTopic(ctx context.Context, user string, id int64) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM topics WHERE id = $2 AND username = $1`, user, id)
+	tag, err := s.db.Exec(ctx, `DELETE FROM topics WHERE id = $2 AND username = $1`, user, id)
+	if err == nil && tag.RowsAffected() == 0 {
+		return errNotFound
+	}
 	return err
 }
 
@@ -290,13 +391,17 @@ func (s store) addOwnFeed(ctx context.Context, user string, topicID int64, url s
 	if err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM topics WHERE id = $1 AND username = $2)`, topicID, user).Scan(&ok); err != nil || !ok {
 		return errNotFound
 	}
-	_, err := s.db.Exec(ctx, `INSERT INTO own_feeds (username, topic_id, url) VALUES ($1, $2, $3)
-		ON CONFLICT (username, url) DO UPDATE SET topic_id = excluded.topic_id`, user, topicID, url)
+	_, err := s.db.Exec(ctx, `INSERT INTO own_feeds (username, topic_id, sealed, url_token) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (username, url_token) DO UPDATE SET topic_id = excluded.topic_id`,
+		user, topicID, s.box.SealString(sealFeed, url), feedToken(s.box, url))
 	return err
 }
 
 func (s store) deleteOwnFeed(ctx context.Context, user string, id int64) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM own_feeds WHERE id = $2 AND username = $1`, user, id)
+	tag, err := s.db.Exec(ctx, `DELETE FROM own_feeds WHERE id = $2 AND username = $1`, user, id)
+	if err == nil && tag.RowsAffected() == 0 {
+		return errNotFound
+	}
 	return err
 }
 
@@ -312,34 +417,44 @@ type digestItem struct {
 }
 
 type digestSection struct {
-	Title string       `json:"titulo"`
-	Kind  string       `json:"tipo,omitempty"` // «red»: por orden de la red (tendencias, votos); si no, por cobertura
+	Title string `json:"titulo"`
+	// Kind: «espana», «mundo», «tema» (categoría elegida), «interes» o «red»
+	// (por orden de la red: tendencias, votos; las demás, por cobertura).
+	Kind  string       `json:"tipo,omitempty"`
 	Items []digestItem `json:"noticias"`
+}
+
+// summaryBlock es un bloque del resumen del día (España, el mundo, tus
+// intereses), una frase por línea.
+type summaryBlock struct {
+	Title string   `json:"titulo"`
+	Lines []string `json:"lineas"`
 }
 
 type digest struct {
 	Day      string          `json:"dia"`
-	Summary  string          `json:"resumen,omitempty"`
+	Summary  string          `json:"resumen,omitempty"` // de los digest anteriores a los bloques
+	Blocks   []summaryBlock  `json:"resumen_bloques,omitempty"`
 	Sections []digestSection `json:"secciones"`
 	Created  time.Time       `json:"preparado"`
 }
 
 func (s store) saveDigest(ctx context.Context, user string, d digest) error {
-	b, err := json.Marshal(d.Sections)
+	b, err := s.box.SealJSON(sealDigest, digestData{Summary: d.Summary, Blocks: d.Blocks, Sections: d.Sections})
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(ctx, `INSERT INTO digests (username, day, content, summary, created_at) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (username, day) DO UPDATE SET content = $3, summary = $4, created_at = $5`, user, d.Day, b, d.Summary, d.Created)
+	_, err = s.db.Exec(ctx, `INSERT INTO digests (username, day, sealed, created_at) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (username, day) DO UPDATE SET sealed = $3, created_at = $4`, user, d.Day, b, d.Created)
 	return err
 }
 
 func (s store) digest(ctx context.Context, user, day string) (digest, error) {
 	var d digest
-	var raw []byte
+	var sealed []byte
 	var t time.Time
-	err := s.db.QueryRow(ctx, `SELECT day, content, summary, created_at FROM digests WHERE username = $1 AND day = $2`, user, day).
-		Scan(&t, &raw, &d.Summary, &d.Created)
+	err := s.db.QueryRow(ctx, `SELECT day, sealed, created_at FROM digests WHERE username = $1 AND day = $2`, user, day).
+		Scan(&t, &sealed, &d.Created)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, errNotFound
 	}
@@ -347,7 +462,12 @@ func (s store) digest(ctx context.Context, user, day string) (digest, error) {
 		return d, err
 	}
 	d.Day = t.Format("2006-01-02")
-	return d, json.Unmarshal(raw, &d.Sections)
+	var data digestData
+	if err := s.box.OpenJSON(sealDigest, sealed, &data); err != nil {
+		return d, err
+	}
+	d.Summary, d.Blocks, d.Sections = data.Summary, data.Blocks, data.Sections
+	return d, nil
 }
 
 func (s store) days(ctx context.Context, user string, limit int) ([]string, error) {

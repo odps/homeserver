@@ -192,3 +192,10 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
   .chip-name { font-size: .9rem; }
   .chip-hint { font-size: .7rem; }
 }
+
+/* Resumen del día por bloques */
+.brief-block + .brief-block { margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--rule-soft); }
+.brief-block h3 { margin: 0 0 .45rem; font: 650 .8rem/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.brief-block ul { margin: 0; padding-left: 1.1rem; }
+.brief-block li { font: 400 clamp(1.02rem, 2vw, 1.18rem)/1.5 var(--serif); color: var(--ink); text-wrap: pretty; }
+.brief-block li + li { margin-top: .4rem; }

@@ -24,11 +24,14 @@ import (
 	_ "github.com/emersion/go-message/charset" // correos en ISO-8859-1, Windows-1252…
 	"github.com/emersion/go-message/mail"
 	"github.com/jackc/pgx/v5"
+
+	sealpkg "homeserver/platform/seal"
 )
 
 // Correo: se lee la bandeja de entrada por IMAP cada pocos minutos y se
-// guarda en la base (para buscar, resumir y que el asistente lo lea). Nunca se
-// envía nada: como mucho se deja un borrador en la carpeta Borradores.
+// guarda cifrado en la base (para buscar, resumir y que el asistente lo lea),
+// clasificado por sus metadatos (classify.go). Nunca se envía nada: como mucho
+// se deja un borrador en la carpeta Borradores.
 //
 // Gmail (y cualquier IMAP) entra con una contraseña de aplicación; Outlook y
 // Hotmail, con OAuth de Microsoft (flujo de código de dispositivo).
@@ -59,22 +62,40 @@ type mailAccount struct {
 }
 
 type message struct {
-	ID          int64     `json:"id"`
-	AccountID   int64     `json:"-"`
-	Account     string    `json:"cuenta"`
-	UID         int64     `json:"-"`
-	MessageID   string    `json:"-"`
-	Refs        string    `json:"-"`
-	FromName    string    `json:"de_nombre,omitempty"`
-	FromAddr    string    `json:"de"`
-	To          string    `json:"para,omitempty"`
-	Cc          string    `json:"cc,omitempty"`
-	Subject     string    `json:"asunto"`
-	Date        time.Time `json:"fecha"`
-	Body        string    `json:"texto,omitempty"`
-	Attachments []string  `json:"adjuntos,omitempty"`
-	Seen        bool      `json:"leido"`
-	Flagged     bool      `json:"destacado,omitempty"`
+	ID          int64       `json:"id"`
+	AccountID   int64       `json:"-"`
+	Account     string      `json:"cuenta"`
+	UID         int64       `json:"-"`
+	MessageID   string      `json:"-"`
+	Refs        string      `json:"-"`
+	FromName    string      `json:"de_nombre,omitempty"`
+	FromAddr    string      `json:"de"`
+	To          string      `json:"para,omitempty"`
+	Cc          string      `json:"cc,omitempty"`
+	Subject     string      `json:"asunto"`
+	Date        time.Time   `json:"fecha"`
+	Body        string      `json:"texto,omitempty"`
+	Attachments []string    `json:"adjuntos,omitempty"`
+	Seen        bool        `json:"leido"`
+	Flagged     bool        `json:"destacado,omitempty"`
+	Category    string      `json:"categoria"`
+	Reason      string      `json:"motivo,omitempty"`
+	Signals     mailSignals `json:"-"`
+}
+
+// mailBlob es lo que va cifrado de cada correo.
+type mailBlob struct {
+	MessageID   string      `json:"mid,omitempty"`
+	Refs        string      `json:"refs,omitempty"`
+	FromName    string      `json:"from_name,omitempty"`
+	FromAddr    string      `json:"from,omitempty"`
+	To          string      `json:"to,omitempty"`
+	Cc          string      `json:"cc,omitempty"`
+	Subject     string      `json:"subject,omitempty"`
+	Body        string      `json:"body,omitempty"`
+	Attachments []string    `json:"att,omitempty"`
+	Reason      string      `json:"reason,omitempty"`
+	Signals     mailSignals `json:"signals"`
 }
 
 // ---- Base de datos ----
@@ -125,21 +146,51 @@ func (s store) accountSynced(ctx context.Context, a mailAccount, syncErr error) 
 }
 
 func (s store) saveMessage(ctx context.Context, m message) error {
-	_, err := s.db.Exec(ctx, `INSERT INTO messages (account_id, uid, message_id, refs, from_name, from_addr, to_addrs, cc_addrs,
-			subject, sent_at, body, attachments, seen, flagged, search)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	sealed, err := s.box.SealJSON(sealMessage, mailBlob{MessageID: m.MessageID, Refs: m.Refs, FromName: m.FromName,
+		FromAddr: m.FromAddr, To: m.To, Cc: m.Cc, Subject: m.Subject, Body: m.Body, Attachments: m.Attachments,
+		Reason: m.Reason, Signals: m.Signals})
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `INSERT INTO messages (account_id, uid, sent_at, seen, flagged, category, sealed, tokens)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (account_id, uid) DO NOTHING`,
-		m.AccountID, m.UID, m.MessageID, m.Refs, m.FromName, m.FromAddr, m.To, m.Cc, m.Subject, m.Date, m.Body,
-		m.Attachments, m.Seen, m.Flagged, fold(strings.Join([]string{m.FromName, m.FromAddr, m.To, m.Cc, m.Subject, m.Body}, " ")))
+		m.AccountID, m.UID, m.Date, m.Seen, m.Flagged, m.Category, sealed, mailTokens(s.box, m))
 	return err
 }
 
-const messageCols = `m.id, m.account_id, a.address, m.uid, m.message_id, m.refs, m.from_name, m.from_addr, m.to_addrs, m.cc_addrs,
-	m.subject, m.sent_at, m.body, m.attachments, m.seen, m.flagged`
+// mailTokens son las huellas para buscar: "f" en el remitente; "t" en todo
+// (remitente, destinatarios, asunto y texto, por ese orden por si se llega al
+// tope).
+func mailTokens(box *sealpkg.Box, m message) []int64 {
+	t := box.Index(nil, "f", m.FromName+" "+m.FromAddr)
+	for _, s := range []string{m.FromName + " " + m.FromAddr, m.Subject, m.To + " " + m.Cc, m.Body} {
+		t = box.Index(t, "t", s)
+	}
+	return t
+}
+
+const messageCols = `m.id, m.account_id, a.address, m.uid, m.sent_at, m.seen, m.flagged, m.category, m.sealed`
 
 func (s store) messages(ctx context.Context, where string, args ...any) ([]message, error) {
 	rows, _ := s.db.Query(ctx, `SELECT `+messageCols+` FROM messages m JOIN mail_accounts a ON a.id = m.account_id WHERE `+where, args...)
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[message])
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (message, error) {
+		var m message
+		var sealed []byte
+		if err := r.Scan(&m.ID, &m.AccountID, &m.Account, &m.UID, &m.Date, &m.Seen, &m.Flagged, &m.Category, &sealed); err != nil {
+			return m, err
+		}
+		var b mailBlob
+		if err := s.box.OpenJSON(sealMessage, sealed, &b); err != nil {
+			return m, err
+		}
+		m.MessageID, m.Refs, m.FromName, m.FromAddr, m.To, m.Cc = b.MessageID, b.Refs, b.FromName, b.FromAddr, b.To, b.Cc
+		m.Subject, m.Body, m.Attachments, m.Reason, m.Signals = b.Subject, b.Body, b.Attachments, b.Reason, b.Signals
+		if m.Attachments == nil {
+			m.Attachments = []string{}
+		}
+		return m, nil
+	})
 }
 
 func (s store) messageByID(ctx context.Context, owner string, id int64) (message, error) {
@@ -159,15 +210,44 @@ type mailQuery struct {
 	UnreadOnly bool
 	Since      time.Time
 	Account    int64
+	Categories []string // vacío: todas
 	Limit      int
 }
 
 func (s store) searchMessages(ctx context.Context, owner string, q mailQuery) ([]message, error) {
-	where, args := wordFilter("m.search", words(q.Text), 2)
-	args = append([]any{owner}, args...)
-	if q.From != "" {
-		args = append(args, "%"+fold(q.From)+"%")
-		where += fmt.Sprintf(` AND lower(m.from_name || ' ' || m.from_addr) LIKE $%d`, len(args))
+	where, args := s.mailWhere(owner, q)
+	if len(q.Categories) > 0 {
+		args = append(args, q.Categories)
+		where += fmt.Sprintf(` AND m.category = ANY($%d)`, len(args))
+	}
+	if q.Limit <= 0 || q.Limit > 200 {
+		q.Limit = 30
+	}
+	return s.messages(ctx, where+fmt.Sprintf(` ORDER BY m.sent_at DESC LIMIT %d`, q.Limit), args...)
+}
+
+// countMessages cuenta por categoría lo que encaja con q (sin mirar
+// q.Categories).
+func (s store) countMessages(ctx context.Context, owner string, q mailQuery) (map[string]int, error) {
+	where, args := s.mailWhere(owner, q)
+	rows, _ := s.db.Query(ctx, `SELECT m.category, count(*) FROM messages m JOIN mail_accounts a ON a.id = m.account_id
+		WHERE `+where+` GROUP BY m.category`, args...)
+	out := map[string]int{}
+	var c string
+	var n int
+	_, err := pgx.ForEachRow(rows, []any{&c, &n}, func() error { out[c] = n; return nil })
+	return out, err
+}
+
+func (s store) mailWhere(owner string, q mailQuery) (string, []any) {
+	where, args := `a.owner = $1`, []any{owner}
+	if t := s.box.Query("t", q.Text); len(t) > 0 {
+		args = append(args, t)
+		where += fmt.Sprintf(` AND m.tokens @> $%d`, len(args))
+	}
+	if t := s.box.Query("f", q.From); len(t) > 0 {
+		args = append(args, t)
+		where += fmt.Sprintf(` AND m.tokens @> $%d`, len(args))
 	}
 	if q.UnreadOnly {
 		where += ` AND NOT m.seen`
@@ -180,10 +260,29 @@ func (s store) searchMessages(ctx context.Context, owner string, q mailQuery) ([
 		args = append(args, q.Account)
 		where += fmt.Sprintf(` AND m.account_id = $%d`, len(args))
 	}
-	if q.Limit <= 0 || q.Limit > 200 {
-		q.Limit = 30
+	return where, args
+}
+
+// reclassify vuelve a clasificar el correo de una cuenta (al cambiar sus
+// remitentes importantes o a ignorar).
+func (s store) reclassify(ctx context.Context, owner string) error {
+	p, err := s.prefs(ctx, owner)
+	if err != nil {
+		return err
 	}
-	return s.messages(ctx, `a.owner = $1`+where+fmt.Sprintf(` ORDER BY m.sent_at DESC LIMIT %d`, q.Limit), args...)
+	list, err := s.messages(ctx, `a.owner = $1`, owner)
+	if err != nil {
+		return err
+	}
+	batch := &pgx.Batch{}
+	for _, m := range list {
+		was := m.Category
+		classify(&m, p)
+		if m.Category != was {
+			batch.Queue(`UPDATE messages SET category = $2 WHERE id = $1`, m.ID, m.Category)
+		}
+	}
+	return s.db.SendBatch(ctx, batch).Close()
 }
 
 // ---- IMAP ----
@@ -372,6 +471,10 @@ func (m *mailer) fetchBatch(ctx context.Context, c *imapclient.Client, a *mailAc
 			}
 		}
 	}
+	p, err := m.store.prefs(ctx, a.Owner)
+	if err != nil {
+		return 0, err
+	}
 	saved := 0
 	for _, u := range uids {
 		h, ok := info[u]
@@ -379,6 +482,7 @@ func (m *mailer) fetchBatch(ctx context.Context, c *imapclient.Client, a *mailAc
 			continue
 		}
 		msg := fromIMAP(a.ID, h, bodies[u])
+		classify(&msg, p)
 		if h.RFC822Size > maxRawBytes {
 			msg.Body = strings.TrimSpace(msg.Body + "\n\n(Correo de " + fmt.Sprint(h.RFC822Size>>20) + " MB: el texto no se ha descargado; ábrelo en tu correo.)")
 		}
@@ -422,6 +526,7 @@ func fromIMAP(account int64, h *imapclient.FetchMessageBuffer, raw []byte) messa
 			msg.Flagged = true
 		}
 	}
+	msg.Signals = headerSignals(raw, msg.FromAddr)
 	if len(raw) > 0 {
 		body, attachments, refs := parseBody(raw)
 		msg.Body, msg.Attachments, msg.Refs = body, attachments, refs
