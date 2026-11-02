@@ -49,9 +49,20 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return
   const path = url.pathname.slice(scope.pathname.length)
 
-  // Navegación: siempre a la red (la pasarela puede pedir login); sin red, la app guardada.
+  // Navegación: a la red (la pasarela puede pedir login), pero sin esperarla
+  // más de unos segundos si hay app guardada: con cobertura a medias la red no
+  // falla, se queda colgada, y la app no abriría nunca.
   if (req.mode === 'navigate') {
-    event.respondWith(fetch(req).catch(async () => (await caches.match('./', { ignoreSearch: true })) ?? Response.error()))
+    event.respondWith((async () => {
+      const saved = await caches.match('./', { ignoreSearch: true })
+      if (!saved) return fetch(req)
+      try {
+        const resp = await within(fetch(req), 4000)
+        return resp.status >= 500 ? saved : resp // pasarela o túnel caídos: la guardada
+      } catch {
+        return saved
+      }
+    })())
     return
   }
   // El catálogo público solo funciona con red: no se guarda en el dispositivo.
@@ -87,15 +98,33 @@ async function cacheFirst(name, req) {
   return resp
 }
 
+// within rechaza si la promesa tarda más de ms.
+function within(p, ms) {
+  return Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('sin respuesta')), ms))])
+}
+
+// networkFirst: lo último de la red y, si no hay o tarda, la última copia.
+// Si la red contesta tarde, la copia se actualiza igualmente para la próxima.
 async function networkFirst(name, req) {
   const cache = await caches.open(name)
-  try {
-    const resp = await fetch(req)
+  const net = fetch(req).then(resp => {
     if (resp.ok) cache.put(req, resp.clone())
     return resp
-  } catch (e) {
-    const hit = await cache.match(req)
-    if (hit) return hit
-    throw e
+  })
+  const hit = await cache.match(req)
+  if (!hit) return net
+  try {
+    return await within(net, 5000)
+  } catch {
+    net.catch(() => {})
+    return copy(hit)
   }
+}
+
+// copy marca una respuesta guardada para que la app sepa que el servidor no
+// ha contestado (y lo diga).
+function copy(resp) {
+  const headers = new Headers(resp.headers)
+  headers.set('X-Libros-Copia', '1')
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers })
 }

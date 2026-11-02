@@ -105,11 +105,20 @@ function guessDevice() {
 export class Offline extends Error {}
 export async function api(path, opts = {}) {
   let resp
+  // Las consultas no esperan más de 12 s (con cobertura a medias la red no
+  // falla, se queda colgada); los envíos (subidas, cambios) no tienen plazo.
+  const ctl = new AbortController()
+  const read = !opts.method || opts.method === 'GET'
+  const timer = read ? setTimeout(() => ctl.abort(), 12_000) : null
   try {
-    resp = await fetch(path, { ...opts, headers: { Accept: 'application/json', ...(opts.headers ?? {}) } })
+    resp = await fetch(path, { signal: ctl.signal, ...opts, headers: { Accept: 'application/json', ...(opts.headers ?? {}) } })
   } catch {
     throw new Offline('sin conexión')
+  } finally {
+    clearTimeout(timer)
   }
+  // ¿Ha contestado el servidor o es la copia del dispositivo? (ver sw.js)
+  window.dispatchEvent(new Event(resp.headers.get('X-Libros-Copia') ? 'libros:sinservidor' : 'libros:conservidor'))
   if (resp.status === 401) {
     sessionExpired()
     throw new Error('sesión caducada')

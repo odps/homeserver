@@ -137,10 +137,24 @@ window.addEventListener('hashchange', () => {
 
 // --- Conexión y progreso pendiente ---
 
+// serverDown: el móvil tiene red pero el servidor no contesta (cobertura a
+// medias, túnel caído). Se avisa y no se quita hasta que vuelva a contestar.
+let serverDown = false
+window.addEventListener('libros:sinservidor', () => {
+  if (serverDown || !navigator.onLine) return
+  serverDown = true
+  banner('Sin conexión con el servidor: puedes leer los libros guardados en este dispositivo.')
+})
+window.addEventListener('libros:conservidor', () => {
+  if (!serverDown) return
+  serverDown = false
+  banner(null)
+})
+
 async function connectivity() {
   if (navigator.onLine) {
     await Promise.all([flushQueue(), syncSettings()])
-    banner(null)
+    if (!serverDown) banner(null)
   } else {
     const n = await pendingCount()
     banner(`Sin conexión. ${n ? `${n} ${n === 1 ? 'libro tiene' : 'libros tienen'} progreso pendiente de sincronizar.` : 'Puedes leer los libros guardados en este dispositivo.'}`)
@@ -167,13 +181,25 @@ if ('serviceWorker' in navigator) {
   })
 }
 
-// Quién soy: de la red o, sin conexión, de la última vez.
-try {
-  Object.assign(me, await api('api/me'))
-} catch (e) {
-  if (e instanceof Offline) {
-    try { Object.assign(me, JSON.parse(localStorage.getItem('libros.me')) ?? {}) } catch {}
-  }
+// Quién soy: si ya entró antes en este dispositivo, se arranca con lo que se
+// recuerda y se comprueba en segundo plano (así abre sin esperar a la red);
+// la primera vez, de la red.
+let remembered = null
+try { remembered = JSON.parse(localStorage.getItem('libros.me')) } catch {}
+if (remembered?.user) {
+  Object.assign(me, remembered)
+  api('api/me').then(fresh => {
+    Object.assign(me, fresh)
+    try { localStorage.setItem('libros.me', JSON.stringify(me)) } catch {}
+    window.dispatchEvent(new Event('libros:me'))
+  }).catch(e => {
+    if (e instanceof Offline && navigator.onLine) window.dispatchEvent(new Event('libros:sinservidor'))
+  })
+} else {
+  try {
+    Object.assign(me, await api('api/me'))
+    try { localStorage.setItem('libros.me', JSON.stringify(me)) } catch {}
+  } catch {}
 }
 
 // Si en este navegador entra otra persona, se borran los libros guardados y
