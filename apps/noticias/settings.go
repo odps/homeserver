@@ -60,7 +60,7 @@ func (s *service) addTopic(ctx context.Context, user, name, query string) (int64
 	}
 	id, err := s.store.addTopic(ctx, user, name, query)
 	if err == nil {
-		go s.collect(context.WithoutCancel(ctx))
+		s.collectSoon(ctx)
 	}
 	return id, err
 }
@@ -73,7 +73,7 @@ func (s *service) updateTopic(ctx context.Context, user string, id int64, name, 
 	if err := s.store.updateTopic(ctx, user, id, name, query); err != nil {
 		return err
 	}
-	go s.collect(context.WithoutCancel(ctx))
+	s.collectSoon(ctx)
 	return nil
 }
 

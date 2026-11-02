@@ -23,6 +23,16 @@ type service struct {
 	summarizer  func(ctx context.Context, prompt string) (string, error) // nil: sin resumen
 	redditPause time.Duration                                            // entre subforos
 	mu          sync.Mutex                                               // una recogida a la vez
+	bg          sync.WaitGroup                                           // recogidas lanzadas tras un cambio
+}
+
+// collectSoon recoge en segundo plano tras cambiar los intereses o feeds.
+func (s *service) collectSoon(ctx context.Context) {
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		s.collect(context.WithoutCancel(ctx))
+	}()
 }
 
 // collect lee todos los feeds (de 4 en 4) y guarda lo nuevo.

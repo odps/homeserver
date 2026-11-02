@@ -139,6 +139,8 @@ func newHarness(t *testing.T) *harness {
 			}
 			return "Hoy destaca el plan de vivienda.", nil
 		}}
+	// Las recogidas en segundo plano acaban antes de deshacer los cambios de arriba.
+	t.Cleanup(svc.bg.Wait)
 	mux2 := http.NewServeMux()
 	(&web{svc: svc}).routes(mux2)
 	srv := httptest.NewServer(mux2)
