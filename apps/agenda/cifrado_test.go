@@ -154,6 +154,14 @@ func TestMailClassifiedAndSealed(t *testing.T) {
 	if n, err := svc.mail.syncAccount(ctx, a); err != nil || n != 3 {
 		t.Fatalf("sincronizar: %d %v", n, err)
 	}
+	// La siguiente vuelta solo trae lo nuevo (la cuenta recuerda hasta dónde llegó).
+	stored, err := svc.store.account(ctx, "ana", a.ID)
+	if err != nil || stored.LastUID == 0 || stored.Error != "" {
+		t.Fatalf("la cuenta no guarda hasta dónde ha leído: %+v %v", stored, err)
+	}
+	if n, err := svc.mail.syncAccount(ctx, stored); err != nil || n != 0 {
+		t.Fatalf("segunda vuelta: %d %v", n, err)
+	}
 	q := mailQuery{UnreadOnly: true, Categories: []string{catPersonal, catImportant}}
 	l, err := svc.store.searchMessages(ctx, "ana", q)
 	if err != nil || len(l) != 2 {

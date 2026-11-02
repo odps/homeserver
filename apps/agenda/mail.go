@@ -136,14 +136,17 @@ func (s store) deleteAccount(ctx context.Context, owner string, id int64) error 
 	return err
 }
 
-func (s store) accountSynced(ctx context.Context, a mailAccount, syncErr error) {
+// accountSynced guarda hasta dónde se ha leído. Si falla, la siguiente vuelta
+// volvería a descargarlo todo: se devuelve el error para que conste.
+func (s store) accountSynced(ctx context.Context, a mailAccount, syncErr error) error {
 	msg := ""
 	if syncErr != nil {
-		msg = syncErr.Error()
+		msg = validText(syncErr.Error())
 	}
-	s.db.Exec(ctx, `UPDATE mail_accounts SET uidvalidity = $2, last_uid = $3, drafts = $4, secret = $5, error = $6,
+	_, err := s.db.Exec(ctx, `UPDATE mail_accounts SET uidvalidity = $2, last_uid = $3, drafts = $4, secret = $5, error = $6,
 		synced_at = CASE WHEN $6 = '' THEN now() ELSE synced_at END WHERE id = $1`,
-		a.ID, a.UIDValidity, a.LastUID, a.Drafts, a.Secret, msg)
+		a.ID, a.UIDValidity, a.LastUID, validText(a.Drafts), a.Secret, msg)
+	return err
 }
 
 func (s store) saveMessage(ctx context.Context, m message) error {
@@ -367,7 +370,9 @@ func (m *mailer) syncAccount(ctx context.Context, a mailAccount) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	n, err := m.syncInbox(ctx, &a)
-	m.store.accountSynced(context.WithoutCancel(ctx), a, err)
+	if serr := m.store.accountSynced(context.WithoutCancel(ctx), a, err); serr != nil {
+		m.log.Error("correo: no se ha guardado hasta dónde se ha leído", "cuenta", a.Address, "err", serr)
+	}
 	return n, err
 }
 
