@@ -1,0 +1,85 @@
+{{define "evento.html"}}{{template "head" .}}
+{{$f := .Form}}{{$task := eq .Form.Kind "tarea"}}
+<section class="hero compact">
+  <p class="eyebrow">{{if $task}}Tarea{{else}}Evento{{end}}</p>
+  <h1 class="date">{{if $f.ID}}{{if $task}}Editar tarea{{else}}Editar evento{{end}}{{else}}{{if $task}}Nueva tarea{{else}}Nuevo evento{{end}}{{end}}</h1>
+  {{if $f.ID}}<div class="hero-meta">{{with $f.RepeatText}}<span>Se repite {{.}}</span>{{end}}{{if $f.Done}}<span>Hecha</span>{{end}}{{if $f.Maps}}<a href="{{$f.Maps}}" target="_blank" rel="noopener">Ver en el mapa</a>{{if $f.Route}}<a href="{{$f.Route}}" target="_blank" rel="noopener">Cómo llegar</a>{{end}}{{end}}</div>{{end}}
+</section>
+
+<form class="panel form" method="post" action="{{if $f.ID}}{{.Base}}/evento/{{$f.ID}}{{else}}{{.Base}}/evento{{end}}">
+  <input type="hidden" name="tipo" value="{{$f.Kind}}">
+  <label class="field">Título
+    <input name="titulo" value="{{$f.Title}}" required maxlength="300" autocomplete="off" placeholder="{{if $task}}p. ej. Llamar al fontanero{{else}}p. ej. Dentista{{end}}"{{if not $f.ID}} autofocus{{end}}></label>
+
+  <fieldset class="fs">
+    <legend class="label">{{if $task}}Vencimiento{{else}}Cuándo{{end}}</legend>
+    <div class="pair dt">
+      <label class="field">{{if $task}}Fecha <span class="help">opcional</span>{{else}}Empieza{{end}}
+        <input type="date" name="fecha" value="{{$f.Date}}"{{if not $task}} required{{end}}></label>
+      <label class="field">Hora <span class="help">opcional</span>
+        <input type="time" name="hora" value="{{$f.Start}}"></label>
+    </div>
+    {{if $task}}
+    <p class="help">Sin fecha, queda en «Pendiente». Con hora, te avisa a esa hora si no eliges otro aviso.</p>
+    {{else}}
+    <div class="pair dt">
+      <label class="field">Termina
+        <input type="date" name="fecha_fin" value="{{$f.EndDate}}"></label>
+      <label class="field">Hora de fin
+        <input type="time" name="hora_fin" value="{{$f.End}}"></label>
+    </div>
+    <label class="switch"><input type="checkbox" name="todo_el_dia" value="1"{{if $f.AllDay}} checked{{end}}><span class="switch-name">Todo el día</span><span class="meta">Sin horas; puede ocupar varios días</span></label>
+    {{end}}
+  </fieldset>
+
+  {{if $task}}<input type="hidden" name="lugar" value="{{$f.Location}}">{{else}}
+  <label class="field">Lugar <span class="help">Dirección o sitio: tendrá enlace a Google Maps</span>
+    <input name="lugar" value="{{$f.Location}}" autocomplete="off" placeholder="p. ej. Calle Mayor 3, Madrid"></label>
+  {{end}}
+
+  <div class="pair">
+    <label class="field">Repetir
+      <select name="repetir">
+        <option value=""{{if eq $f.Repeat ""}} selected{{end}}>No se repite</option>
+        <option value="DAILY"{{if eq $f.Repeat "DAILY"}} selected{{end}}>Cada día</option>
+        <option value="WEEKLY"{{if eq $f.Repeat "WEEKLY"}} selected{{end}}>Cada semana</option>
+        <option value="MONTHLY"{{if eq $f.Repeat "MONTHLY"}} selected{{end}}>Cada mes</option>
+        <option value="YEARLY"{{if eq $f.Repeat "YEARLY"}} selected{{end}}>Cada año</option>
+        {{if eq $f.Repeat "keep"}}<option value="keep" selected>{{with $f.RepeatText}}{{.}}{{else}}Como está{{end}} (sin cambios)</option>{{end}}
+      </select></label>
+    <label class="field">Aviso
+      <select name="aviso">
+        <option value=""{{if eq $f.Alarm ""}} selected{{end}}>Sin aviso</option>
+        <option value="0"{{if eq $f.Alarm "0"}} selected{{end}}>A la hora</option>
+        <option value="5"{{if eq $f.Alarm "5"}} selected{{end}}>5 minutos antes</option>
+        <option value="10"{{if eq $f.Alarm "10"}} selected{{end}}>10 minutos antes</option>
+        <option value="15"{{if eq $f.Alarm "15"}} selected{{end}}>15 minutos antes</option>
+        <option value="30"{{if eq $f.Alarm "30"}} selected{{end}}>30 minutos antes</option>
+        <option value="60"{{if eq $f.Alarm "60"}} selected{{end}}>1 hora antes</option>
+        <option value="120"{{if eq $f.Alarm "120"}} selected{{end}}>2 horas antes</option>
+        <option value="1440"{{if eq $f.Alarm "1440"}} selected{{end}}>1 día antes</option>
+        {{if not (eq $f.Alarm "" "0" "5" "10" "15" "30" "60" "120" "1440")}}<option value="{{$f.Alarm}}" selected>{{$f.Alarm}} minutos antes</option>{{end}}
+      </select></label>
+  </div>
+
+  {{if not $f.ID}}{{if gt (len .Calendars) 1}}
+  <label class="field">Calendario
+    <select name="calendario">{{range .Calendars}}<option value="{{.Slug}}"{{if eq .Slug $f.Calendar}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  {{else}}<input type="hidden" name="calendario" value="{{with .Calendars}}{{(index . 0).Slug}}{{end}}">{{end}}{{end}}
+
+  <label class="field">Notas
+    <textarea name="notas" rows="4" placeholder="Opcional">{{$f.Notes}}</textarea></label>
+
+  <div class="actions">
+    <button class="btn primary">{{if $f.ID}}Guardar cambios{{else if $task}}Crear tarea{{else}}Crear evento{{end}}</button>
+    <a class="btn ghost" href="{{if $task}}{{.Base}}/tareas{{else}}{{.Base}}/{{end}}">Cancelar</a>
+  </div>
+</form>
+
+{{if $f.ID}}
+<form class="dangerzone" method="post" action="{{.Base}}/evento/{{$f.ID}}/borrar">
+  <p>Borrar {{if $task}}esta tarea{{else}}este evento{{end}}{{if $f.RepeatText}} y <strong>todas sus repeticiones</strong>{{end}}. También desaparece del móvil.</p>
+  <button class="btn danger">Borrar {{if $task}}tarea{{else}}evento{{end}}</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

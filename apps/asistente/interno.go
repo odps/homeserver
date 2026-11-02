@@ -10,10 +10,10 @@ import (
 )
 
 // Peticiones de otras apps del propio servidor (no pasan por la pasarela):
-// de momento, que noticias pida un resumen del día con el modelo del
+// que noticias o agenda pidan un resumen (del día, del correo) con el modelo del
 // asistente, sin tener copia de sus claves. Cuenta para el límite diario.
 
-const summarySystem = `Eres un redactor de un resumen de noticias matinal. Escribes en español de España, en texto plano (sin Markdown), con frases claras y neutrales. Usa solo la información que se te da; no inventes nada ni opines.`
+const summarySystem = `Redactas resúmenes breves para una persona. Escribes en español de España, en texto plano (sin Markdown), con frases claras y neutrales. Usa solo la información que se te da; no inventes nada ni opines.`
 
 // internalOnly rechaza lo que llega por la pasarela (que siempre pone
 // X-Forwarded-Prefix) o desde fuera del propio servidor.

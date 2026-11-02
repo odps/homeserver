@@ -38,6 +38,9 @@ type alertsConfig struct {
 		At         string `json:"at"`          // hora (Madrid) del mensaje
 		PerSection int    `json:"per_section"` // titulares por sección
 	} `json:"news"`
+	Agenda struct {
+		On bool `json:"on"` // recordatorios y resumen de la mañana de la app Agenda
+	} `json:"agenda"`
 	Chapters struct {
 		On        bool   `json:"on"`
 		Favorites bool   `json:"favorites"` // solo series favoritas
@@ -83,6 +86,7 @@ func defaultAlerts() alertsConfig {
 	c.QuietFrom, c.QuietTo = "23:00", "08:00"
 	c.Chapters.On, c.Chapters.DailyAt = true, "20:00"
 	c.News.On, c.News.At, c.News.PerSection = true, "07:30", 3
+	c.Agenda.On = true
 	c.Deploys.Failed = true
 	c.Network.On, c.Network.MinMinutes = true, 3
 	c.Battery.On, c.Battery.Low, c.Battery.High, c.Battery.Unplugged = true, 25, 90, true
@@ -227,6 +231,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 		g.alertApps(ctx, c, &s, now, add)
 		g.alertBackups(c, &s, now, add)
 		g.alertNews(ctx, c, &s, now, add)
+		g.alertAgenda(ctx, c, add)
 		if now.Sub(a.chaptersAt) >= 10*time.Minute {
 			a.chaptersAt = now
 			g.alertChapters(ctx, c, &s, add)
@@ -429,6 +434,46 @@ func (g *gateway) alertNews(ctx context.Context, c alertsConfig, s *alertsState,
 		text += "\n\nEl digest completo: " + c.PublicURL + "/noticias/"
 	}
 	add("noticias", "Buenos días. Tus noticias de hoy:\n\n"+text)
+}
+
+// alertAgenda recoge lo que la app Agenda tiene preparado para la cuenta
+// elegida: los recordatorios de eventos y tareas y el resumen de la mañana
+// (la hora y el contenido se ajustan en la propia app).
+func (g *gateway) alertAgenda(ctx context.Context, c alertsConfig, add func(kind, text string)) {
+	app, ok := g.apps["agenda"]
+	if !ok || !c.Agenda.On || c.User == "" {
+		return
+	}
+	u, ok := g.users.get(c.User)
+	if !ok || !u.allows("agenda") {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/api/avisos", app.Port), nil)
+	setAuthHeaders(req, c.User, u.Name, u.Role)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var list []struct {
+		Kind string `json:"tipo"`
+		Text string `json:"texto"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&list) != nil {
+		return
+	}
+	for _, n := range list {
+		text := n.Text
+		if r := []rune(text); len(r) > 3800 {
+			text = strings.TrimSpace(string(r[:3800])) + "\n…"
+		}
+		if n.Kind == "resumen" && c.PublicURL != "" {
+			text += "\n\nTu agenda: " + c.PublicURL + "/agenda/"
+		}
+		add("agenda", text)
+	}
 }
 
 // alertApps avisa de una app que lleva un rato sin responder, y cuando vuelve.

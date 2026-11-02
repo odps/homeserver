@@ -468,6 +468,10 @@
       <label class="field"><span class="field-label">Titulares por sección</span><input name="news_per_section" type="number" min="1" max="10" value="{{$c.News.PerSection}}"></label></div>
       <p class="hint">De la cuenta elegida en «Cómics», que debe tener la app Noticias.</p>
     </fieldset>
+    <fieldset class="group"><legend>Agenda</legend>
+      <label class="switch"><input type="checkbox" name="agenda" value="1"{{if $c.Agenda.On}} checked{{end}}><span>Recordatorios de eventos y tareas, y el resumen de la mañana</span></label>
+      <p class="hint">La hora del resumen y qué incluye se eligen en la app Agenda (Ajustes). De la cuenta elegida en «Cómics», que debe tener la app.</p>
+    </fieldset>
     <fieldset class="group"><legend>Servidor</legend>
       <div class="opt"><label class="switch"><input type="checkbox" name="apps" value="1"{{if $c.Apps.On}} checked{{end}}><span>Una app deja de funcionar</span></label>
         <label class="mini"><span>durante (min)</span><input name="apps_minutes" type="number" min="1" max="600" value="{{$c.Apps.Minutes}}"></label></div>

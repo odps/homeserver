@@ -1,0 +1,117 @@
+{{define "agenda.html"}}{{template "head" .}}
+<section class="hero">
+  <p class="eyebrow">{{if eq .From .Today}}Hoy{{with .Name}} · Hola, {{.}}{{end}}{{else}}Desde el{{end}}</p>
+  <h1 class="date">{{with .Days}}{{(index . 0).Label}}{{else}}Agenda{{end}}</h1>
+  <div class="hero-meta">
+    <span>Próximos 14 días</span>
+    {{with .Tasks}}<a href="#pendiente">{{len .}} pendiente{{if gt (len .) 1}}s{{end}}</a>{{end}}
+    {{if .Unread}}<a href="#sin-leer">{{.Unread}} correo{{if gt .Unread 1}}s{{end}} sin leer</a>{{end}}
+  </div>
+</section>
+
+<div class="toolbar">
+  <nav class="pager" aria-label="Cambiar de quincena">
+    <a class="btn square" href="{{.Base}}/?desde={{.Prev}}" aria-label="14 días antes" title="14 días antes">←</a>
+    <a class="btn" href="{{.Base}}/"{{if eq .From .Today}} aria-current="date"{{end}}>Hoy</a>
+    <a class="btn square" href="{{.Base}}/?desde={{.Next}}" aria-label="14 días después" title="14 días después">→</a>
+  </nav>
+  <div class="quick">
+    <a class="btn primary" href="{{.Base}}/evento/nuevo"><span aria-hidden="true">+</span> Nuevo evento</a>
+    <a class="btn" href="{{.Base}}/evento/nuevo?tipo=tarea"><span aria-hidden="true">+</span> Nueva tarea</a>
+  </div>
+</div>
+
+<div class="split">
+  <div class="days">
+    {{range .Days}}{{$d := .}}
+    <section class="day{{if .Today}} is-today{{end}}{{if not .Items}} is-empty{{end}}" aria-labelledby="d{{.Date}}">
+      <header class="day-head">
+        <h2 id="d{{.Date}}">{{.Label}}</h2>
+        {{if .Today}}<span class="badge">Hoy</span>{{end}}
+        {{if not .Items}}<span class="nada">Nada</span>{{end}}
+        <a class="add" href="{{$.Base}}/evento/nuevo?fecha={{.Date}}" aria-label="Añadir algo el {{.Label}}" title="Añadir">+</a>
+      </header>
+      {{with .Items}}
+      <ul class="items">
+        {{range .}}
+        <li class="item {{.Kind}}{{if .Done}} done{{end}}{{if .Overdue}} overdue{{end}}">
+          <div class="when">
+            {{if eq .Kind "tarea"}}{{if or .AllDay (not .Start)}}<span class="t">Tarea</span>{{else}}<span class="t">{{hm .Start}}</span>{{end}}
+            {{else if .AllDay}}<span class="t">Todo el día</span>
+            {{else if .Start}}{{if eq (.Start.Format "2006-01-02") $d.Date}}<span class="t">{{hm .Start}}</span>{{with .End}}<span class="t2">{{hm .}}</span>{{end}}{{else}}<span class="t">Sigue</span>{{with .End}}<span class="t2">→ {{hm .}}</span>{{end}}{{end}}{{end}}
+          </div>
+          <div class="what">
+            <a class="title" href="{{$.Base}}/evento/{{.ID}}">{{.Title}}</a>
+            <p class="meta">
+              {{if .Overdue}}<span class="tag danger">Vencida</span>{{end}}
+              {{if .Done}}<span class="tag">Hecha</span>{{end}}
+              {{if .AllDay}}{{if eq .Kind "evento"}}<span>{{.When}}</span>{{end}}{{else if .Start}}{{if ne (.Start.Format "2006-01-02") $d.Date}}<span>{{.When}}</span>{{end}}{{end}}
+              {{if .Location}}<span class="loc">{{.Location}}</span>{{if .Route}}<a class="go" href="{{.Route}}" target="_blank" rel="noopener">Cómo llegar</a>{{end}}{{end}}
+              {{with .Repeat}}<span class="rep"><span aria-hidden="true">↻</span> {{.}}</span>{{end}}
+              {{if .Alarms}}<span class="alarm">Con aviso</span>{{end}}
+            </p>
+          </div>
+          {{if eq .Kind "tarea"}}
+          <form class="tickform" method="post" action="{{$.Base}}/tareas/{{.ID}}/hecha">
+            <input type="hidden" name="hecha" value="{{if .Done}}0{{else}}1{{end}}">
+            <input type="hidden" name="volver" value="/">
+            <button class="tick{{if .Done}} on{{end}}" aria-label="{{if .Done}}Marcar «{{.Title}}» como pendiente{{else}}Marcar «{{.Title}}» como hecha{{end}}" title="{{if .Done}}Desmarcar{{else}}Hecha{{end}}"></button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
+    </section>
+    {{end}}
+    <nav class="pager end" aria-label="Más días">
+      <a class="btn" href="{{.Base}}/?desde={{.Next}}">Siguientes 14 días →</a>
+    </nav>
+  </div>
+
+  <aside class="side" aria-label="Pendiente y correo">
+    <section class="card" id="pendiente" aria-labelledby="pend-h">
+      <header class="card-head"><h2 id="pend-h">Pendiente</h2><span class="count">{{len .Tasks}}</span></header>
+      {{with .Tasks}}
+      <ul class="tasks">
+        {{range .}}
+        <li class="task{{if .Overdue}} overdue{{end}}">
+          <a class="task-main" href="{{$.Base}}/evento/{{.ID}}">
+            <span class="title">{{.Title}}</span>
+            <span class="meta">{{if .Overdue}}<span class="tag danger">Vencida</span>{{end}}{{with .When}}<span>{{.}}</span>{{else}}<span>Sin fecha</span>{{end}}</span>
+          </a>
+          <form method="post" action="{{$.Base}}/tareas/{{.ID}}/hecha">
+            <input type="hidden" name="hecha" value="1">
+            <input type="hidden" name="volver" value="/">
+            <button class="btn small done-btn" aria-label="Marcar «{{.Title}}» como hecha"><span aria-hidden="true">✓</span> Hecha</button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="quiet">Nada vencido ni sin fecha. Todo en orden.</p>
+      {{end}}
+      <a class="more" href="{{.Base}}/tareas">Todas las tareas <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section class="card" id="sin-leer" aria-labelledby="mail-h">
+      <header class="card-head"><h2 id="mail-h">Correo sin leer</h2><span class="count">{{.Unread}}</span></header>
+      {{with .Mails}}
+      <ul class="minimail">
+        {{range .}}
+        <li><a href="{{$.Base}}/correo/{{.ID}}">
+          <span class="from">{{if .FromName}}{{.FromName}}{{else}}{{.FromAddr}}{{end}}</span>
+          <span class="ago">{{ago .Date}}</span>
+          <span class="subj">{{with .Subject}}{{.}}{{else}}(sin asunto){{end}}</span>
+        </a></li>
+        {{end}}
+      </ul>
+      {{if gt $.Unread (len .)}}<p class="quiet">{{$.Unread}} sin leer en total esta semana.</p>{{end}}
+      {{else}}
+      <p class="quiet">Nada sin leer en los últimos siete días.</p>
+      {{end}}
+      <a class="more" href="{{.Base}}/correo?no_leidos=1">Ir al correo <span aria-hidden="true">→</span></a>
+    </section>
+  </aside>
+</div>
+{{template "foot" .}}{{end}}

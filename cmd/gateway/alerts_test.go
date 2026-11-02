@@ -382,3 +382,54 @@ func TestSyncAssistantToken(t *testing.T) {
 		t.Fatal("el token viejo sigue valiendo")
 	}
 }
+
+func TestAgendaAlert(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	bot := &fakeBot{}
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m tgMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		bot.mu.Lock()
+		bot.sent = append(bot.sent, m)
+		bot.mu.Unlock()
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+	g.alerts.telegramAPI = tg.URL
+	writeEnvFile(g.assistantPath("claves.env"), map[string]string{"TELEGRAM_TOKEN": "123:abc", "TELEGRAM_USER_ID": "42"})
+	g.alerts.phone = func(context.Context) phoneStatus { return phoneStatus{} }
+	calls := 0
+	agenda := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/avisos" || r.Header.Get("X-Auth-User") != "ana" {
+			http.NotFound(w, r)
+			return
+		}
+		calls++
+		if calls > 1 {
+			w.Write([]byte(`[]`))
+			return
+		}
+		w.Write([]byte(`[{"tipo":"recordatorio","texto":"Recordatorio: Dentista"},{"tipo":"resumen","texto":"Buenos días. Tu día."}]`))
+	}))
+	defer agenda.Close()
+	g.apps = map[string]appSpec{"agenda": {Name: "agenda", Port: portOf(t, agenda)}}
+	g.users.create("ana", "Ana", []string{"agenda"}, "usuario")
+	c := defaultAlerts()
+	c.User, c.PublicURL, c.QuietFrom, c.QuietTo = "ana", "https://srv.example", "", ""
+	c.Apps.On, c.News.On = false, false
+	g.alerts.saveConfig(c)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, madrid)
+	g.checkAlerts(ctx, now)
+	got := bot.take()
+	if len(got) != 2 || got[0].Text != "Recordatorio: Dentista" || !strings.HasSuffix(got[1].Text, "Tu agenda: https://srv.example/agenda/") {
+		t.Fatalf("agenda: %+v", got)
+	}
+	c.Agenda.On = false
+	g.alerts.saveConfig(c)
+	g.checkAlerts(ctx, now.Add(time.Minute))
+	if calls != 1 {
+		t.Fatalf("con los avisos de la agenda apagados se sigue preguntando: %d", calls)
+	}
+}

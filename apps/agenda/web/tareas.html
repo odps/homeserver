@@ -1,0 +1,60 @@
+{{define "tareas.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Tareas</p>
+  <h1 class="date">Pendientes</h1>
+  <div class="hero-meta">
+    <span>{{with .Tasks}}{{len .}} por hacer{{else}}Ninguna por hacer{{end}}</span>
+    <span>Las que tienen fecha salen también en la agenda</span>
+  </div>
+</section>
+
+<div class="toolbar">
+  <div class="quick"><a class="btn primary" href="{{.Base}}/evento/nuevo?tipo=tarea"><span aria-hidden="true">+</span> Nueva tarea</a></div>
+</div>
+
+{{with .Tasks}}
+<section class="group" aria-labelledby="g1">
+  <h2 class="label danger" id="g1">Vencidas</h2>
+  <ul class="list">{{range .}}{{if .Overdue}}
+    <li class="row task overdue">
+      <a class="row-main" href="{{$.Base}}/evento/{{.ID}}">
+        <span class="title">{{.Title}}</span>
+        <span class="meta"><span class="tag danger">Vencida</span><span>{{.When}}</span>{{with .Repeat}}<span><span aria-hidden="true">↻</span> {{.}}</span>{{end}}</span>
+        {{with .Notes}}<span class="notes">{{.}}</span>{{end}}
+      </a>
+      <form method="post" action="{{$.Base}}/tareas/{{.ID}}/hecha"><input type="hidden" name="hecha" value="1"><button class="btn small done-btn" aria-label="Marcar «{{.Title}}» como hecha"><span aria-hidden="true">✓</span> Hecha</button></form>
+    </li>{{end}}{{end}}
+  </ul>
+</section>
+<section class="group" aria-labelledby="g2">
+  <h2 class="label" id="g2">Con fecha</h2>
+  <ul class="list">{{range .}}{{if and .Start (not .Overdue)}}
+    <li class="row task">
+      <a class="row-main" href="{{$.Base}}/evento/{{.ID}}">
+        <span class="title">{{.Title}}</span>
+        <span class="meta"><span>{{.When}}</span>{{with .Repeat}}<span><span aria-hidden="true">↻</span> {{.}}</span>{{end}}{{if .Alarms}}<span>Con aviso</span>{{end}}</span>
+        {{with .Notes}}<span class="notes">{{.}}</span>{{end}}
+      </a>
+      <form method="post" action="{{$.Base}}/tareas/{{.ID}}/hecha"><input type="hidden" name="hecha" value="1"><button class="btn small done-btn" aria-label="Marcar «{{.Title}}» como hecha"><span aria-hidden="true">✓</span> Hecha</button></form>
+    </li>{{end}}{{end}}
+  </ul>
+</section>
+<section class="group" aria-labelledby="g3">
+  <h2 class="label" id="g3">Sin fecha</h2>
+  <ul class="list">{{range .}}{{if and (not .Start) (not .Overdue)}}
+    <li class="row task">
+      <a class="row-main" href="{{$.Base}}/evento/{{.ID}}">
+        <span class="title">{{.Title}}</span>
+        {{with .Notes}}<span class="notes">{{.}}</span>{{end}}
+      </a>
+      <form method="post" action="{{$.Base}}/tareas/{{.ID}}/hecha"><input type="hidden" name="hecha" value="1"><button class="btn small done-btn" aria-label="Marcar «{{.Title}}» como hecha"><span aria-hidden="true">✓</span> Hecha</button></form>
+    </li>{{end}}{{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Nada pendiente.</p>
+  <p>Añade una tarea aquí o pídesela al asistente por Telegram: «Recuérdame llamar a Juan el lunes a las 10».</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

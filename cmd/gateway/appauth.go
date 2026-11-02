@@ -66,6 +66,20 @@ func (g *gateway) appAuth(next http.Handler) http.Handler {
 			g.appDenied(w, r, app)
 			return
 		}
+		if user, tok, ok := r.BasicAuth(); ok {
+			// Clientes CalDAV/CardDAV (el calendario del móvil), que solo
+			// saben de usuario y contraseña: el usuario y un token de la app
+			// creado en su nombre.
+			name, entry, valid := g.tokens.check(tok, app, now)
+			if u, okUser := g.users.get(entry.User); valid && entry.User != "" && strings.EqualFold(user, entry.User) && okUser && u.allows(app) {
+				setAuthHeaders(r, entry.User, u.Name, u.Role)
+				next.ServeHTTP(w, r)
+				return
+			}
+			g.audit.add("token_rechazado", clientIP(r), map[string]string{"app": app, "token": name, "usuario": user})
+			g.appDenied(w, r, app)
+			return
+		}
 		if c, err := r.Cookie(appCookie); err == nil {
 			if sess, ok := g.appSessions.get(c.Value, clientIP(r), now); ok {
 				if u, ok := g.users.get(sess.User); ok && u.allows(app) {
@@ -128,6 +142,10 @@ func (g *gateway) appDenied(w http.ResponseWriter, r *http.Request, app string) 
 		return
 	}
 	w.Header().Set("WWW-Authenticate", `Bearer realm="homeserver"`)
+	if strings.HasPrefix(r.URL.Path, "/"+app+"/dav/") || r.URL.Path == "/"+app+"/dav" {
+		// CalDAV/CardDAV: el cliente pide usuario y contraseña (el token).
+		w.Header().Add("WWW-Authenticate", `Basic realm="homeserver `+app+`", charset="UTF-8"`)
+	}
 	http.Error(w, "no autorizado", http.StatusUnauthorized)
 }
 

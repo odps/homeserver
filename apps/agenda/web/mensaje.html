@@ -1,0 +1,34 @@
+{{define "mensaje.html"}}{{template "head" .}}
+{{$m := .Mail}}
+<p class="back"><a href="{{.Base}}/correo"><span aria-hidden="true">←</span> Correo</a></p>
+<article class="msg" aria-labelledby="msg-h">
+  <header class="msg-head">
+    <h1 id="msg-h">{{with $m.Subject}}{{.}}{{else}}(sin asunto){{end}}</h1>
+    <dl class="msg-meta">
+      <div><dt>De</dt><dd>{{with $m.FromName}}<strong>{{.}}</strong> {{end}}<a href="mailto:{{$m.FromAddr}}">{{$m.FromAddr}}</a></dd></div>
+      {{with $m.To}}<div><dt>Para</dt><dd>{{.}}</dd></div>{{end}}
+      {{with $m.Cc}}<div><dt>Cc</dt><dd>{{.}}</dd></div>{{end}}
+      {{if not $m.Date.IsZero}}<div><dt>Fecha</dt><dd>{{longDate $m.Date}}, {{clock $m.Date}} <span class="quiet">· {{ago $m.Date}}</span></dd></div>{{end}}
+      {{with $m.Account}}<div><dt>Cuenta</dt><dd>{{.}}</dd></div>{{end}}
+    </dl>
+    {{with $m.Attachments}}
+    <div class="attach">
+      <h2 class="label">{{len .}} adjunto{{if gt (len .) 1}}s{{end}}</h2>
+      <ul>{{range .}}<li>{{.}}</li>{{end}}</ul>
+      <p class="help">Ábrelos desde tu programa de correo.</p>
+    </div>
+    {{end}}
+  </header>
+  {{with $m.Body}}<pre class="mail-body">{{.}}</pre>{{else}}<p class="quiet mail-body">Este mensaje no tiene texto.</p>{{end}}
+</article>
+
+{{if $m.ID}}
+<form class="panel reply" method="post" action="{{.Base}}/correo/{{$m.ID}}/borrador">
+  <header class="panel-head"><h2>Responder</h2></header>
+  <label class="field">Tu respuesta a {{if $m.FromName}}{{$m.FromName}}{{else}}{{$m.FromAddr}}{{end}}
+    <textarea name="texto" rows="8" required>{{.Query}}</textarea></label>
+  <p class="help">Se guarda en la carpeta de borradores de {{with $m.Account}}{{.}}{{else}}tu buzón{{end}}. No se envía nada automáticamente: revísalo y envíalo tú desde tu correo.</p>
+  <div class="actions"><button class="btn primary">Guardar borrador de respuesta</button></div>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

@@ -1,0 +1,167 @@
+{{define "ajustes.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Ajustes</p>
+  <h1 class="date">Tu agenda</h1>
+  <div class="hero-meta"><span>Avisos, correo y conexión con el móvil</span></div>
+</section>
+
+<nav class="toc" aria-label="Partes de los ajustes">
+  <a href="#resumen">Resumen y avisos</a><a href="#correo">Correo</a><a href="#movil">En el móvil</a><a href="#asistente">Con el asistente</a>
+</nav>
+
+<form id="resumen" class="panel" method="post" action="{{.Base}}/ajustes">
+  <header class="panel-head"><h2>Resumen y avisos</h2>
+    <p>Llegan por Telegram a través del bot del homeserver. Para recibirlos, los avisos de la agenda tienen que estar activados también en el panel del homeserver.</p></header>
+  <label class="switch"><input type="checkbox" name="resumen" value="1"{{if .Prefs.SummaryOn}} checked{{end}}><span class="switch-name">Resumen de la mañana por Telegram</span><span class="meta">Eventos y tareas del día, y el correo</span></label>
+  <label class="switch"><input type="checkbox" name="resumen_ia" value="1"{{if .Prefs.SummaryAI}} checked{{end}}><span class="switch-name">Con lo importante del correo resumido por la IA</span><span class="meta">Si no, solo remitentes y asuntos</span></label>
+  <label class="switch"><input type="checkbox" name="avisos" value="1"{{if .Prefs.RemindersOn}} checked{{end}}><span class="switch-name">Avisos de eventos y tareas por Telegram</span><span class="meta">Con la antelación de cada uno</span></label>
+  <div class="pair">
+    <label class="field">Hora del resumen
+      <input type="time" name="resumen_hora" value="{{.Prefs.SummaryAt}}"></label>
+    <label class="field">Aviso por defecto al crear un evento
+      <select name="aviso_min">
+        <option value="0"{{if eq .Prefs.DefaultMin 0}} selected{{end}}>Sin aviso</option>
+        <option value="5"{{if eq .Prefs.DefaultMin 5}} selected{{end}}>5 minutos antes</option>
+        <option value="10"{{if eq .Prefs.DefaultMin 10}} selected{{end}}>10 minutos antes</option>
+        <option value="15"{{if eq .Prefs.DefaultMin 15}} selected{{end}}>15 minutos antes</option>
+        <option value="30"{{if eq .Prefs.DefaultMin 30}} selected{{end}}>30 minutos antes</option>
+        <option value="60"{{if eq .Prefs.DefaultMin 60}} selected{{end}}>1 hora antes</option>
+        <option value="120"{{if eq .Prefs.DefaultMin 120}} selected{{end}}>2 horas antes</option>
+        <option value="1440"{{if eq .Prefs.DefaultMin 1440}} selected{{end}}>1 día antes</option>
+        {{if not (eq .Prefs.DefaultMin 0 5 10 15 30 60 120 1440)}}<option value="{{.Prefs.DefaultMin}}" selected>{{.Prefs.DefaultMin}} minutos antes</option>{{end}}
+      </select></label>
+  </div>
+  <label class="field">Tu dirección (origen de las rutas) <span class="help">Para los enlaces «Cómo llegar». Vacía: Google Maps usa dónde estés.</span>
+    <input name="casa" value="{{.Prefs.Home}}" autocomplete="street-address" placeholder="p. ej. Calle Mayor 3, Madrid"></label>
+  <div class="actions"><button class="btn primary">Guardar</button></div>
+</form>
+
+<section id="correo" class="panel" aria-labelledby="correo-h">
+  <header class="panel-head"><h2 id="correo-h">Correo</h2>
+    <p>Se lee por IMAP. El asistente puede buscar y resumir, y deja las respuestas como borrador en tu buzón: nunca envía.</p></header>
+
+  {{with .Flow}}
+  <div class="flow{{if .Done}} ok{{else if .Err}} bad{{end}}" role="status">
+    {{if .Done}}
+    <p class="flow-title">Outlook conectado</p>
+    <p>{{.Address}} ya está enlazada. El correo llegará en unos minutos.</p>
+    {{else if .Err}}
+    <p class="flow-title">No se pudo conectar Outlook</p>
+    <p>{{.Err}}</p>
+    <p class="help">Revisa los pasos de abajo y vuelve a pulsar «Conectar Outlook».</p>
+    {{else}}
+    <p class="flow-title">Abre esta página, inicia sesión y escribe el código</p>
+    <p class="code-big"><code>{{.UserCode}}</code></p>
+    <p><a class="btn primary" href="{{.URI}}" target="_blank" rel="noopener">Abrir {{.URI}}</a></p>
+    <p class="help">Esta página se actualiza sola cada pocos segundos hasta que termines.</p>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{with .Accounts}}
+  <ul class="accounts">
+    {{range .}}
+    <li class="account">
+      <div class="account-main">
+        <p class="addr"><strong>{{.Address}}</strong> <span class="tag">{{if eq .Kind "gmail"}}Gmail{{else if eq .Kind "outlook"}}Outlook{{else}}IMAP{{end}}</span></p>
+        <p class="meta">{{if .Error}}<span class="danger">Error: {{.Error}}</span>{{else if .Synced}}<span>Sincronizado {{.Synced}}</span>{{else}}<span>Pendiente de la primera sincronización</span>{{end}}{{with .Drafts}}<span>Borradores en «{{.}}»</span>{{end}}</p>
+      </div>
+      <form method="post" action="{{$.Base}}/cuentas/{{.ID}}/borrar"><button class="btn small ghost" aria-label="Desconectar {{.Address}}">Desconectar</button></form>
+    </li>
+    {{end}}
+  </ul>
+  <p class="help">Desconectar solo borra la copia que hay aquí; tu buzón no se toca.</p>
+  {{else}}
+  <p class="quiet">Aún no hay ninguna cuenta conectada.</p>
+  {{end}}
+
+  <form class="sub" method="post" action="{{.Base}}/cuentas">
+    <h3 class="label">Añadir Gmail</h3>
+    <ol class="steps">
+      <li>Activa la verificación en dos pasos de tu cuenta de Google.</li>
+      <li>Crea una contraseña de aplicación en <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a> (llámala, por ejemplo, «Agenda»).</li>
+      <li>Pégala aquí; los espacios dan igual.</li>
+    </ol>
+    <input type="hidden" name="tipo" value="gmail">
+    <div class="pair">
+      <label class="field">Dirección de Gmail
+        <input type="email" name="direccion" required autocomplete="email" placeholder="tu@gmail.com" spellcheck="false"></label>
+      <label class="field">Contraseña de aplicación
+        <input type="password" name="clave" required autocomplete="off" placeholder="xxxx xxxx xxxx xxxx"></label>
+    </div>
+    <div class="actions"><button class="btn primary">Conectar Gmail</button></div>
+  </form>
+
+  <details class="topic"{{if .Flow}} open{{end}}>
+    <summary><span class="topic-name">Outlook o Hotmail</span><span class="meta">Con una app de Azure</span><span class="chev" aria-hidden="true"></span></summary>
+    <div class="topic-body">
+      <ol class="steps">
+        <li>En <a href="https://portal.azure.com" target="_blank" rel="noopener">portal.azure.com</a> → «App registrations» → «New registration».</li>
+        <li>En los tipos de cuenta, elige uno que incluya las cuentas personales de Microsoft. No pongas «Redirect URI».</li>
+        <li>En «Authentication», activa «Allow public client flows» y guarda.</li>
+        <li>Copia el «Application (client) ID» aquí abajo.</li>
+        <li>Pulsa «Conectar Outlook» y sigue el código que aparecerá.</li>
+      </ol>
+      <form method="post" action="{{.Base}}/cuentas/outlook">
+        <label class="field">ID de la aplicación (client ID)
+          <input name="app_id" value="{{.Prefs.OutlookApp}}" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000"></label>
+        <div class="actions"><button class="btn primary">Conectar Outlook</button></div>
+      </form>
+    </div>
+  </details>
+
+  <details class="topic">
+    <summary><span class="topic-name">Otro correo (IMAP)</span><span class="meta">iCloud, Yahoo, tu dominio…</span><span class="chev" aria-hidden="true"></span></summary>
+    <form class="topic-body" method="post" action="{{.Base}}/cuentas">
+      <input type="hidden" name="tipo" value="imap">
+      <div class="pair">
+        <label class="field">Dirección
+          <input type="email" name="direccion" required autocomplete="email" spellcheck="false"></label>
+        <label class="field">Usuario <span class="help">si no es la dirección</span>
+          <input name="usuario" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <label class="field">Contraseña <span class="help">mejor una de aplicación</span>
+        <input type="password" name="clave" required autocomplete="off"></label>
+      <div class="pair wide-first">
+        <label class="field">Servidor IMAP
+          <input name="servidor" required autocomplete="off" spellcheck="false" placeholder="imap.ejemplo.com"></label>
+        <label class="field">Puerto
+          <input type="number" name="puerto" value="993" min="1" max="65535" inputmode="numeric"></label>
+      </div>
+      <div class="actions"><button class="btn primary">Conectar</button></div>
+    </form>
+  </details>
+</section>
+
+<section id="movil" class="panel" aria-labelledby="movil-h">
+  <header class="panel-head"><h2 id="movil-h">Calendario y contactos en el móvil</h2>
+    <p>Por CalDAV y CardDAV: lo que cambies en el móvil aparece aquí, y al revés.</p></header>
+  <h3 class="label">Android, con DAVx⁵</h3>
+  <ol class="steps">
+    <li>Instala DAVx⁵: gratis en F-Droid o unos 5 € en Google Play.</li>
+    <li>En el panel del homeserver, crea un token en Seguridad → Tokens: nombre, por ejemplo, «movil-agenda»; «en nombre de» tu usuario; app «agenda»; sin caducidad. Será la contraseña.</li>
+    <li>En DAVx⁵, añade una cuenta «con URL y nombre de usuario»:
+      <dl class="creds">
+        <div><dt>URL</dt><dd><code class="copy">{{.DAVURL}}</code></dd></div>
+        <div><dt>Usuario</dt><dd><code class="copy">{{.User}}</code></dd></div>
+        <div><dt>Contraseña</dt><dd>el token que acabas de crear</dd></div>
+      </dl></li>
+    <li>DAVx⁵ encontrará el calendario «Personal» (eventos y tareas) y la libreta «Contactos»: márcalos. Para ver las tareas en el móvil, instala jtx Board o Tasks.org.</li>
+  </ol>
+  <h3 class="label">iPhone</h3>
+  <p class="plain">Ajustes → Calendario → Cuentas → Añadir cuenta → Otra → Añadir cuenta CalDAV (y otra CardDAV para los contactos), con la misma URL, usuario y token.</p>
+</section>
+
+<section id="asistente" class="panel" aria-labelledby="asis-h">
+  <header class="panel-head"><h2 id="asis-h">Con el asistente</h2>
+    <p>Lo más rápido es pedírselo por Telegram, con tus palabras. Por ejemplo:</p></header>
+  <ul class="asks">
+    <li>¿Qué tengo mañana?</li>
+    <li>Apunta dentista el jueves a las 17:30 en Calle Mayor 3</li>
+    <li>Recuérdame llamar a Juan el lunes a las 10</li>
+    <li>¿Tengo algún correo de la gestoría?</li>
+    <li>Prepara un borrador respondiendo a…</li>
+  </ul>
+  <p class="help">Los borradores quedan en tu buzón para que los revises: el asistente nunca envía correo.</p>
+</section>
+{{template "foot" .}}{{end}}

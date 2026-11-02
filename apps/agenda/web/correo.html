@@ -1,0 +1,62 @@
+{{define "correo.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Correo</p>
+  <h1 class="date">{{if .Query}}«{{.Query}}»{{else if .UnreadOnly}}Sin leer{{else}}Bandeja{{end}}</h1>
+  <div class="hero-meta">
+    {{if .Accounts}}<span>{{len .Mails}} mensaje{{if ne (len .Mails) 1}}s{{end}}</span>{{end}}
+    <span>Solo lectura: el asistente deja borradores, nunca envía</span>
+  </div>
+</section>
+
+{{if not .Accounts}}
+<section class="empty">
+  <p class="big">Conecta tu correo.</p>
+  <p>Gmail, Outlook o cualquier buzón IMAP. Se lee aquí y con el asistente («¿Tengo algún correo de la gestoría?»); las respuestas quedan como borrador en tu buzón.</p>
+  <p><a class="btn primary" href="{{.Base}}/ajustes#correo">Conectar una cuenta</a></p>
+</section>
+{{else}}
+<div class="toolbar">
+  <form class="search" role="search" method="get" action="{{.Base}}/correo">
+    <label class="vh" for="q">Buscar en el correo</label>
+    <input id="q" type="search" name="q" value="{{.Query}}" placeholder="Remitente, asunto o texto" autocomplete="off">
+    <label class="chk"><input type="checkbox" name="no_leidos" value="1"{{if .UnreadOnly}} checked{{end}}> Sin leer</label>
+    <button class="btn">Buscar</button>
+  </form>
+  <form class="quick" method="post" action="{{.Base}}/correo/sincronizar">
+    {{if or .Query .UnreadOnly}}<a class="btn ghost" href="{{.Base}}/correo">Todo</a>{{end}}
+    <button class="btn">Comprobar ahora</button>
+  </form>
+</div>
+
+<ul class="accts" aria-label="Estado de las cuentas">
+  {{range .Accounts}}
+  <li{{if .Error}} class="bad"{{end}}><span class="addr">{{.Address}}</span>
+    {{if .Error}}<span class="danger">Error: {{.Error}}</span>{{else if .Synced}}<span>Al día {{.Synced}}</span>{{else}}<span>Primera sincronización en curso</span>{{end}}</li>
+  {{end}}
+</ul>
+
+{{with .Mails}}
+<ul class="list mails">
+  {{range .}}
+  <li class="mail{{if not .Seen}} unread{{end}}"><a href="{{$.Base}}/correo/{{.ID}}">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="from">{{if not .Seen}}<span class="vh">Sin leer. </span>{{end}}{{if .FromName}}{{.FromName}}{{else}}{{.FromAddr}}{{end}}</span>
+    <span class="ago">{{ago .Date}}</span>
+    <span class="subj">{{with .Subject}}{{.}}{{else}}(sin asunto){{end}}</span>
+    <span class="info">{{if .Flagged}}<span class="tag accent">★ Destacado</span>{{end}}{{with .Attachments}}<span class="tag">{{len .}} adjunto{{if gt (len .) 1}}s{{end}}</span>{{end}}<span class="acct">{{.Account}}</span></span>
+  </a></li>
+  {{end}}
+</ul>
+{{else}}
+<section class="empty">
+  {{if or .Query .UnreadOnly}}
+  <p class="big">Nada por aquí.</p>
+  <p>No hay mensajes {{if .UnreadOnly}}sin leer {{end}}{{with .Query}}que coincidan con «{{.}}»{{end}}. <a href="{{.Base}}/correo">Ver todo el correo</a>.</p>
+  {{else}}
+  <p class="big">Aún no ha llegado nada.</p>
+  <p>La primera sincronización puede tardar unos minutos. Pulsa «Comprobar ahora» para forzarla.</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{template "foot" .}}{{end}}

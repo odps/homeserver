@@ -1,0 +1,44 @@
+{{define "contactos.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Contactos</p>
+  <h1 class="date">{{if .Query}}«{{.Query}}»{{else}}Personas{{end}}</h1>
+  <div class="hero-meta">
+    <span>{{len .Contacts}} {{if .Query}}resultado{{if ne (len .Contacts) 1}}s{{end}}{{else}}contacto{{if ne (len .Contacts) 1}}s{{end}}{{end}}</span>
+    <span>Sincronizados con el móvil</span>
+  </div>
+</section>
+
+<div class="toolbar">
+  <form class="search" role="search" method="get" action="{{.Base}}/contactos">
+    <label class="vh" for="q">Buscar contactos</label>
+    <input id="q" type="search" name="q" value="{{.Query}}" placeholder="Nombre, empresa, correo o teléfono" autocomplete="off">
+    <button class="btn">Buscar</button>
+  </form>
+  <div class="quick">
+    {{if .Query}}<a class="btn ghost" href="{{.Base}}/contactos">Ver todos</a>{{end}}
+    <a class="btn primary" href="{{.Base}}/contactos/nuevo"><span aria-hidden="true">+</span> Nuevo contacto</a>
+  </div>
+</div>
+
+{{with .Contacts}}
+<ul class="list people">
+  {{range .}}
+  <li class="row"><a class="row-main" href="{{$.Base}}/contactos/{{.ID}}">
+    <span class="title">{{.Name}}</span>
+    <span class="meta">{{if .Org}}<span>{{.Org}}{{with .Role}} · {{.}}{{end}}</span>{{else}}{{with .Role}}<span>{{.}}</span>{{end}}{{end}}{{with .Emails}}<span class="mono-ish">{{(index . 0).Value}}</span>{{end}}{{with .Phones}}<span class="tnum">{{(index . 0).Value}}</span>{{end}}</span>
+    <span class="arrow" aria-hidden="true">→</span>
+  </a></li>
+  {{end}}
+</ul>
+{{else}}
+<section class="empty">
+  {{if .Query}}
+  <p class="big">Nadie coincide con «{{.Query}}».</p>
+  <p>Prueba con otra parte del nombre, la empresa, el correo o el teléfono, o <a href="{{.Base}}/contactos">mira todos</a>.</p>
+  {{else}}
+  <p class="big">Aún no hay contactos.</p>
+  <p>Si los tienes en el móvil, sincronízalos con DAVx⁵ y aparecerán aquí solos: mira cómo en <a href="{{.Base}}/ajustes#movil">Ajustes</a>. También puedes crear uno o pedírselo al asistente.</p>
+  {{end}}
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

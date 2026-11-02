@@ -1,0 +1,101 @@
+{{define "contacto.html"}}{{template "head" .}}
+{{$c := .Contact}}
+{{if not $c.ID}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/contactos">Contactos</a></p>
+  <h1 class="date">Nuevo contacto</h1>
+  <div class="hero-meta"><span>Aparecerá también en el móvil</span></div>
+</section>
+<div class="panel form">{{template "contact-form" .}}</div>
+{{else}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/contactos">Contactos</a></p>
+  <h1 class="date">{{$c.Name}}</h1>
+  {{if or $c.Org $c.Role}}<div class="hero-meta">{{with $c.Role}}<span>{{.}}</span>{{end}}{{with $c.Org}}<span>{{.}}</span>{{end}}</div>{{end}}
+</section>
+
+{{if or $c.Phones $c.Emails}}
+<div class="toolbar">
+  <div class="quick">
+    {{with $c.Phones}}<a class="btn primary" href="tel:{{(index . 0).Value}}">Llamar</a>{{end}}
+    {{with $c.Emails}}<a class="btn" href="mailto:{{(index . 0).Value}}">Escribir</a>{{end}}
+  </div>
+</div>
+{{end}}
+
+<div class="split">
+  <section class="card sheet" aria-label="Datos de {{$c.Name}}">
+    <dl class="facts">
+      {{with $c.Emails}}<div><dt>Correo</dt><dd><ul>{{range .}}<li><a href="mailto:{{.Value}}">{{.Value}}</a>{{with .Label}} <span class="lbl">{{.}}</span>{{end}}</li>{{end}}</ul></dd></div>{{end}}
+      {{with $c.Phones}}<div><dt>Teléfono</dt><dd><ul>{{range .}}<li><a class="tnum" href="tel:{{.Value}}">{{.Value}}</a>{{with .Label}} <span class="lbl">{{.}}</span>{{end}}</li>{{end}}</ul></dd></div>{{end}}
+      {{with $c.Addresses}}<div><dt>Dirección</dt><dd><ul>{{range .}}<li><span class="addr">{{.Value}}</span>{{with .Label}} <span class="lbl">{{.}}</span>{{end}}{{with .Maps}} <a class="go" href="{{.}}" target="_blank" rel="noopener">Ver en el mapa</a>{{end}}</li>{{end}}</ul></dd></div>{{end}}
+      {{with $c.Birthday}}<div><dt>Cumpleaños</dt><dd class="tnum">{{.}}</dd></div>{{end}}
+      {{with $c.Notes}}<div><dt>Notas</dt><dd class="notes-full">{{.}}</dd></div>{{end}}
+      {{if not (or $c.Emails $c.Phones $c.Addresses $c.Birthday $c.Notes)}}<div><dt>Datos</dt><dd class="quiet">Solo el nombre. Añade algo más en «Editar».</dd></div>{{end}}
+    </dl>
+  </section>
+
+  <aside class="side">
+    <section class="card" aria-labelledby="mails-h">
+      <header class="card-head"><h2 id="mails-h">Últimos correos</h2><span class="count">{{len .Mails}}</span></header>
+      {{with .Mails}}
+      <ul class="minimail">
+        {{range .}}
+        <li><a href="{{$.Base}}/correo/{{.ID}}"{{if not .Seen}} class="unread"{{end}}>
+          <span class="from">{{with .Subject}}{{.}}{{else}}(sin asunto){{end}}</span>
+          <span class="ago">{{ago .Date}}</span>
+          <span class="subj">{{.Account}}</span>
+        </a></li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="quiet">{{if $c.Emails}}No hay correos recientes de esta persona.{{else}}Sin dirección de correo, no se buscan sus mensajes.{{end}}</p>
+      {{end}}
+    </section>
+  </aside>
+</div>
+
+<details class="topic edit"{{if .Error}} open{{end}}>
+  <summary><span class="topic-name">Editar</span><span class="meta">Nombre, correos, teléfonos, direcciones…</span><span class="chev" aria-hidden="true"></span></summary>
+  <div class="topic-body">
+    {{template "contact-form" .}}
+    <form class="dangerzone" method="post" action="{{.Base}}/contactos/{{$c.ID}}/borrar">
+      <p>Borrar a {{$c.Name}} de tus contactos, también en el móvil.</p>
+      <button class="btn danger">Borrar contacto</button>
+    </form>
+  </div>
+</details>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "contact-form"}}{{$c := .Contact}}
+<form method="post" action="{{if $c.ID}}{{.Base}}/contactos/{{$c.ID}}{{else}}{{.Base}}/contactos{{end}}">
+  <label class="field">Nombre
+    <input name="nombre" value="{{$c.Name}}" required maxlength="200" autocomplete="off"{{if not $c.ID}} autofocus{{end}}></label>
+  <div class="pair">
+    <label class="field">Empresa <span class="help">opcional</span>
+      <input name="empresa" value="{{$c.Org}}" autocomplete="off"></label>
+    <label class="field">Cargo <span class="help">opcional</span>
+      <input name="cargo" value="{{$c.Role}}" autocomplete="off"></label>
+  </div>
+  <div class="pair">
+    <label class="field">Correos <span class="help">uno por línea</span>
+      <textarea name="correos" rows="3" spellcheck="false" autocapitalize="off">{{range $c.Emails}}{{.Value}}
+{{end}}</textarea></label>
+    <label class="field">Teléfonos <span class="help">uno por línea</span>
+      <textarea name="telefonos" rows="3" spellcheck="false">{{range $c.Phones}}{{.Value}}
+{{end}}</textarea></label>
+  </div>
+  <label class="field">Direcciones <span class="help">una por línea</span>
+    <textarea name="direcciones" rows="3">{{range $c.Addresses}}{{.Value}}
+{{end}}</textarea></label>
+  <label class="field">Cumpleaños <span class="help">con o sin año</span>
+    <input name="cumpleanos" value="{{$c.Birthday}}" placeholder="1990-05-17 o --05-17" autocomplete="off" spellcheck="false"></label>
+  <label class="field">Notas
+    <textarea name="notas" rows="3">{{$c.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn primary">{{if $c.ID}}Guardar cambios{{else}}Crear contacto{{end}}</button>
+    <a class="btn ghost" href="{{if $c.ID}}{{.Base}}/contactos/{{$c.ID}}{{else}}{{.Base}}/contactos{{end}}">Cancelar</a>
+  </div>
+</form>
+{{end}}

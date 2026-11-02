@@ -630,3 +630,36 @@ func TestAssistantConfig(t *testing.T) {
 		t.Fatal("el token del asistente sigue valiendo")
 	}
 }
+
+// Los clientes CalDAV/CardDAV entran con Basic: el usuario y un token de la
+// app creado en su nombre.
+func TestDAVBasicAuth(t *testing.T) {
+	h := newHarness(t)
+	h.g.users.create("ana", "Ana", []string{"hola"}, "usuario")
+	tok, err := h.g.tokens.create("movil", "ana", []string{"hola"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, _ := h.g.tokens.create("servicio", "", []string{"hola"}, 0)
+	do := func(user, pass string) *http.Response {
+		req, _ := http.NewRequest("PROPFIND", h.gw.URL+"/hola/dav/ana/", nil)
+		if user != "" {
+			req.SetBasicAuth(user, pass)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	if got := body(t, do("ana", tok)); !strings.Contains(got, "app:/dav/ana/ user:ana role:usuario") || !strings.HasSuffix(got, "auth:") {
+		t.Fatalf("con token: %q", got)
+	}
+	for _, c := range []struct{ user, pass string }{{"eva", tok}, {"ana", "malo"}, {"servicio", service}, {"", ""}} {
+		resp := do(c.user, c.pass)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized || !strings.Contains(strings.Join(resp.Header.Values("WWW-Authenticate"), " "), "Basic") {
+			t.Fatalf("%s/%s: %d %v", c.user, c.pass, resp.StatusCode, resp.Header.Values("WWW-Authenticate"))
+		}
+	}
+}
