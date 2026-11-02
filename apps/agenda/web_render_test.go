@@ -69,6 +69,14 @@ func TestRenderPages(t *testing.T) {
 		Addresses: []labeled{{Label: "trabajo", Value: "Calle Mayor 3, 28013 Madrid", Maps: "https://www.google.com/maps/search/?api=1&query=Calle+Mayor+3"}, {Label: "casa", Value: "Avenida de la Constitución 145, 4.º B, 41001 Sevilla", Maps: "https://www.google.com/maps/search/?api=1&query=Avenida+Constitucion"}},
 		Birthday:  "--05-17", Notes: "Prefiere WhatsApp.\nNo llamar antes de las 10."}
 
+	shipments := []shipmentView{
+		{ID: 1, Carrier: "SEUR", Number: "08123456789", Merchant: "PcComponentes", Status: stOut, State: "en reparto", Expected: ymd(0),
+			When: dayLabel(today), Link: "https://www.seur.com/livetracking/?segOnlineIdentificador=08123456789", Updated: now.Add(-2 * time.Hour),
+			Text: "Tu envío sale hoy en reparto"},
+		{ID: 2, Carrier: "GLS", Number: "61234567890", Status: stProblem, State: "incidencia", Updated: now.Add(-26 * time.Hour),
+			Text: "Incidencia en la entrega de tu envío: no había nadie en el domicilio y haremos un nuevo intento mañana por la mañana"},
+		{ID: 3, Carrier: "Amazon", Merchant: "Amazon", Status: stDelivered, State: "entregado", Updated: now.Add(-50 * time.Hour)},
+	}
 	cals := []collection{{Slug: "personal", Name: "Personal"}, {Slug: "trabajo", Name: "Trabajo"}}
 	accts := []accountView{
 		{ID: 1, Kind: "gmail", Address: "olga@gmail.com", Synced: "hace 3 min", Drafts: "[Gmail]/Borradores"},
@@ -109,6 +117,10 @@ func TestRenderPages(t *testing.T) {
 		{"correo", "correo.html", pageData{Tab: "correo", Mails: mails, Accounts: accts}},
 		{"correo-busqueda", "correo.html", pageData{Tab: "correo", Query: "gestoría", UnreadOnly: true, Accounts: accts[:1]}},
 		{"correo-sin-cuentas", "correo.html", pageData{Tab: "correo"}},
+		{"correo-con-envios", "correo.html", pageData{Tab: "correo", Mails: mails, Accounts: accts, Shipments: shipments}},
+		{"envios", "envios.html", pageData{Tab: "correo", Shipments: shipments, Flash: "Envío quitado de la lista."}},
+		{"envios-entregados", "envios.html", pageData{Tab: "correo", Shipments: shipments[2:], Delivered: true}},
+		{"envios-vacia", "envios.html", pageData{Tab: "correo"}},
 		{"mensaje", "mensaje.html", pageData{Tab: "correo", Mail: msg, Flash: "Borrador guardado en tu correo. No se ha enviado."}},
 		{"mensaje-vacio", "mensaje.html", pageData{Tab: "correo", Mail: message{ID: 104, FromAddr: "x@example.com", Date: now}}},
 		{"correo-categorias", "correo.html", pageData{Tab: "correo", Accounts: accts, Category: catImportant,

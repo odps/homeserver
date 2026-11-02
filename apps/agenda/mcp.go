@@ -158,6 +158,7 @@ type summaryOut struct {
 
 func addTools(server *mcp.Server, svc *service) {
 	addMoreTools(server, svc)
+	addShipmentTools(server, svc)
 	mcp.AddTool(server, &mcp.Tool{Name: "agenda_ver", Description: "Eventos (cada repetición por separado) y tareas con vencimiento entre dos días, por orden, con lugar, enlace a Maps y avisos"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in rangeIn) (*mcp.CallToolResult, entriesOut, error) {
 			who, err := identity(req)

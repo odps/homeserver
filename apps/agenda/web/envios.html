@@ -1,0 +1,31 @@
+{{define "envios.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/correo">Correo</a></p>
+  <h1 class="date">Envíos</h1>
+  <div class="hero-meta">
+    <span>{{with .Shipments}}{{len .}} en la lista{{else}}Ninguno en la lista{{end}}</span>
+    <span>Sacados del correo, sin IA</span>
+    {{if .Delivered}}<a href="{{.Base}}/envios">Solo los pendientes</a>{{else}}<a href="{{.Base}}/envios?entregados=1">Ver también los entregados</a>{{end}}
+  </div>
+</section>
+
+{{with .Shipments}}
+<ul class="list">{{range .}}
+  <li class="row{{if eq .Status "incidencia"}} overdue{{end}}">
+    <div class="row-main">
+      <span class="title">{{with .Merchant}}{{.}}{{else}}{{with .Carrier}}{{.}}{{else}}Paquete{{end}}{{end}}</span>
+      <span class="meta"><span class="tag{{if eq .Status "incidencia"}} danger{{else if or (eq .Status "reparto") (eq .Status "recogida")}} accent{{end}}">{{.State}}</span>{{with .When}}<span>Llega el {{.}}</span>{{end}}{{if and .Merchant .Carrier}}<span>{{.Carrier}}</span>{{end}}{{with .Number}}<span class="tnum">{{.}}</span>{{end}}<span>{{ago .Updated}}</span></span>
+      {{with .Text}}<span class="notes">{{.}}</span>{{end}}
+    </div>
+    {{with .Link}}<a class="btn small" href="{{.}}" rel="noopener noreferrer" target="_blank">Seguimiento</a>{{end}}
+    <form method="post" action="{{$.Base}}/envios/{{.ID}}/quitar"><button class="btn small ghost" aria-label="Quitar de la lista">Quitar</button></form>
+  </li>{{end}}
+</ul>
+<p class="help">El estado sale de los correos de la tienda y del transportista: no se consulta su web. Se guardan cifrados; los entregados se borran a los 30 días y los demás a los 90.</p>
+{{else}}
+<section class="empty">
+  <p class="big">Nada en camino.</p>
+  <p>Cuando llegue un correo de un pedido o de un transportista (Correos, SEUR, MRW, GLS, DHL, UPS, InPost, Amazon…), el envío aparecerá aquí.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

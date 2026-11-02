@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ type agent struct {
 	statusPath string
 	web        *webClient
 	geo        *geo.Client
+	voice      transcriber
 	apps       *appTools
 	telegramAt string // https://api.telegram.org (sustituible en los tests)
 	httpClient *http.Client
@@ -47,7 +49,8 @@ const (
 
 func newAgent(s store, log *slog.Logger, keysPath, statusPath, gateway string) *agent {
 	a := &agent{store: s, log: log, keysPath: keysPath, statusPath: statusPath, web: newWebClient(false), geo: geo.New(),
-		apps: &appTools{gateway: gateway, log: log}, telegramAt: "https://api.telegram.org",
+		voice: newTranscriber(filepath.Dir(keysPath)),
+		apps:  &appTools{gateway: gateway, log: log}, telegramAt: "https://api.telegram.org",
 		httpClient: &http.Client{Timeout: 90 * time.Second}, strangers: map[int64]time.Time{}}
 	a.config.Store(&config{})
 	return a
@@ -213,6 +216,9 @@ func (a *agent) poll(ctx context.Context, c config) {
 			if u.Message != nil {
 				a.handle(ctx, tg, c, u.Message)
 			}
+			if u.Callback != nil {
+				a.pressed(ctx, tg, c, u.Callback)
+			}
 			// Ubicación en tiempo real: se actualiza sin contestar.
 			if e := u.Edited; e != nil && e.Location != nil && e.Chat.Type == "private" && e.From.ID == c.TelegramUser && c.TelegramUser != 0 {
 				a.gotLocation(ctx, tg, e.Chat.ID, e, true)
@@ -222,6 +228,8 @@ func (a *agent) poll(ctx context.Context, c config) {
 }
 
 const help = `Hola, soy tu asistente del homeserver. Puedes preguntarme por tus libros y cómics, pedirme que busque algo en internet o que te apunte una nota.
+
+También entiendo notas de voz, fotos y PDF (citas, tickets, facturas) y la ubicación que compartas.
 
 Órdenes:
 /nuevo — empezar una conversación nueva (olvido lo anterior)
@@ -241,13 +249,20 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 		a.stranger(ctx, tg, c, m)
 		return
 	}
-	if m.Location != nil {
+	switch {
+	case m.Location != nil:
 		a.gotLocation(ctx, tg, chat, m, false)
+		return
+	case len(m.Photo) > 0 || m.Document != nil:
+		a.gotFile(ctx, tg, c, m)
+		return
+	case m.Voice != nil || m.Audio != nil:
+		a.gotVoice(ctx, tg, c, m)
 		return
 	}
 	text := strings.TrimSpace(m.Text)
 	if text == "" {
-		tg.send(ctx, chat, "De momento entiendo mensajes de texto y la ubicación que compartas.")
+		tg.send(ctx, chat, "Entiendo texto, notas de voz, fotos, PDF y la ubicación que compartas.")
 		return
 	}
 	cmd := strings.ToLower(strings.SplitN(text, " ", 2)[0])
@@ -288,6 +303,17 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 		tg.send(ctx, chat, fmt.Sprintf("Hoy: %d de %d peticiones al modelo (%d tokens de entrada y %d de salida).", u.Requests, c.DailyLimit, u.PromptTokens, u.CompletionTokens))
 		return
 	}
+	a.respond(ctx, tg, c, chat, text, nil)
+}
+
+// respond contesta un texto de la persona con el modelo.
+func (a *agent) respond(ctx context.Context, tg telegram, c config, chat int64, text string, parts []map[string]any) {
+	a.respondWith(ctx, tg, c, chat, text, "", parts)
+}
+
+// respondWith es respond con adjuntos (fotos, PDF) y lo que queda de ellos en
+// el historial (label: «[foto]»); el adjunto en sí no se guarda.
+func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int64, text, label string, parts []map[string]any) {
 	// Mientras piensa, Telegram muestra «escribiendo…».
 	done := make(chan struct{})
 	go func() {
@@ -306,18 +332,31 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 	// (seudonimos.go); a la persona, con el dato real.
 	p := newPseudonyms(a.store, chat, false)
 	hidden := p.hideText(ctx, text)
-	reply, err := a.answer(ctx, c, chat, hidden, p)
+	reply, err := a.answer(ctx, c, chat, hidden, p, parts)
 	close(done)
+	var opts []string
 	if err != nil {
 		a.log.Warn("responder", "err", err)
 		reply = "No he podido responder: " + err.Error()
 	} else {
-		if err := a.store.addTurns(ctx, chat, turn{"user", hidden}, turn{"assistant", reply}); err != nil {
+		reply, opts = splitButtons(reply)
+		saved := reply
+		if len(opts) > 0 {
+			saved += "\n(Opciones: " + strings.Join(opts, " | ") + ")"
+		}
+		user := hidden
+		if label != "" {
+			user = label + " " + hidden
+		}
+		if err := a.store.addTurns(ctx, chat, turn{"user", user}, turn{"assistant", saved}); err != nil {
 			a.log.Error("guardar conversación", "err", err)
 		}
 		reply = p.reveal(ctx, reply)
+		for i := range opts {
+			opts[i] = p.reveal(ctx, opts[i])
+		}
 	}
-	if err := tg.send(ctx, chat, reply); err != nil {
+	if err := tg.sendButtons(ctx, chat, reply, opts); err != nil {
 		a.log.Warn("enviar", "err", err)
 	}
 }
@@ -374,6 +413,9 @@ Cómo trabajas:
 - Rutinas (trabajo, club, prácticas, clases: lo que ocupa una franja cada semana): créalas con rutinas_crear; para quitar un día suelto, agenda_saltar. Para proponer cuándo hacer algo o quedar, mira agenda_huecos, que ya descuenta eventos y rutinas. En agenda_ver salen marcadas como rutina: no las enumeres una a una salvo que lo pida.
 - Los datos personales te llegan como etiquetas: «TEL_1», «DIR_2:Madrid» (la localidad es una pista), «EMAIL_3», «IBAN_1», «DNI_1», «CUMPLE_1», «ENLACE_1»… Úsalas tal cual, con las comillas, al contestar y al llamar a herramientas: el sistema pone el dato real y la persona lo ve completo. No digas que están ocultas, no las expliques ni intentes adivinar qué contienen.
 - Para «cerca de mí», dónde está o cómo llegar: lugares_cerca, mi_ubicacion y como_llegar, que usan la ubicación que la persona comparte en Telegram (tú solo ves la zona). Si no la tienes, pídele que la comparta con el clip → Ubicación. Para el tiempo, la herramienta tiempo. No uses la búsqueda en internet para esto.
+- Autobús y metro de Valencia: bus_llegadas (por número o nombre de parada), metro_llegadas y paradas_cerca (con la ubicación compartida). Da los minutos que faltan; si hay varias paradas posibles, pregunta cuál.
+- Cuando pidas una confirmación o des a elegir entre pocas opciones, termina el mensaje con una última línea así: [[botones: Sí, bórralo | No]] (de 2 a 4 opciones cortas). Saldrán como botones en Telegram.
+- Si te mandan una foto o un PDF (una cita, un ticket, una factura, una carta), di en pocas líneas qué es y ofrece apuntar lo útil: la cita en la agenda, el plazo como tarea, el dato como nota. No apuntes nada sin que la persona lo confirme.
 - Ajustes de cada app (resumen y avisos de la agenda, noticias, lectura…): usa sus herramientas *_ajustes_ver y *_ajustes_cambiar, y cambia solo lo que haya pedido. Las cuentas, claves y contraseñas no se tocan desde aquí: se configuran en la web.
 - Para la dirección o el teléfono de alguien, contactos_buscar; para ir a un sitio, el enlace «ruta» del evento o mapa_ruta.
 - Escribes en un chat: texto plano, sin Markdown. Nada de tablas, títulos, negritas, cursivas ni enlaces entre corchetes; si das un enlace, pon la dirección tal cual. Para enumerar, una línea por elemento empezando por «• ». Respuestas breves y fáciles de leer en el móvil.`
@@ -396,7 +438,7 @@ func nextDays(now time.Time) string {
 }
 
 // answer resuelve un mensaje con el modelo y las herramientas.
-func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p *pseudonyms) (string, error) {
+func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p *pseudonyms, parts []map[string]any) (string, error) {
 	if c.BaseURL == "" || c.APIKey == "" {
 		return "", errors.New("falta configurar el modelo en el panel")
 	}
@@ -428,7 +470,11 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 	for _, h := range hist {
 		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content})
 	}
-	msgs = append(msgs, chatMessage{Role: "user", Content: text})
+	if len(parts) > 0 {
+		msgs = append(msgs, chatMessage{Role: "user", Content: append([]map[string]any{{"type": "text", "text": text}}, parts...)})
+	} else {
+		msgs = append(msgs, chatMessage{Role: "user", Content: text})
+	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	fixed := false

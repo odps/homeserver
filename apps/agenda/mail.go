@@ -82,6 +82,7 @@ type message struct {
 	Category    string      `json:"categoria"`
 	Reason      string      `json:"motivo,omitempty"`
 	Signals     mailSignals `json:"-"`
+	Links       []string    `json:"-"` // enlaces de seguimiento del HTML (envios.go)
 }
 
 // mailBlob es lo que va cifrado de cada correo.
@@ -97,6 +98,7 @@ type mailBlob struct {
 	Attachments []string    `json:"att,omitempty"`
 	Reason      string      `json:"reason,omitempty"`
 	Signals     mailSignals `json:"signals"`
+	Links       []string    `json:"links,omitempty"`
 }
 
 // ---- Base de datos ----
@@ -149,18 +151,23 @@ func (s store) accountSynced(ctx context.Context, a mailAccount, syncErr error) 
 	return err
 }
 
-func (s store) saveMessage(ctx context.Context, m message) error {
+// saveMessage guarda un correo y devuelve su id (0 si ya estaba).
+func (s store) saveMessage(ctx context.Context, m message) (int64, error) {
 	sealed, err := s.box.SealJSON(sealMessage, mailBlob{MessageID: m.MessageID, Refs: m.Refs, FromName: m.FromName,
 		FromAddr: m.FromAddr, To: m.To, Cc: m.Cc, Subject: m.Subject, Body: m.Body, Attachments: m.Attachments,
-		Reason: m.Reason, Signals: m.Signals})
+		Reason: m.Reason, Signals: m.Signals, Links: m.Links})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = s.db.Exec(ctx, `INSERT INTO messages (account_id, uid, sent_at, seen, flagged, category, sealed, tokens)
+	var id int64
+	err = s.db.QueryRow(ctx, `INSERT INTO messages (account_id, uid, sent_at, seen, flagged, category, sealed, tokens)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (account_id, uid) DO NOTHING`,
-		m.AccountID, m.UID, m.Date, m.Seen, m.Flagged, m.Category, sealed, mailTokens(s.box, m))
-	return err
+		ON CONFLICT (account_id, uid) DO NOTHING RETURNING id`,
+		m.AccountID, m.UID, m.Date, m.Seen, m.Flagged, m.Category, sealed, mailTokens(s.box, m)).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }
 
 // mailTokens son las huellas para buscar: "f" en el remitente; "t" en todo
@@ -189,7 +196,7 @@ func (s store) messages(ctx context.Context, where string, args ...any) ([]messa
 			return m, err
 		}
 		m.MessageID, m.Refs, m.FromName, m.FromAddr, m.To, m.Cc = b.MessageID, b.Refs, b.FromName, b.FromAddr, b.To, b.Cc
-		m.Subject, m.Body, m.Attachments, m.Reason, m.Signals = b.Subject, b.Body, b.Attachments, b.Reason, b.Signals
+		m.Subject, m.Body, m.Attachments, m.Reason, m.Signals, m.Links = b.Subject, b.Body, b.Attachments, b.Reason, b.Signals, b.Links
 		if m.Attachments == nil {
 			m.Attachments = []string{}
 		}
@@ -492,10 +499,17 @@ func (m *mailer) fetchBatch(ctx context.Context, c *imapclient.Client, a *mailAc
 		if h.RFC822Size > maxRawBytes {
 			msg.Body = strings.TrimSpace(msg.Body + "\n\n(Correo de " + fmt.Sprint(h.RFC822Size>>20) + " MB: el texto no se ha descargado; ábrelo en tu correo.)")
 		}
-		if err := m.store.saveMessage(ctx, msg); err != nil {
+		id, err := m.store.saveMessage(ctx, msg)
+		if err != nil {
 			return saved, err
 		}
 		saved++
+		if id != 0 {
+			msg.ID = id
+			if err := m.store.trackShipment(ctx, a.Owner, msg); err != nil {
+				m.log.Warn("envíos", "cuenta", a.Address, "err", err)
+			}
+		}
 	}
 	return saved, nil
 }
@@ -534,8 +548,8 @@ func fromIMAP(account int64, h *imapclient.FetchMessageBuffer, raw []byte) messa
 	}
 	msg.Signals = headerSignals(raw, msg.FromAddr)
 	if len(raw) > 0 {
-		body, attachments, refs := parseBody(raw)
-		msg.Body, msg.Attachments, msg.Refs = body, attachments, refs
+		body, attachments, refs, links := parseBody(raw)
+		msg.Body, msg.Attachments, msg.Refs, msg.Links = body, attachments, refs, links
 	}
 	if msg.Attachments == nil {
 		msg.Attachments = []string{}
@@ -548,6 +562,9 @@ func fromIMAP(account int64, h *imapclient.FetchMessageBuffer, raw []byte) messa
 	}
 	for i := range msg.Attachments {
 		msg.Attachments[i] = validText(msg.Attachments[i])
+	}
+	for i := range msg.Links {
+		msg.Links[i] = validText(msg.Links[i])
 	}
 	return msg
 }
@@ -572,15 +589,16 @@ func validText(s string) string {
 }
 
 // parseBody saca el texto (el text/plain o, si no hay, el HTML pasado a
-// texto), los nombres de los adjuntos y las referencias del hilo.
-func parseBody(raw []byte) (string, []string, string) {
+// texto), los nombres de los adjuntos, las referencias del hilo y los enlaces
+// de seguimiento de envíos del HTML (al pasarlo a texto se pierden).
+func parseBody(raw []byte) (string, []string, string, []string) {
 	r, err := mail.CreateReader(bytes.NewReader(raw))
 	if err != nil {
-		return "", nil, ""
+		return "", nil, "", nil
 	}
 	refs := strings.Join(strings.Fields(r.Header.Get("References")), " ")
 	var plain, htmlText string
-	var attachments []string
+	var attachments, links []string
 	for {
 		p, err := r.NextPart()
 		if err != nil {
@@ -595,6 +613,7 @@ func parseBody(raw []byte) (string, []string, string) {
 				plain = string(b)
 			case ct == "text/html" && htmlText == "":
 				htmlText = htmlToText(string(b))
+				links = trackingLinks(string(b))
 			}
 		case *mail.AttachmentHeader:
 			if name, _ := h.Filename(); name != "" {
@@ -611,7 +630,7 @@ func parseBody(raw []byte) (string, []string, string) {
 	if r := []rune(text); len(text) > maxBody {
 		text = string(r[:min(len(r), maxBody/2)]) + "\n…"
 	}
-	return text, attachments, refs
+	return text, attachments, refs, links
 }
 
 var (

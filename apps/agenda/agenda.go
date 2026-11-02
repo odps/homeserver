@@ -516,6 +516,9 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 	if len(due) > 0 {
 		b.WriteString("\nTareas:\n" + strings.Join(due, "\n") + "\n")
 	}
+	if lines := s.shipmentLines(ctx, owner, now); len(lines) > 0 {
+		b.WriteString("\n" + strings.Join(lines, "\n") + "\n")
+	}
 	if bdays, err := s.store.birthdays(ctx, owner, local.Format("01-02")); err == nil && len(bdays) > 0 {
 		b.WriteString("\nCumpleaños:\n")
 		for _, r := range bdays {
@@ -762,5 +765,8 @@ func (s *service) syncAll(ctx context.Context) {
 		} else if n > 0 {
 			s.log.Info("correo nuevo", "cuenta", a.Address, "correos", n)
 		}
+	}
+	if err := s.store.pruneShipments(ctx, s.now()); err != nil {
+		s.log.Warn("envíos", "err", err)
 	}
 }

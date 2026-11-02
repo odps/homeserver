@@ -77,6 +77,10 @@ type pageData struct {
 	UnreadOnly bool
 	Unread     int // sin leer en la última semana (agenda)
 
+	// Envíos (sacados del correo)
+	Shipments []shipmentView
+	Delivered bool // también los entregados
+
 	// Ajustes
 	Prefs    prefs
 	Accounts []accountView
@@ -171,6 +175,8 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /correo/{id}/remitente", w.user(w.mailSender))
 	mux.HandleFunc("POST /ajustes/correo", w.user(w.saveMailRules))
 	mux.HandleFunc("POST /correo/sincronizar", w.user(w.mailSync))
+	mux.HandleFunc("GET /envios", w.user(w.shipmentsPage))
+	mux.HandleFunc("POST /envios/{id}/quitar", w.user(w.hideShipment))
 	mux.HandleFunc("GET /ajustes", w.user(w.settings))
 	mux.HandleFunc("POST /ajustes", w.user(w.savePrefs))
 	mux.HandleFunc("POST /cuentas", w.user(w.addAccount))
@@ -214,6 +220,7 @@ var flashes = map[string]string{
 	"ajustes": "Ajustes guardados.", "cuenta": "Cuenta conectada: el correo llegará en unos minutos.",
 	"borrador": "Borrador guardado en tu correo. No se ha enviado.", "sincronizado": "Correo al día.",
 	"hecha": "Tarea marcada.", "rutina": "Rutina creada.", "clasificacion": "Clasificación guardada: el correo ya se ha reordenado.",
+	"envio": "Envío quitado de la lista.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }
@@ -630,7 +637,28 @@ func (w *web) mailPage(rw http.ResponseWriter, r *http.Request, who app.Identity
 	if err != nil {
 		data.Error = err.Error()
 	}
+	data.Shipments, _ = w.svc.shipments(r.Context(), who.User, false)
 	w.render(rw, r, "correo.html", data)
+}
+
+// ---- Envíos ----
+
+func (w *web) shipmentsPage(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	all := r.URL.Query().Get("entregados") != ""
+	list, err := w.svc.shipments(r.Context(), who.User, all)
+	data := pageData{Name: who.Name, Tab: "correo", Shipments: list, Delivered: all, Flash: flash(r)}
+	if err != nil {
+		data.Error = err.Error()
+	}
+	w.render(rw, r, "envios.html", data)
+}
+
+func (w *web) hideShipment(rw http.ResponseWriter, r *http.Request, who app.Identity) {
+	if _, err := w.svc.hideShipment(r.Context(), who.User, pathID(r)); err != nil && !notFound(err) {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	back(rw, r, "/envios", "envio")
 }
 
 func (w *web) mailMessage(rw http.ResponseWriter, r *http.Request, who app.Identity) {

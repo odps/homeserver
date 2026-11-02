@@ -16,6 +16,8 @@ func steps(box *sealpkg.Box) map[int]db.Step {
 		// luego se compactan las tablas para que no quede en disco).
 		2: {Run: func(ctx context.Context, tx pgx.Tx) error { return sealExisting(ctx, tx, box) },
 			Vacuum: []string{"users", "objects", "contacts", "notices"}},
+		// 004: busca envíos en el correo que ya estaba guardado.
+		4: {Run: func(ctx context.Context, tx pgx.Tx) error { return backfillShipments(ctx, tx, box) }},
 	}
 }
 

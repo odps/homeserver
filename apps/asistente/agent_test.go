@@ -22,12 +22,26 @@ import (
 
 // fakeTelegram guarda lo que el bot envía.
 type fakeTelegram struct {
-	mu   sync.Mutex
-	sent []string
+	mu     sync.Mutex
+	sent   []string
+	markup []any             // reply_markup de cada envío (nil si no lleva)
+	edited int               // botones quitados
+	files  map[string][]byte // ficheros que se pueden bajar (file_id → datos)
 }
 
 func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name, ok := strings.CutPrefix(r.URL.Path, "/file/botTOKEN/"); ok {
+			f.mu.Lock()
+			data, found := f.files[name]
+			f.mu.Unlock()
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			w.Write(data)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/botTOKEN/") {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"ok":false,"description":"Unauthorized"}`))
@@ -41,8 +55,17 @@ func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
 		case "sendMessage":
 			f.mu.Lock()
 			f.sent = append(f.sent, body["text"].(string))
+			f.markup = append(f.markup, body["reply_markup"])
 			f.mu.Unlock()
 			w.Write([]byte(`{"ok":true,"result":{}}`))
+		case "getFile":
+			id, _ := body["file_id"].(string)
+			w.Write([]byte(`{"ok":true,"result":{"file_path":"` + id + `","file_size":10}}`))
+		case "editMessageReplyMarkup":
+			f.mu.Lock()
+			f.edited++
+			f.mu.Unlock()
+			w.Write([]byte(`{"ok":true,"result":true}`))
 		default:
 			w.Write([]byte(`{"ok":true,"result":true}`))
 		}
@@ -91,6 +114,21 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			reply["tool_calls"] = []map[string]any{{"id": "c1", "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
 		}
 		text, _ := last.Content.(string)
+		if parts, ok := last.Content.([]any); ok && last.Role == "user" {
+			// Con adjunto: se comprueba que llega la imagen o el PDF.
+			kinds := ""
+			for _, p := range parts {
+				pm, _ := p.(map[string]any)
+				kinds += fmt.Sprint(pm["type"]) + " "
+				if img, ok := pm["image_url"].(map[string]any); ok && strings.HasPrefix(fmt.Sprint(img["url"]), "data:image/jpeg;base64,") {
+					kinds += "jpeg "
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]any{"role": "assistant",
+				"content": "Recibido: " + kinds + "\n[[botones: Apúntala | No]]"}, "finish_reason": "stop"}},
+				"usage": map[string]int{"prompt_tokens": 100, "completion_tokens": 20}})
+			return
+		}
 		// Como Groq: una llamada que no cumple el esquema se rechaza con un 400.
 		if strings.Contains(text, "esquema") && last.Role == "user" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -111,6 +149,10 @@ func fakeLLM(t *testing.T) *httptest.Server {
 			call("notas_guardar", string(b))
 		case strings.Contains(text, "Lucía"):
 			call("contactos_buscar", `{"texto":"Lucía"}`)
+		case strings.Contains(text, "borra la nota"):
+			reply["content"] = "¿Seguro que la borro?\n[[botones: Sí, bórrala | No]]"
+		case text == "Sí, bórrala":
+			reply["content"] = "Borrada."
 		case strings.Contains(text, "farmacia"):
 			call("lugares_cerca", `{"que":"farmacia"}`)
 		default:

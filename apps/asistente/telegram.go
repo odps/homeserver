@@ -34,8 +34,13 @@ type tgMessage struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
-	Text     string      `json:"text"`
-	Location *tgLocation `json:"location"`
+	Text     string        `json:"text"`
+	Location *tgLocation   `json:"location"`
+	Photo    []tgPhotoSize `json:"photo"`
+	Document *tgFileRef    `json:"document"`
+	Voice    *tgFileRef    `json:"voice"`
+	Audio    *tgFileRef    `json:"audio"`
+	Caption  string        `json:"caption"`
 }
 
 type tgLocation struct {
@@ -45,9 +50,10 @@ type tgLocation struct {
 }
 
 type tgUpdate struct {
-	UpdateID int64      `json:"update_id"`
-	Message  *tgMessage `json:"message"`
-	Edited   *tgMessage `json:"edited_message"` // la ubicación en tiempo real llega así
+	UpdateID int64       `json:"update_id"`
+	Message  *tgMessage  `json:"message"`
+	Edited   *tgMessage  `json:"edited_message"` // la ubicación en tiempo real llega así
+	Callback *tgCallback `json:"callback_query"` // un botón pulsado
 }
 
 var errUnauthorized = errors.New("Telegram rechaza el token del bot")
@@ -90,7 +96,7 @@ func (t telegram) me(ctx context.Context) (tgUser, error) {
 
 func (t telegram) updates(ctx context.Context, offset int64, wait time.Duration) ([]tgUpdate, error) {
 	var u []tgUpdate
-	err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message", "edited_message"}}, &u)
+	err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message", "edited_message", "callback_query"}}, &u)
 	return u, err
 }
 

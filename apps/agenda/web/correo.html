@@ -3,7 +3,8 @@
   <p class="eyebrow">Correo</p>
   <h1 class="date">{{if .Query}}«{{.Query}}»{{else if .UnreadOnly}}Sin leer{{else}}Bandeja{{end}}</h1>
   <div class="hero-meta">
-    {{if .Accounts}}<span>{{len .Mails}} mensaje{{if ne (len .Mails) 1}}s{{end}}</span>{{end}}
+    {{if .Accounts}}<span>{{len .Mails}} mensaje{{if ne (len .Mails) 1}}s{{end}}</span>
+    <a href="{{.Base}}/envios">Envíos{{with .Shipments}} pendientes: {{len .}}{{end}}</a>{{end}}
     <span>Solo lectura: el asistente deja borradores, nunca envía</span>
   </div>
 </section>
