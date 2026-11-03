@@ -1,0 +1,88 @@
+{{define "importar.html"}}{{template "head" .}}
+{{if .Preview}}{{$p := .Preview}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/importar">Importar</a></p>
+  <h1 class="date">{{$p.Count}} sesi{{if eq $p.Count 1}}ón{{else}}ones{{end}}</h1>
+  <div class="hero-meta">
+    <span>{{if eq $p.From $p.To}}{{$p.From}}{{else}}Del {{$p.From}} al {{$p.To}}{{end}}</span>
+    {{if $p.Already}}<span>{{$p.Already}} {{if eq $p.Already 1}}día ya estaba importado{{else}}días ya estaban importados{{end}}: se saltan</span>{{end}}
+  </div>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/importar/{{$p.ID}}">
+  {{with $p.Unknown}}
+  <div class="panel-head">
+    <h2>Nombres sin reconocer</h2>
+    <p>Di a qué ejercicio corresponde cada uno; se recuerda para la próxima vez. Lo que quede en «No importar» no se guarda.</p>
+  </div>
+  {{range .}}
+  <label class="field">«{{.Name}}» <span class="help">{{.Count}} {{if eq .Count 1}}vez{{else}}veces{{end}}</span>
+    <select name="m_{{.Index}}">
+      <option value="" selected>No importar</option>
+      <option value="nuevo">Crear como ejercicio propio</option>
+      {{range $.Groups}}<optgroup label="{{.Label}}">{{range .Options}}<option value="{{.Key}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+    </select></label>
+  {{end}}
+  {{else}}
+  <div class="panel-head">
+    <h2>Todo reconocido</h2>
+    <p>Todos los ejercicios del chat están en el catálogo o en tus nombres.</p>
+  </div>
+  {{end}}
+  <div class="actions">
+    <button class="btn primary">Importar {{$p.Count}} sesi{{if eq $p.Count 1}}ón{{else}}ones{{end}}</button>
+    <a class="btn ghost" href="{{.Base}}/importar">Cancelar</a>
+  </div>
+  <p class="help">La vista previa dura media hora. El fichero no se guarda.</p>
+</form>
+
+<section class="group">
+  <h2 class="label">{{if $p.More}}Las {{len $p.Sample}} más recientes{{else}}Sesiones{{end}}</h2>
+  <ul class="list">{{range $p.Sample}}
+    <li class="row"><div class="row-main">
+      <span class="title">{{.Date}}</span>
+      <span class="meta">{{range $i, $n := .Names}}{{if $i}}<span aria-hidden="true">·</span>{{end}}<span{{if .Unknown}} class="unknown" title="Sin reconocer"{{end}}>{{.Name}}{{if .Unknown}} (?){{end}}</span>{{end}}</span>
+    </div></li>{{end}}
+  </ul>
+  {{if $p.More}}<p class="quiet">y {{$p.More}} más.</p>{{end}}
+</section>
+{{else}}
+<section class="hero compact">
+  <p class="eyebrow">Importar</p>
+  <h1 class="date">{{if .Done}}Hecho{{else}}Tus notas de WhatsApp{{end}}</h1>
+  <div class="hero-meta"><span>Las sesiones que apuntabas en un chat, de una vez</span></div>
+</section>
+
+{{with .Done}}
+<div class="flow ok">
+  <p class="flow-title">Importada{{if ne .Saved 1}}s{{end}} {{.Saved}} sesi{{if eq .Saved 1}}ón{{else}}ones{{end}}{{if .Skipped}} ({{.Skipped}} ya estaba{{if ne .Skipped 1}}n{{end}}){{end}}.</p>
+  <p><a href="{{$.Base}}/">Ver las sesiones</a> · <a href="{{$.Base}}/ejercicios">Ver los ejercicios</a></p>
+</div>
+{{end}}
+
+<section class="panel form">
+  <div class="panel-head">
+    <h2>1. Exporta el chat</h2>
+    <p>En el móvil, abre el chat donde apuntas los entrenos (puede ser el tuyo contigo).</p>
+  </div>
+  <ul class="steps">
+    <li><strong>Android:</strong> chat → <span aria-label="menú">⋮</span> → Más → Exportar chat → <strong>Sin archivos</strong>. Guárdalo o mándatelo y descárgalo.</li>
+    <li><strong>iPhone:</strong> chat → toca el nombre arriba → Exportar chat → <strong>Sin archivos</strong>. Sale un .zip: súbelo tal cual.</li>
+    <li>También vale el <code>.md</code> de los exportadores que ordenan por días («## 21 January 2026», «[20:40] **You:** Squat 3x6 30kg»).</li>
+  </ul>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/importar" enctype="multipart/form-data">
+  <div class="panel-head">
+    <h2>2. Súbelo</h2>
+    <p>Verás antes lo que se va a importar. Los días que ya estén importados se saltan, así que puedes repetirlo cuando quieras.</p>
+  </div>
+  <label class="field">Fichero <span class="help">.txt, .md o .zip, hasta 5 MB</span>
+    <input type="file" name="fichero" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" required></label>
+  <div class="actions">
+    <button class="btn primary">Ver qué se importa</button>
+  </div>
+  <p class="help">El fichero se lee en memoria y no se guarda: solo se guardan los entrenos, cifrados.</p>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

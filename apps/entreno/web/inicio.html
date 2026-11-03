@@ -1,0 +1,40 @@
+{{define "inicio.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Entreno</p>
+  <h1 class="date">Últimas sesiones</h1>
+  <div class="hero-meta">
+    <a href="{{.Base}}/ejercicios">Tus ejercicios</a>
+    <a href="{{.Base}}/importar">Importar de WhatsApp</a>
+  </div>
+</section>
+
+<div class="toolbar">
+  <div class="quick wide"><a class="btn primary big" href="{{.Base}}/apuntar"><span aria-hidden="true">+</span> Apuntar</a></div>
+</div>
+
+{{with .Sessions}}
+<ol class="sessions">
+  {{range .}}
+  <li class="session">
+    <a class="session-head" href="{{$.Base}}/sesion/{{.ID}}"><span class="session-date">{{.Date}}</span><span class="arrow" aria-hidden="true">→</span></a>
+    {{with .Lines}}<ul class="exlist">{{range .}}
+      <li><span class="ex-name">{{.Name}}</span> <span class="ex-sum">— {{.Summary}}</span></li>{{end}}
+    </ul>{{end}}
+    {{with .Notes}}<p class="notes">{{range $i, $n := .}}{{if $i}} · {{end}}{{$n}}{{end}}</p>{{end}}
+  </li>
+  {{end}}
+</ol>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no hay entrenos.</p>
+  <p>Apunta lo que haces como en tus notas, un ejercicio por línea:</p>
+  <pre class="sample">Lat machine 3x10 50kg rir 2
+Farmer carry 3x20m 22kg
+Hollow hold 3x45s
+Bulgarian 3x8 12kg/ea
+Rir 2</pre>
+  <p>Series × repeticiones (o segundos, o metros), la carga y el RIR. «Rir 2» en su línea va al ejercicio de arriba.</p>
+  <p class="actions"><a class="btn primary" href="{{.Base}}/apuntar">Apuntar</a> <a class="btn" href="{{.Base}}/importar">Importar las notas de WhatsApp</a></p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

@@ -1,0 +1,58 @@
+{{define "sesion.html"}}{{template "head" .}}
+{{$s := .Session}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/">Sesiones</a></p>
+  <h1 class="date">{{$s.Date}}</h1>
+  <div class="hero-meta">
+    <span class="tnum">{{$s.Time}}</span>
+    {{with $s.Source}}<span>{{.}}</span>{{end}}
+    <span>{{len $s.Exercises}} ejercicio{{if ne (len $s.Exercises) 1}}s{{end}}</span>
+  </div>
+</section>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/sesion/{{$s.ID}}/borrar">
+  <p><strong>¿Borrar esta sesión entera?</strong> Se borran todos sus ejercicios y no se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar la sesión</button>
+    <a class="btn ghost" href="{{.Base}}/sesion/{{$s.ID}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+{{with $s.Notes}}
+<section class="card notes-card">
+  <h2 class="label">Notas</h2>
+  <ul class="plainlist">{{range .}}<li>{{.}}</li>{{end}}</ul>
+</section>
+{{end}}
+
+<div class="exercises">
+  {{range $s.Exercises}}
+  <article class="ex">
+    <header class="ex-head">
+      <h2>{{if .Key}}<a href="{{$.Base}}/ejercicio/{{.Key}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h2>
+      {{with .Best}}<span class="tag accent" title="1RM estimado de la mejor serie">1RM ≈ {{.}}</span>{{end}}
+    </header>
+    <p class="ex-sum">{{.Summary}}</p>
+    {{if .Sets}}
+    <table class="sets">
+      <thead><tr><th scope="col">Serie</th><th scope="col">{{.Unit}}</th>{{if .HasKg}}<th scope="col">kg{{if .PerSide}} por lado{{end}}</th>{{end}}{{if .HasRIR}}<th scope="col">RIR</th>{{end}}</tr></thead>
+      <tbody>{{$e := .}}{{range .Sets}}
+        <tr><td>{{.N}}</td><td>{{.Amount}}</td>{{if $e.HasKg}}<td>{{.Kg}}</td>{{end}}{{if $e.HasRIR}}<td>{{.R}}</td>{{end}}</tr>{{end}}
+      </tbody>
+    </table>
+    {{end}}
+    {{with .Note}}<p class="ex-note">{{.}}</p>{{end}}
+    {{if .Key}}<a class="more" href="{{$.Base}}/ejercicio/{{.Key}}">Historial <span aria-hidden="true">→</span></a>{{end}}
+  </article>
+  {{end}}
+</div>
+
+{{if not .Confirm}}
+<div class="dangerzone">
+  <p>¿Está mal? Bórrala y vuelve a apuntarla.</p>
+  <a class="btn danger small" href="{{.Base}}/sesion/{{$s.ID}}?borrar=1">Borrar la sesión…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

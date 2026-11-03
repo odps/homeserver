@@ -1,0 +1,36 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11100f" media="(prefers-color-scheme: dark)">
+<title>{{if eq .Tab "apuntar"}}Apuntar · {{else if eq .Tab "ejercicios"}}Ejercicios · {{else if eq .Tab "importar"}}Importar · {{end}}Entreno</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Entreno, inicio"><span class="mark" aria-hidden="true"></span>Entreno</a>
+    <nav class="tabs" aria-label="Secciones de Entreno">
+      <a href="{{.Base}}/"{{if eq .Tab "inicio"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9.5 20v-5.5h5V20"/></svg><span>Inicio</span></a>
+      <a href="{{.Base}}/apuntar"{{if eq .Tab "apuntar"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg><span>Apuntar</span></a>
+      <a href="{{.Base}}/ejercicios"{{if eq .Tab "ejercicios"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10"/><rect x="3.5" y="8" width="3.5" height="8" rx="1"/><rect x="17" y="8" width="3.5" height="8" rx="1"/><path d="M2 11v2M22 11v2"/></svg><span>Ejercicios</span></a>
+      <a href="{{.Base}}/importar"{{if eq .Tab "importar"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span>Importar</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tus entrenos, cifrados en tu servidor.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}

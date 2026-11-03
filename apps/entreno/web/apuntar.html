@@ -1,0 +1,73 @@
+{{define "apuntar.html"}}{{template "head" .}}
+{{if .Unknown}}
+<section class="hero compact">
+  <p class="eyebrow">Apuntar</p>
+  <h1 class="date">{{if eq (len .Unknown) 1}}Un nombre sin reconocer{{else}}{{len .Unknown}} nombres sin reconocer{{end}}</h1>
+  <div class="hero-meta">
+    {{if .Partial}}<span>Lo demás ya está apuntado</span><a href="{{.Base}}/sesion/{{.SessionID}}">Ver la sesión</a>{{else}}<span>Aún no se ha apuntado nada</span>{{end}}
+  </div>
+</section>
+
+{{with .Saved}}
+<section class="card saved">
+  <h2 class="label">Apuntado</h2>
+  <ul class="exlist">{{range .}}<li>{{.}}</li>{{end}}</ul>
+</section>
+{{end}}
+
+<form class="panel form" method="post" action="{{.Base}}/alias">
+  <div class="panel-head">
+    <h2>¿Qué ejercicio es?</h2>
+    <p>Elige a cuál corresponde cada nombre. Se recuerda: la próxima vez ya lo reconoce.</p>
+  </div>
+  <input type="hidden" name="texto" value="{{.Text}}">
+  <input type="hidden" name="fecha" value="{{.Date}}">
+  {{if .Partial}}<input type="hidden" name="parcial" value="1"><input type="hidden" name="sesion" value="{{.SessionID}}">{{end}}
+  {{range .Unknown}}{{$sel := .Sel}}
+  <input type="hidden" name="n_{{.Index}}" value="{{.Name}}">
+  <label class="field">«{{.Name}}»
+    <select name="m_{{.Index}}">
+      <option value=""{{if eq $sel ""}} selected{{end}}>No apuntar</option>
+      <option value="nuevo"{{if eq $sel "nuevo"}} selected{{end}}>Crear como ejercicio propio</option>
+      {{range $.Groups}}<optgroup label="{{.Label}}">{{range .Options}}<option value="{{.Key}}"{{if eq .Key $sel}} selected{{end}}>{{.Name}}</option>{{end}}</optgroup>{{end}}
+    </select></label>
+  {{end}}
+  <div class="actions">
+    <button class="btn primary">Guardar y apuntar</button>
+    <a class="btn ghost" href="{{.Base}}/apuntar">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<section class="hero compact">
+  <p class="eyebrow">Apuntar</p>
+  <h1 class="date">¿Qué has hecho?</h1>
+  <div class="hero-meta"><span>Un ejercicio por línea, como en tus notas</span></div>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/apuntar">
+  <label class="field">Ejercicios
+    <textarea name="texto" rows="9" required maxlength="20000" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Lat machine 3x10 50kg rir 2
+Farmer carry 3x20m 22kg
+Hollow hold 3x45s
+Bench 3x8 50/55/60kg
+Rir 2">{{.Text}}</textarea></label>
+  <label class="field">Fecha
+    <input type="date" name="fecha" value="{{.Date}}" max="{{.Today}}" required></label>
+  <div class="actions">
+    <button class="btn primary big">Apuntar</button>
+  </div>
+  <details class="topic">
+    <summary><span class="topic-name">Cómo se escribe</span><span class="chev" aria-hidden="true"></span></summary>
+    <div class="topic-body">
+      <ul class="steps">
+        <li><code>3x10 50kg</code>: series × repeticiones y carga. <code>50/55/60kg</code>, una carga por serie.</li>
+        <li><code>3x45s</code>, <code>2min</code>: por tiempo. <code>3x20m</code>: por distancia.</li>
+        <li><code>12kg/ea</code>: carga por lado o por mano.</li>
+        <li><code>rir 2</code> o <code>rpe 8</code> en la línea; <code>Rir 2</code> solo, para el ejercicio de arriba.</li>
+        <li>Una línea con solo series (<code>3x8 8kg</code>) se suma al ejercicio anterior. El texto suelto queda como nota.</li>
+      </ul>
+    </div>
+  </details>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

@@ -4,7 +4,8 @@
     { "name": "libros", "port": 8102, "max_upload_mb": 250, "title": "Libros" },
     { "name": "asistente", "port": 8103, "title": "Asistente" },
     { "name": "noticias", "port": 8104, "title": "Noticias" },
-    { "name": "agenda", "port": 8105, "title": "Agenda" }
+    { "name": "agenda", "port": 8105, "title": "Agenda" },
+    { "name": "entreno", "port": 8106, "max_upload_mb": 5, "title": "Entreno" }
   ],
   "services": ["netwatch", "gateway", "tailscale_web"]
 }

@@ -1,0 +1,45 @@
+{{define "ejercicio.html"}}{{template "head" .}}
+{{$h := .Exercise}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/ejercicios">Ejercicios</a></p>
+  <h1 class="date">{{$h.Name}}</h1>
+  <div class="hero-meta">
+    {{with $h.Muscles}}<span>{{.}}</span>{{end}}
+    {{if $h.Rows}}<span>{{len $h.Rows}} {{if eq (len $h.Rows) 1}}vez{{else}}veces{{end}}</span>{{end}}
+  </div>
+</section>
+
+{{if $h.Rows}}
+{{with $h.Record}}<p class="record"><span class="label">Récord · {{$h.Metric}}</span><strong class="tnum">{{.}}</strong></p>{{end}}
+
+{{with $h.Chart}}
+<figure class="chart">
+  <figcaption class="label">{{$h.Metric}} por sesión</figcaption>
+  <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+    {{$x0 := .X0}}{{$x1 := .X1}}
+    {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+    {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+    <polyline class="line" points="{{.Line}}"/>
+    {{range .Dots}}<circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="4.5"><title>{{.Title}}</title></circle>{{end}}
+  </svg>
+</figure>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Cada vez</h2>
+  <div class="scroll">
+  <table class="history">
+    <thead><tr><th scope="col">Fecha</th><th scope="col">Series</th><th scope="col">1RM est.</th><th scope="col">Nota</th></tr></thead>
+    <tbody>{{range $h.Rows}}
+      <tr><td class="nowrap"><a href="{{$.Base}}/sesion/{{.SessionID}}">{{.Date}}</a></td><td>{{.Series}}</td><td class="tnum nowrap">{{with .E1RM}}{{.}}{{else}}—{{end}}</td><td class="muted">{{.Note}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no lo has hecho.</p>
+  <p>Cuando lo <a href="{{.Base}}/apuntar">apuntes</a>, aquí verás cómo evoluciona: la carga, el 1RM estimado y cada sesión.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
