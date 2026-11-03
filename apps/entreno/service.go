@@ -159,7 +159,7 @@ func (s *service) confirmImport(ctx context.Context, owner, id string, mapping m
 			keys[name] = key
 			s.store.setAlias(ctx, owner, name, key)
 		default:
-			if _, ok := byKey(to); !ok {
+			if _, ok := lookup(to); !ok {
 				return 0, 0, fmt.Errorf("ejercicio desconocido: %s", to)
 			}
 			keys[name] = to

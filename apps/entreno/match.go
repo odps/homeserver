@@ -12,6 +12,15 @@ type matcher struct {
 
 func newMatcher(user map[string]string) *matcher {
 	m := &matcher{alias: map[string]string{}}
+	// Primero los de wger que no están en el catálogo propio: los del propio
+	// (y luego los de la persona) mandan si coinciden.
+	loadExternal()
+	for _, e := range ext.extra {
+		m.alias[fold(e.Name)] = e.Key
+		for _, a := range e.Aliases {
+			m.alias[fold(a)] = e.Key
+		}
+	}
 	for _, e := range catalog {
 		m.alias[fold(e.Name)] = e.Key
 		for _, a := range e.Aliases {
@@ -101,7 +110,7 @@ func levenshtein(a, b string) int {
 
 // exerciseName es el nombre para enseñar de una clave (o el escrito).
 func exerciseName(key, written string, custom map[string]string) string {
-	if e, ok := byKey(key); ok {
+	if e, ok := lookup(key); ok {
 		return e.Name
 	}
 	if n, ok := custom[key]; ok {

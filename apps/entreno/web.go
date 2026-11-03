@@ -33,6 +33,16 @@ var webFS embed.FS
 
 var pages = template.Must(template.New("").Funcs(template.FuncMap{
 	"muscle": func(m string) string { return strings.ToLower(muscleLabel(m)) },
+	"join":   strings.Join,
+	"lines": func(s string) []string { // un párrafo por línea
+		var out []string
+		for _, l := range strings.Split(s, "\n") {
+			if l = strings.TrimSpace(l); l != "" {
+				out = append(out, l)
+			}
+		}
+		return out
+	},
 }).ParseFS(webFS, "web/*.html"))
 
 const csp = "default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
@@ -147,6 +157,7 @@ type statRow struct {
 type historyView struct {
 	Key     string
 	Name    string
+	Detail  *exDetail // ficha: explicación, imágenes y fuentes
 	Muscles string
 	Metric  string // qué enseña la gráfica
 	Record  string
@@ -185,10 +196,14 @@ type nameTag struct {
 type importDone struct{ Saved, Skipped int }
 
 type web struct {
-	svc *service
+	svc    *service
+	images *imageCache
 }
 
 func (w *web) routes(mux *http.ServeMux) {
+	if w.images == nil {
+		w.images = newImageCache()
+	}
 	static, _ := fs.Sub(webFS, "web/static")
 	files := http.FileServerFS(static)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -203,6 +218,7 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sesion/{id}/borrar", w.user(w.deleteSession))
 	mux.HandleFunc("GET /ejercicios", w.user(w.exercisesPage))
 	mux.HandleFunc("GET /ejercicio/{key}", w.user(w.exercisePage))
+	mux.HandleFunc("GET /img/{key}/{n}", w.user(w.imagePage))
 	mux.HandleFunc("GET /importar", w.user(w.importPage))
 	mux.HandleFunc("POST /importar", w.user(w.importUpload))
 	mux.HandleFunc("POST /importar/{id}", w.user(w.importConfirm))
@@ -464,7 +480,7 @@ func (w *web) aliasPost(rw http.ResponseWriter, r *http.Request, who app.Identit
 			w.render(rw, r, "apuntar.html", d)
 			return
 		}
-		if _, ok := byKey(to); !ok && to != "nuevo" && custom[to] == "" {
+		if _, ok := lookup(to); !ok && to != "nuevo" && custom[to] == "" {
 			d.Error = "Ese ejercicio no existe: elige uno de la lista."
 			w.render(rw, r, "apuntar.html", d)
 			return
@@ -779,8 +795,11 @@ func (w *web) exercisePage(rw http.ResponseWriter, r *http.Request, who app.Iden
 		return
 	}
 	h := historyView{Key: key}
-	if e, ok := byKey(key); ok {
+	if e, ok := lookup(key); ok {
 		h.Name = e.Name
+		if d := details(e); d.Desc != "" || len(d.Images) > 0 {
+			h.Detail = &d
+		}
 		var ms []string
 		for _, m := range append(append([]string{}, e.Muscles...), e.Secondary...) {
 			ms = append(ms, strings.ToLower(muscleLabel(m)))
@@ -1137,7 +1156,7 @@ func (w *web) importConfirm(rw http.ResponseWriter, r *http.Request, who app.Ide
 	mapping := map[string]string{}
 	for i, name := range sortedKeys(p.Unknown) {
 		to := r.PostForm.Get(fmt.Sprintf("m_%d", i))
-		if _, ok := byKey(to); !ok && to != "" && to != "nuevo" {
+		if _, ok := lookup(to); !ok && to != "" && to != "nuevo" {
 			d.Error = "Ese ejercicio no existe: elige uno de la lista."
 			custom, _ := w.svc.store.customNames(ctx, who.User)
 			d.Preview, d.Groups = w.previewOf(p, custom), catalogGroups()

@@ -222,3 +222,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .chart .dot { stroke-width: 3.4; r: 6px; }
   .actions .btn.big { width: 100%; }
 }
+
+/* Ficha del ejercicio (wger / free-exercise-db) */
+.ficha { margin: 1.2rem 0 1.6rem; }
+.ficha-imgs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .6rem; margin-bottom: 1rem; }
+.ficha-imgs figure { margin: 0; background: #fff; border-radius: 12px; overflow: hidden; }
+.ficha-imgs img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; }
+.ficha-imgs figcaption { font: 400 .68rem/1.3 var(--sans); color: #555; padding: .3rem .5rem; }
+.ficha-texto p { margin: 0 0 .45rem; line-height: 1.5; }
+.ficha-meta { display: flex; flex-wrap: wrap; gap: .3rem 1rem; color: var(--ink-2); font-size: .88rem; }
+.ficha-fuente { color: var(--ink-2); font-size: .74rem; margin-top: .5rem; }

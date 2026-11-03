@@ -1,6 +1,9 @@
 package main
 
 import (
+	"compress/gzip"
+	"encoding/json"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -192,5 +195,79 @@ func TestCatalogoByKey(t *testing.T) {
 	}
 	if _, ok := byKey("no_existe"); ok {
 		t.Error("byKey(no_existe) debería fallar")
+	}
+}
+
+// Lo que entrena la persona de verdad: todos deben tener su ficha en wger.
+var catalogoHabituales = []string{
+	"dumbbell_curl", "lat_pulldown", "bench_press", "seated_calf_raise", "romanian_deadlift", "back_squat",
+	"lateral_raise", "incline_dumbbell_press", "dead_bug", "side_plank", "dumbbell_shoulder_press",
+	"bulgarian_split_squat", "seated_row", "single_leg_rdl", "farmer_carry", "face_pull", "walking_lunge",
+	"hollow_hold", "front_squat", "scapular_push_up", "hip_thrust", "tibialis_raise", "scapular_pull",
+	"cable_pullover", "overhead_press", "leg_press", "stiff_leg_deadlift", "squat_hold", "back_extension",
+	"push_up", "overhead_cable_triceps_extension", "kettlebell_swing", "hip_adduction_machine", "dumbbell_row",
+	"smith_squat", "barbell_row", "decline_sit_up", "chest_supported_row", "abdominal_machine",
+}
+
+func TestCatalogoExternos(t *testing.T) {
+	f, err := os.Open("datos/externos.json.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snap struct {
+		Wger []struct {
+			ID int `json:"id"`
+		} `json:"wger"`
+		Fedb []struct {
+			ID string `json:"id"`
+		} `json:"fedb"`
+	}
+	if err := json.NewDecoder(zr).Decode(&snap); err != nil {
+		t.Fatal(err)
+	}
+	wger, fedb := map[int]bool{}, map[string]bool{}
+	for _, e := range snap.Wger {
+		wger[e.ID] = true
+	}
+	for _, e := range snap.Fedb {
+		fedb[e.ID] = true
+	}
+	if len(wger) < 500 || len(fedb) < 500 {
+		t.Fatalf("copia incompleta: %d de wger, %d de free-exercise-db", len(wger), len(fedb))
+	}
+
+	usoW, usoF := map[int]string{}, map[string]string{}
+	for _, e := range catalog {
+		if e.Wger != 0 {
+			if !wger[e.Wger] {
+				t.Errorf("%s: wger %d no está en la copia", e.Key, e.Wger)
+			}
+			if otra, ok := usoW[e.Wger]; ok {
+				t.Errorf("wger %d repetido en %s y %s", e.Wger, otra, e.Key)
+			}
+			usoW[e.Wger] = e.Key
+		}
+		if e.Fedb != "" {
+			if !fedb[e.Fedb] {
+				t.Errorf("%s: free-exercise-db %q no está en la copia", e.Key, e.Fedb)
+			}
+			if otra, ok := usoF[e.Fedb]; ok {
+				t.Errorf("free-exercise-db %q repetido en %s y %s", e.Fedb, otra, e.Key)
+			}
+			usoF[e.Fedb] = e.Key
+		}
+	}
+	for _, k := range catalogoHabituales {
+		e, ok := byKey(k)
+		if !ok {
+			t.Errorf("%s no está en el catálogo", k)
+		} else if e.Wger == 0 {
+			t.Errorf("%s: sin ejercicio de wger", k)
+		}
 	}
 }

@@ -191,6 +191,29 @@ func addTools(server *mcp.Server, svc *service) {
 			}
 			return nil, out, nil
 		})
+	mcp.AddTool(server, &mcp.Tool{Name: "entreno_ficha", Description: "Cómo se hace un ejercicio: explicación (de wger o free-exercise-db), músculos y material. Cita la fuente si la usas"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in historyIn) (*mcp.CallToolResult, map[string]any, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			nm, err := svc.store.matcherFor(ctx, who.User)
+			if err != nil {
+				return nil, nil, err
+			}
+			key, ok := nm.resolve(in.Ejercicio)
+			e, found := lookup(key)
+			if !ok || !found {
+				return nil, nil, fmt.Errorf("no tengo ficha de «%s»", in.Ejercicio)
+			}
+			d := details(e)
+			desc := d.Desc
+			if r := []rune(desc); len(r) > 1500 {
+				desc = string(r[:1500]) + "…"
+			}
+			return nil, map[string]any{"ejercicio": d.Name, "en_ingles": d.English, "como_se_hace": desc, "idioma": d.DescLang,
+				"musculos": d.Muscles, "material": d.Equipment, "fuente": d.Sources}, nil
+		})
 	mcp.AddTool(server, &mcp.Tool{Name: "entreno_catalogo", Description: "Busca ejercicios en el catálogo (para saber la clave al asignar un nombre que no se reconoce)"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in catalogIn) (*mcp.CallToolResult, map[string][]catalogRow, error) {
 			if _, err := identity(req); err != nil {
@@ -209,7 +232,7 @@ func addTools(server *mcp.Server, svc *service) {
 				if key, err = svc.store.addCustom(ctx, who.User, in.Nombre, "reps"); err != nil {
 					return nil, nil, err
 				}
-			} else if _, ok := byKey(key); !ok {
+			} else if _, ok := lookup(key); !ok {
 				return nil, nil, fmt.Errorf("«%s» no es una clave del catálogo: búscala con entreno_catalogo", key)
 			}
 			if err := svc.store.setAlias(ctx, who.User, in.Nombre, key); err != nil {
@@ -236,7 +259,7 @@ func searchCatalog(q string, limit int) []catalogRow {
 		score int
 	}
 	var hits []scored
-	for _, e := range catalog {
+	for _, e := range allExercises() {
 		hay := " " + fold(e.Name+" "+strings.Join(e.Aliases, " ")+" "+strings.Join(e.Muscles, " ")) + " "
 		score := 0
 		for _, w := range words {

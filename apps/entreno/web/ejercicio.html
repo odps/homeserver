@@ -9,6 +9,16 @@
   </div>
 </section>
 
+{{with $h.Detail}}
+<section class="ficha" aria-label="Cómo se hace">
+  {{with .Images}}<div class="ficha-imgs">{{range $i, $im := .}}{{if lt $i 2}}<figure><img src="{{$.Base}}/img/{{$h.Key}}/{{$i}}" alt="{{$h.Name}}, imagen {{$i}}" loading="lazy"><figcaption>{{$im.Credit}}</figcaption></figure>{{end}}{{end}}</div>{{end}}
+  {{with .Desc}}<h2 class="label">Cómo se hace{{if eq $h.Detail.DescLang "en"}} <span class="muted">(en inglés)</span>{{end}}</h2>
+  <div class="ficha-texto">{{range (lines .)}}<p>{{.}}</p>{{end}}</div>{{end}}
+  <p class="ficha-meta">{{with .English}}<span>{{.}}</span>{{end}}{{with .Equipment}}<span>Material: {{join . ", "}}</span>{{end}}</p>
+  <p class="ficha-fuente">Fuente: {{join .Sources " · "}}</p>
+</section>
+{{end}}
+
 {{if $h.Rows}}
 {{with $h.Record}}<p class="record"><span class="label">Récord · {{$h.Metric}}</span><strong class="tnum">{{.}}</strong></p>{{end}}
 
