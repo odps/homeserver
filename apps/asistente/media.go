@@ -190,7 +190,7 @@ func (a *agent) gotFile(ctx context.Context, tg telegram, c config, m *tgMessage
 	if text == "" {
 		text = "Mira esto y dime qué es y si hay algo que convenga apuntar (una cita, un plazo, un gasto)."
 	}
-	a.respondWith(ctx, tg, c, chat, text, label, []map[string]any{part})
+	a.respondWith(ctx, tg, c, chat, text, label, []map[string]any{part}, false)
 }
 
 // ---- Notas de voz ----
@@ -301,5 +301,5 @@ func (a *agent) gotVoice(ctx context.Context, tg telegram, c config, m *tgMessag
 		return
 	}
 	tg.send(ctx, chat, "🎙 «"+text+"»")
-	a.respond(ctx, tg, c, chat, text, nil)
+	a.respondWith(ctx, tg, c, chat, text, "", nil, true)
 }

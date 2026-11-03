@@ -27,6 +27,7 @@ type fakeTelegram struct {
 	markup []any             // reply_markup de cada envío (nil si no lleva)
 	edited int               // botones quitados
 	files  map[string][]byte // ficheros que se pueden bajar (file_id → datos)
+	voices [][]byte          // notas de voz enviadas
 }
 
 func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
@@ -45,6 +46,16 @@ func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
 		if !strings.HasPrefix(r.URL.Path, "/botTOKEN/") {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"ok":false,"description":"Unauthorized"}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/sendVoice") {
+			f.mu.Lock()
+			if file, _, err := r.FormFile("voice"); err == nil && r.FormValue("chat_id") != "" {
+				b, _ := io.ReadAll(file)
+				f.voices = append(f.voices, b)
+			}
+			f.mu.Unlock()
+			w.Write([]byte(`{"ok":true,"result":{}}`))
 			return
 		}
 		var body map[string]any

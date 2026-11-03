@@ -26,6 +26,7 @@ type agent struct {
 	web        *webClient
 	geo        *geo.Client
 	voice      transcriber
+	speak      speaker
 	apps       *appTools
 	telegramAt string // https://api.telegram.org (sustituible en los tests)
 	httpClient *http.Client
@@ -49,8 +50,8 @@ const (
 
 func newAgent(s store, log *slog.Logger, keysPath, statusPath, gateway string) *agent {
 	a := &agent{store: s, log: log, keysPath: keysPath, statusPath: statusPath, web: newWebClient(false), geo: geo.New(),
-		voice: newTranscriber(filepath.Dir(keysPath)),
-		apps:  &appTools{gateway: gateway, log: log}, telegramAt: "https://api.telegram.org",
+		voice: newTranscriber(filepath.Dir(keysPath)), speak: newSpeaker(filepath.Dir(keysPath)),
+		apps: &appTools{gateway: gateway, log: log}, telegramAt: "https://api.telegram.org",
 		httpClient: &http.Client{Timeout: 90 * time.Second}, strangers: map[int64]time.Time{}}
 	a.config.Store(&config{})
 	return a
@@ -236,6 +237,7 @@ También entiendo notas de voz, fotos y PDF (citas, tickets, facturas) y la ubic
 /notas — ver tus últimas notas
 /ubicacion — qué ubicación tengo tuya (compártela con el clip → Ubicación)
 /sinubicacion — borrar tu ubicación
+/voz — cuándo te contesto también con voz (siempre, auto o no)
 /uso — peticiones al modelo de hoy
 /ayuda — este mensaje`
 
@@ -298,6 +300,9 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 		a.store.forgetLocation(ctx, chat)
 		tg.send(ctx, chat, "He borrado tu ubicación.")
 		return
+	case "/voz":
+		tg.send(ctx, chat, a.voiceCommand(ctx, strings.TrimSpace(strings.TrimPrefix(text, strings.SplitN(text, " ", 2)[0]))))
+		return
 	case "/uso":
 		u, _ := a.store.usageToday(ctx)
 		tg.send(ctx, chat, fmt.Sprintf("Hoy: %d de %d peticiones al modelo (%d tokens de entrada y %d de salida).", u.Requests, c.DailyLimit, u.PromptTokens, u.CompletionTokens))
@@ -308,12 +313,13 @@ func (a *agent) handle(ctx context.Context, tg telegram, c config, m *tgMessage)
 
 // respond contesta un texto de la persona con el modelo.
 func (a *agent) respond(ctx context.Context, tg telegram, c config, chat int64, text string, parts []map[string]any) {
-	a.respondWith(ctx, tg, c, chat, text, "", parts)
+	a.respondWith(ctx, tg, c, chat, text, "", parts, false)
 }
 
 // respondWith es respond con adjuntos (fotos, PDF) y lo que queda de ellos en
-// el historial (label: «[foto]»); el adjunto en sí no se guarda.
-func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int64, text, label string, parts []map[string]any) {
+// el historial (label: «[foto]»); el adjunto en sí no se guarda. voiceIn: se
+// le ha hablado con una nota de voz (puede contestar también con voz).
+func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int64, text, label string, parts []map[string]any, voiceIn bool) {
 	// Mientras piensa, Telegram muestra «escribiendo…».
 	done := make(chan struct{})
 	go func() {
@@ -358,6 +364,10 @@ func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int
 	}
 	if err := tg.sendButtons(ctx, chat, reply, opts); err != nil {
 		a.log.Warn("enviar", "err", err)
+		return
+	}
+	if err == nil {
+		a.speakReply(ctx, tg, chat, reply, voiceIn)
 	}
 }
 
