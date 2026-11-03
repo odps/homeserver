@@ -41,7 +41,7 @@ func TestWeatherInSummary(t *testing.T) {
 	p.Home = "Calle Mayor 3, 28013 Madrid"
 	svc.store.savePrefs(ctx, "ana", p)
 	text, _ := svc.summary(ctx, "ana", day, false)
-	if !strings.Contains(text, "Tiempo en Madrid: lluvia, 9–17 °C; lluvia probable 18:00–19:00 (70 %).") {
+	if !strings.Contains(text, "\n\n🌧 TIEMPO\nMadrid: lluvia, 9–17 °C; lluvia probable 18:00–19:00 (70 %)") {
 		t.Fatalf("resumen:\n%s", text)
 	}
 	if asked != "Madrid" {

@@ -460,46 +460,51 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 	local := now.In(madrid)
 	today := dayStart(local)
 	var b strings.Builder
-	fmt.Fprintf(&b, "Tu día, %s.\n", longDate(local))
-	if line := s.weatherLine(ctx, owner, local); line != "" {
-		b.WriteString(line + "\n")
+	// section escribe un bloque con su título; sin líneas, no sale.
+	section := func(title string, lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		b.WriteString("\n\n" + title + "\n" + strings.Join(lines, "\n"))
 	}
+	day := longDate(local)
+	b.WriteString("☀️ Buenos días. " + strings.ToUpper(day[:1]) + day[1:])
+
+	if place, d, ok := s.weather(ctx, owner); ok {
+		section(skyIcon(d.Sky)+" TIEMPO", []string{place + ": " + d.Line()})
+	}
+
+	// Hoy: eventos y rutinas en una sola línea de tiempo (ya vienen por hora).
 	events, err := s.agenda(ctx, owner, today, today.AddDate(0, 0, 1))
 	if err != nil {
 		return "", err
 	}
-	var evs []entry
-	var routine []string
+	var todayLines []string
 	for _, e := range events {
+		if e.Kind != "evento" {
+			continue
+		}
+		line := "• "
 		switch {
-		case e.Kind != "evento":
-		case e.Routine && !e.AllDay && e.Start != nil && e.End != nil:
-			routine = append(routine, e.Title+" "+e.Start.Format("15:04")+"–"+e.End.Format("15:04"))
-		default:
-			evs = append(evs, e)
+		case e.AllDay:
+			line += "Todo el día · "
+		case e.Start != nil && e.End != nil:
+			line += e.Start.Format("15:04") + "–" + e.End.Format("15:04") + " · "
 		}
-	}
-	if len(evs) == 0 {
-		b.WriteString("\nAgenda: nada para hoy.\n")
-	} else {
-		b.WriteString("\nAgenda:\n")
-		for _, e := range evs {
-			line := "• "
-			if e.AllDay {
-				line += "Todo el día: "
-			} else {
-				line += e.Start.Format("15:04") + "–" + e.End.Format("15:04") + " "
-			}
-			line += e.Title
-			if e.Location != "" {
-				line += " (" + e.Location + ")"
-			}
-			b.WriteString(line + "\n")
+		line += e.Title
+		if e.Routine {
+			line += " 🔁"
 		}
+		if e.Location != "" && !e.Routine {
+			line += " · " + e.Location
+		}
+		todayLines = append(todayLines, line)
 	}
-	if len(routine) > 0 {
-		b.WriteString("Rutina: " + strings.Join(routine, " · ") + "\n")
+	if len(todayLines) == 0 {
+		todayLines = []string{"Nada en la agenda."}
 	}
+	section("📅 HOY", todayLines)
+
 	tasks, err := s.tasks(ctx, owner)
 	if err != nil {
 		return "", err
@@ -508,20 +513,26 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 	for _, t := range tasks {
 		switch {
 		case t.Overdue:
-			due = append(due, "• Vencida: "+t.Title+" ("+t.When+")")
+			due = append(due, "⚠️ "+t.Title+" ("+strings.Replace(t.When, "vence", "venció", 1)+")")
 		case t.Start != nil && t.Start.Before(today.AddDate(0, 0, 1)):
-			due = append(due, "• Hoy: "+t.Title)
+			line := "• " + t.Title
+			if !t.AllDay {
+				line += ", a las " + t.Start.Format("15:04")
+			}
+			due = append(due, line)
 		}
 	}
-	if len(due) > 0 {
-		b.WriteString("\nTareas:\n" + strings.Join(due, "\n") + "\n")
+	section("✅ TAREAS", due)
+
+	var ships []string
+	for _, l := range s.shipmentLines(ctx, owner, now) {
+		ships = append(ships, "• "+strings.TrimPrefix(l, "📦 "))
 	}
-	if lines := s.shipmentLines(ctx, owner, now); len(lines) > 0 {
-		b.WriteString("\n" + strings.Join(lines, "\n") + "\n")
-	}
-	if bdays, err := s.store.birthdays(ctx, owner, local.Format("01-02")); err == nil && len(bdays) > 0 {
-		b.WriteString("\nCumpleaños:\n")
-		for _, r := range bdays {
+	section("📦 ENVÍOS", ships)
+
+	var bdays []string
+	if rows, err := s.store.birthdays(ctx, owner, local.Format("01-02")); err == nil {
+		for _, r := range rows {
 			if c, err := decodeCard(r.Data); err == nil {
 				v := viewContact(r.ID, c)
 				line := "• " + v.Name
@@ -532,31 +543,34 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 						line += fmt.Sprintf(" (%d años)", local.Year()-year)
 					}
 				}
-				b.WriteString(line + "\n")
+				bdays = append(bdays, line)
 			}
 		}
 	}
-	// Solo lo personal y lo importante se lista y pasa por la IA; de lo
-	// demás (notificaciones y comerciales), el número.
+	section("🎂 CUMPLEAÑOS", bdays)
+
+	// Correo: solo lo personal y lo importante se lista y pasa por la IA; de
+	// lo demás (notificaciones y comerciales), el número.
 	unread := mailQuery{UnreadOnly: true, Since: now.Add(-24 * time.Hour), Limit: 50, Categories: []string{catPersonal, catImportant}}
 	mails, err := s.store.searchMessages(ctx, owner, unread)
 	counts, _ := s.store.countMessages(ctx, owner, unread)
 	if err == nil && (len(mails) > 0 || counts[catNotice]+counts[catBulk] > 0) {
-		fmt.Fprintf(&b, "\nCorreo sin leer de las últimas 24 h: %d\n", len(mails)+counts[catNotice]+counts[catBulk])
+		var lines []string
 		for i, m := range mails {
 			if i == 8 {
-				fmt.Fprintf(&b, "• y %d más\n", len(mails)-8)
+				lines = append(lines, fmt.Sprintf("• y %d más", len(mails)-8))
 				break
 			}
 			line := "• " + senderName(m) + ": " + orNone(m.Subject)
 			if m.Category == catImportant {
-				line += " [" + m.Reason + "]"
+				line = "❗ " + senderName(m) + ": " + orNone(m.Subject) + " (" + m.Reason + ")"
 			}
-			b.WriteString(line + "\n")
+			lines = append(lines, line)
 		}
 		if n, c := counts[catNotice], counts[catBulk]; n+c > 0 {
-			fmt.Fprintf(&b, "• Además: %s y %s (no pasan por la IA)\n", plural(n, "notificación", "notificaciones"), plural(c, "comercial", "comerciales"))
+			lines = append(lines, fmt.Sprintf("Además, %s y %s, que no pasan por la IA.", plural(n, "notificación", "notificaciones"), plural(c, "comercial", "comerciales")))
 		}
+		section(fmt.Sprintf("✉️ CORREO SIN LEER (24 h): %d", len(mails)+counts[catNotice]+counts[catBulk]), lines)
 		if withAI && s.summarizer != nil && len(mails) > 0 {
 			sctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 			text, err := s.summarizer(sctx, mailPrompt(mails))
@@ -564,22 +578,54 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			if err != nil {
 				s.log.Warn("resumen del correo", "usuario", owner, "err", err)
 			} else if text = strings.TrimSpace(text); text != "" {
-				b.WriteString("\nLo importante del correo:\n" + text + "\n")
+				section("💡 LO IMPORTANTE DEL CORREO", []string{text})
 			}
 		}
 	}
+
+	// Mañana, en corto: hora y título de cada evento (como mucho 5).
 	tomorrow, _ := s.agenda(ctx, owner, today.AddDate(0, 0, 1), today.AddDate(0, 0, 2))
+	var next []string
 	for _, e := range tomorrow {
-		if e.Kind == "evento" {
-			when := "todo el día"
-			if !e.AllDay {
-				when = "a las " + e.Start.Format("15:04")
-			}
-			b.WriteString("\nMañana empieza " + when + " con: " + e.Title + ".\n")
+		if e.Kind != "evento" {
+			continue
+		}
+		if len(next) == 5 {
+			next = append(next, "• …")
 			break
 		}
+		line := "• Todo el día · " + e.Title
+		if !e.AllDay && e.Start != nil {
+			line = "• " + e.Start.Format("15:04") + " · " + e.Title
+		}
+		if e.Routine {
+			line += " 🔁"
+		}
+		next = append(next, line)
 	}
+	section("🔜 MAÑANA", next)
 	return strings.TrimSpace(b.String()), nil
+}
+
+// skyIcon es el icono del cielo que da Open-Meteo (geo.Sky).
+func skyIcon(sky string) string {
+	switch sky {
+	case "despejado":
+		return "☀️"
+	case "poco nuboso":
+		return "🌤"
+	case "nublado":
+		return "☁️"
+	case "niebla":
+		return "🌫"
+	case "llovizna", "lluvia":
+		return "🌧"
+	case "nieve":
+		return "❄️"
+	case "tormenta":
+		return "⛈"
+	}
+	return "🌡"
 }
 
 // setMailRules guarda los remitentes importantes y a ignorar y reclasifica.
@@ -627,30 +673,30 @@ func (s *service) markSender(ctx context.Context, owner, addr, as string) error 
 	return s.setMailRules(ctx, owner, imp, ign)
 }
 
-// weatherLine es el tiempo de hoy en la ciudad de la persona, o nada si no se
-// sabe la ciudad o el servicio no responde.
-func (s *service) weatherLine(ctx context.Context, owner string, day time.Time) string {
+// weather es el tiempo de hoy en la ciudad de la persona (ok = false si no
+// se sabe la ciudad o el servicio no responde).
+func (s *service) weather(ctx context.Context, owner string) (place string, day geo.Day, ok bool) {
 	if s.geo == nil {
-		return ""
+		return "", day, false
 	}
 	p, _ := s.store.prefs(ctx, owner)
 	city := p.weatherCity()
 	if city == "" {
-		return ""
+		return "", day, false
 	}
 	wctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	lat, lon, label, err := s.geo.City(wctx, city)
 	if err != nil {
 		s.log.Warn("tiempo", "err", err)
-		return ""
+		return "", day, false
 	}
 	f, err := s.geo.Weather(wctx, lat, lon, 1)
 	if err != nil || len(f.Days) == 0 {
 		s.log.Warn("tiempo", "err", err)
-		return ""
+		return "", day, false
 	}
-	return "Tiempo en " + label + ": " + f.Days[0].Line() + "."
+	return label, f.Days[0], true
 }
 
 func senderName(m message) string {
@@ -769,4 +815,31 @@ func (s *service) syncAll(ctx context.Context) {
 	if err := s.store.pruneShipments(ctx, s.now()); err != nil {
 		s.log.Warn("envíos", "err", err)
 	}
+}
+
+// remaining es la agenda entre from y to para el asistente: si el intervalo
+// incluye este momento, empieza ahora (lo terminado no sale; lo que está en
+// curso, sí) y se añaden delante las tareas vencidas sin hacer. withPast lo
+// da todo desde from.
+func (s *service) remaining(ctx context.Context, owner string, from, to time.Time, withPast bool) ([]entry, error) {
+	now := s.now()
+	fromNow := !withPast && from.Before(now) && to.After(now)
+	if fromNow {
+		from = now
+	}
+	l, err := s.agenda(ctx, owner, from, to)
+	if err != nil || !fromNow {
+		return l, err
+	}
+	tasks, err := s.tasks(ctx, owner)
+	if err != nil {
+		return l, err
+	}
+	var overdue []entry
+	for _, t := range tasks {
+		if t.Overdue {
+			overdue = append(overdue, t)
+		}
+	}
+	return append(overdue, l...), nil
 }

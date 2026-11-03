@@ -49,9 +49,11 @@ type rangeIn struct {
 	Desde      string `json:"desde,omitempty" jsonschema:"primer día (AAAA-MM-DD); por defecto, hoy"`
 	Hasta      string `json:"hasta,omitempty" jsonschema:"último día incluido (AAAA-MM-DD); por defecto, 7 días después de desde"`
 	SinRutinas bool   `json:"sin_rutinas,omitempty" jsonschema:"true para no incluir las rutinas (trabajo, club…), que salen marcadas con rutina"`
+	ConPasado  bool   `json:"con_pasado,omitempty" jsonschema:"true para incluir también lo que ya ha terminado hoy (por defecto, desde ahora)"`
 }
 
 type entriesOut struct {
+	Ahora     string  `json:"ahora,omitempty"` // fecha y hora a la que se ha mirado
 	Elementos []entry `json:"elementos"`
 }
 
@@ -159,7 +161,7 @@ type summaryOut struct {
 func addTools(server *mcp.Server, svc *service) {
 	addMoreTools(server, svc)
 	addShipmentTools(server, svc)
-	mcp.AddTool(server, &mcp.Tool{Name: "agenda_ver", Description: "Eventos (cada repetición por separado) y tareas con vencimiento entre dos días, por orden, con lugar, enlace a Maps y avisos"},
+	mcp.AddTool(server, &mcp.Tool{Name: "agenda_ver", Description: "Eventos (cada repetición por separado) y tareas con vencimiento entre dos días, por orden, con lugar, enlace a Maps y avisos. Por defecto empieza ahora: lo que ya ha terminado hoy no sale (lo que está en curso sí), y se añaden las tareas vencidas sin hacer"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in rangeIn) (*mcp.CallToolResult, entriesOut, error) {
 			who, err := identity(req)
 			if err != nil {
@@ -184,11 +186,12 @@ func addTools(server *mcp.Server, svc *service) {
 			if !to.After(from) || to.Sub(from) > 400*24*time.Hour {
 				return nil, entriesOut{}, errors.New("el intervalo debe ir hacia delante y durar menos de un año")
 			}
-			l, err := svc.agenda(ctx, who.User, from, to)
+			now := svc.now()
+			l, err := svc.remaining(ctx, who.User, from, to, in.ConPasado)
 			if in.SinRutinas {
 				l = slices.DeleteFunc(l, func(e entry) bool { return e.Routine })
 			}
-			return nil, entriesOut{Elementos: orEmpty(l)}, err
+			return nil, entriesOut{Ahora: now.In(madrid).Format("2006-01-02 15:04"), Elementos: orEmpty(l)}, err
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "agenda_buscar", Description: "Busca eventos y tareas (pasados o futuros) por palabras del título, lugar o notas"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in contactsIn) (*mcp.CallToolResult, entriesOut, error) {

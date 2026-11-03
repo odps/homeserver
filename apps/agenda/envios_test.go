@@ -299,7 +299,7 @@ func TestShipmentsSummaryAndTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"📦 Hoy llega: Zalando (Correos)", "📦 Para recoger: Shein (InPost)"} {
+	for _, want := range []string{"📦 ENVÍOS\n• Hoy llega: Zalando (Correos)", "• Para recoger: Shein (InPost)"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("falta %q en el resumen:\n%s", want, text)
 		}
