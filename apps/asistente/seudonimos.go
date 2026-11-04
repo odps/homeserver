@@ -34,6 +34,7 @@ var piiFields = map[string]string{
 	"lugar": "DIR", "direccion": "DIR", "direcciones": "DIR", "casa": "DIR", "origen": "DIR", "destino": "DIR",
 	"telefono": "TEL", "telefonos": "TEL", "correos": "EMAIL", "correo": "EMAIL", "email": "EMAIL",
 	"mapa": "ENLACE", "ruta": "ENLACE", "cumpleanos": "CUMPLE",
+	"numero": "DOC", // números de documento (papeles) y de seguimiento (envíos)
 }
 
 var (

@@ -1,0 +1,101 @@
+{{define "doc.html"}}{{template "head" .}}
+{{$d := .Doc}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/">Documentos</a></p>
+  <h1 class="date">{{$d.Title}}</h1>
+  <div class="hero-meta"><span>{{$d.TypeLabel}}</span>{{with $d.Holder}}<span>{{.}}</span>{{end}}</div>
+</section>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/doc/{{$d.ID}}/borrar">
+  <p><strong>¿Borrar este documento?</strong> Se borran también sus {{len .Files}} archivo{{if ne (len .Files) 1}}s{{end}} y su aviso en la Agenda. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar el documento</button>
+    <a class="btn ghost" href="{{.Base}}/doc/{{$d.ID}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+{{if $d.Expires}}
+<section class="status {{$d.State}}">
+  <span class="count"><span class="count-lead">{{$d.Lead}}</span><span class="count-n tnum">{{$d.Big}}</span><span class="count-u">{{$d.Unit}}</span></span>
+  <span class="status-main">
+    <span class="status-word">{{if eq $d.State "caducado"}}Caducado{{else if eq $d.State "caduca_pronto"}}Caduca pronto{{else}}Vigente{{end}}</span>
+    <span class="status-date">{{if eq $d.State "caducado"}}Caducó{{else}}Caduca{{end}} el {{$d.ExpiresTx}}</span>
+  </span>
+</section>
+{{else}}
+<section class="status sin_caducidad"><span class="status-main"><span class="status-word">Sin caducidad</span></span></section>
+{{end}}
+
+<section class="card">
+  <dl class="facts">
+    {{with $d.Number}}<div><dt>Número</dt><dd class="number">{{.}}</dd></div>{{end}}
+    {{with $d.Holder}}<div><dt>Titular</dt><dd>{{.}}</dd></div>{{end}}
+    {{with $d.Issuer}}<div><dt>Emisor</dt><dd>{{.}}</dd></div>{{end}}
+    {{with $d.Issued}}<div><dt>Emisión</dt><dd>{{.}}</dd></div>{{end}}
+    {{with $d.Expires}}<div><dt>Caducidad</dt><dd>{{.}}</dd></div>{{end}}
+    {{with $d.Every}}<div><dt>Renovación</dt><dd>{{.}}</dd></div>{{end}}
+    <div><dt>Avisos</dt><dd>{{$d.Alerts}}</dd></div>
+    {{with $d.Amount}}<div><dt>Importe</dt><dd class="tnum">{{.}}</dd></div>{{end}}
+  </dl>
+  {{with $d.Notes}}<div class="notes"><h2 class="label">Notas</h2>{{range lines .}}<p>{{.}}</p>{{end}}</div>{{end}}
+  <p class="actions"><a class="btn" href="{{.Base}}/doc/{{$d.ID}}/editar">Editar</a></p>
+</section>
+
+{{if $d.CanRenew}}
+<form class="panel renew" method="post" action="{{.Base}}/doc/{{$d.ID}}/renovar">
+  <div class="panel-head">
+    <h2>Renovar</h2>
+    <p>{{if $d.Next}}Se renueva {{$d.Every}}: si lo dejas vacío, la caducidad pasa al {{$d.Next}}.{{else}}Pon la fecha de caducidad del documento nuevo.{{end}}</p>
+  </div>
+  <label class="field">Nueva caducidad <input type="date" name="fecha"{{if not $d.Next}} required{{end}}></label>
+  <p class="actions"><button class="btn primary">Renovar</button></p>
+</form>
+{{end}}
+
+<section class="files" id="archivos" aria-labelledby="h-archivos">
+  <h2 class="section-title" id="h-archivos">Archivos{{with .Files}} <span class="muted">({{len .}})</span>{{end}}</h2>
+  {{with .ConfirmFile}}
+  <form class="dangerzone confirm" method="post" action="{{$.Base}}/archivo/{{.ID}}/borrar">
+    <p><strong>¿Quitar «{{.Name}}»?</strong> Se borra de tu servidor y no se puede deshacer.</p>
+    <div class="actions tight">
+      <button class="btn danger">Sí, quitar el archivo</button>
+      <a class="btn ghost" href="{{$.Base}}/doc/{{$d.ID}}#archivos">Cancelar</a>
+    </div>
+  </form>
+  {{end}}
+  {{if .Files}}
+  <ul class="file-grid">
+    {{range .Files}}
+    <li class="file">
+      <a class="file-open" href="{{$.Base}}/archivo/{{.ID}}">
+        {{if .Mini}}<img src="{{$.Base}}/archivo/{{.ID}}/mini" alt="{{.Name}}" loading="lazy">{{else}}<span class="file-icon" aria-hidden="true">{{.Kind}}</span>{{end}}
+        <span class="file-name">{{.Name}}</span>
+      </a>
+      <span class="file-meta">{{.Kind}} · {{.Size}}</span>
+      <a class="file-del" href="{{$.Base}}/doc/{{$d.ID}}?quitar={{.ID}}#archivos">Quitar…</a>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">Sin archivos. Puedes guardar el escaneo, una foto de cada cara o el PDF.</p>
+  {{end}}
+  {{if lt (len .Files) 10}}
+  <form class="upload" method="post" action="{{.Base}}/doc/{{$d.ID}}/archivo" enctype="multipart/form-data">
+    <label class="field">Añadir un archivo <input type="file" name="archivo" accept="image/*,application/pdf" required></label>
+    <p class="help">PDF, JPEG, PNG o WebP, hasta 15 MB. Las fotos se guardan sin los datos ocultos (lugar, móvil, hora).</p>
+    <p class="actions"><button class="btn primary">Subir</button></p>
+  </form>
+  {{else}}
+  <p class="quiet">Ya tiene 10 archivos, el máximo: quita alguno para añadir otro.</p>
+  {{end}}
+</section>
+
+{{if not .Confirm}}
+<div class="dangerzone">
+  <p>¿Ya no lo necesitas? Al borrarlo desaparece de tu servidor con sus archivos.</p>
+  <a class="btn danger small" href="{{.Base}}/doc/{{$d.ID}}?borrar=1">Borrar el documento…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

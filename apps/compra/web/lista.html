@@ -1,0 +1,100 @@
+{{define "lista.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Compra</p>
+  <h1 class="date">La lista</h1>
+  <div class="hero-meta">
+    {{if .Total}}<span><span id="quedan" class="tnum">{{.Left}}</span> por comprar</span>{{else}}<span>Vacía</span>{{end}}
+    <a href="{{.Base}}/secciones">Orden de las secciones</a>
+  </div>
+</section>
+
+<form class="add" id="anadir" method="post" action="{{.Base}}/anadir">
+  <label class="vh" for="texto">Qué hay que comprar</label>
+  <div class="add-row">
+    <textarea id="texto" name="texto" rows="1" maxlength="2000" placeholder="leche, 2 kg de patatas, huevos y pan" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="send" required>{{.Text}}</textarea>
+    <button class="btn primary add-btn">Añadir</button>
+  </div>
+  <p class="help">Separa con comas o con «y». La cantidad, delante o detrás: «2 kg de patatas», «leche x6».</p>
+</form>
+
+{{if .Sections}}
+<div class="lista">
+  {{range .Sections}}
+  <section class="sec" id="s-{{.Key}}">
+    <h2 class="sec-title"><span>{{.Label}}</span> <span class="sec-n tnum" title="Por comprar">{{.Left}}</span></h2>
+    <ul class="items">
+      {{range .Items}}
+      <li class="item{{if .Done}} hecho{{end}}" id="i-{{.ID}}" data-id="{{.ID}}">
+        <form class="marcar" method="post" action="{{$.Base}}/marcar">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <input type="hidden" name="hecho" value="{{if .Done}}0{{else}}1{{end}}">
+          <button class="check" aria-pressed="{{if .Done}}true{{else}}false{{end}}">
+            <span class="box" aria-hidden="true"></span>
+            <span class="item-text">
+              <span class="item-line"><span class="item-name">{{.Name}}</span>{{with .Qty}} <span class="item-qty tnum">{{.}}</span>{{end}}</span>
+              {{if or .Note .By}}<span class="item-meta">{{.Note}}{{if and .Note .By}} · {{end}}{{with .By}}<span class="by">{{.}}</span>{{end}}</span>{{end}}
+            </span>
+          </button>
+        </form>
+        <a class="item-edit" href="{{$.Base}}/cosa/{{.ID}}" aria-label="Editar {{.Name}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></a>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</div>
+
+<div class="finish" id="terminar">
+  <form method="post" action="{{.Base}}/terminar">
+    <button class="btn primary big finish-btn">He terminado <span class="finish-n">· <span id="tachadas" class="tnum">{{.Done}}</span> en el carro</span></button>
+  </form>
+  <p class="help">Lo tachado sale de la lista y se apunta en tu historial. Lo demás se queda.</p>
+</div>
+
+{{if .ConfirmClear}}
+<form class="dangerzone confirm" id="vaciar" method="post" action="{{.Base}}/vaciar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Vaciar la lista entera?</strong> Se borra todo, también lo tachado, y no pasa al historial.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, vaciar la lista</button>
+    <a class="btn ghost" href="{{.Base}}/">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="vaciar">
+  <p>¿Empezar de cero?</p>
+  <a class="btn danger small" href="{{.Base}}/?vaciar=1#vaciar">Vaciar la lista…</a>
+</div>
+{{end}}
+{{else}}
+<section class="empty">
+  <p class="big">La lista está vacía.</p>
+  <p>Escribe arriba lo que haga falta, todo de una vez: «leche, 2 kg de patatas, huevos y pan». Cada cosa va a su sección del súper, y puedes cambiarla.</p>
+  <p>También se lo puedes pedir a Talia.</p>
+</section>
+{{end}}
+
+{{if or .Running .Usual}}
+<section class="sugs" id="sugerencias">
+  {{with .Running}}
+  <h2 class="label">Se te estará acabando</h2>
+  <ul class="freq">
+    {{range .}}<li><form method="post" action="{{$.Base}}/anadir"><input type="hidden" name="nombre" value="{{.Name}}"><button class="btn freq-btn"><span class="plus" aria-hidden="true">+</span><span class="freq-text"><span class="freq-name">{{.Name}}</span><span class="freq-meta">{{.Meta}}</span></span></button></form></li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{with .Usual}}
+  <h2 class="label">Lo de siempre</h2>
+  <ul class="freq">
+    {{range .}}<li><form method="post" action="{{$.Base}}/anadir"><input type="hidden" name="nombre" value="{{.Name}}"><button class="btn freq-btn"><span class="plus" aria-hidden="true">+</span><span class="freq-text"><span class="freq-name">{{.Name}}</span><span class="freq-meta">{{.Meta}}</span></span></button></form></li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+{{end}}
+
+<div class="dock" data-api="{{.Base}}/api/marcar">
+  <p class="dock-msg" id="cola" role="status" hidden></p>
+  <p class="dock-msg error" id="lista-error" role="alert" hidden></p>
+</div>
+{{template "foot" .}}{{end}}

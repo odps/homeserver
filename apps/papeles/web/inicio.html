@@ -1,0 +1,87 @@
+{{define "inicio.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Papeles</p>
+  <h1 class="date">Tus documentos</h1>
+  {{if .Total}}<div class="hero-meta"><span>{{.Total}} documento{{if ne .Total 1}}s{{end}}</span>{{with .Expired}}<span class="hm-expired">{{len .}} caducado{{if ne (len .) 1}}s{{end}}</span>{{end}}{{with .Soon}}<span class="hm-soon">{{len .}} caduca{{if ne (len .) 1}}n{{end}} pronto</span>{{end}}</div>{{end}}
+</section>
+
+{{if .Total}}
+<form class="search" method="get" action="{{.Base}}/" role="search">
+  <label class="vh" for="q">Buscar por título, titular, emisor o tipo</label>
+  <input type="search" id="q" name="q" value="{{.Query}}" placeholder="Buscar: DNI, seguro, Ana…" maxlength="100" autocomplete="off">
+  <button class="btn">Buscar</button>
+  {{if .Query}}<a class="btn ghost" href="{{.Base}}/">Ver todo</a>{{end}}
+</form>
+{{end}}
+
+{{with .Expired}}
+<section class="alerts expired" aria-labelledby="h-caducados">
+  <h2 class="label" id="h-caducados">Caducados</h2>
+  <ul class="alert-list">
+    {{range .}}
+    <li><a class="alert" href="{{$.Base}}/doc/{{.ID}}">
+      <span class="count"><span class="count-lead">{{.Lead}}</span><span class="count-n tnum">{{.Big}}</span><span class="count-u">{{.Unit}}</span></span>
+      <span class="alert-main"><span class="alert-title">{{.Title}}</span><span class="alert-meta">{{.TypeLabel}}{{with .Holder}} · {{.}}{{end}}</span><span class="alert-meta">Caducó el {{.Expires}}</span></span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{with .Soon}}
+<section class="alerts soon" aria-labelledby="h-pronto">
+  <h2 class="label" id="h-pronto">Caducan pronto</h2>
+  <ul class="alert-list">
+    {{range .}}
+    <li><a class="alert" href="{{$.Base}}/doc/{{.ID}}">
+      <span class="count"><span class="count-lead">{{.Lead}}</span><span class="count-n tnum">{{.Big}}</span><span class="count-u">{{.Unit}}</span></span>
+      <span class="alert-main"><span class="alert-title">{{.Title}}</span><span class="alert-meta">{{.TypeLabel}}{{with .Holder}} · {{.}}{{end}}</span><span class="alert-meta">Caduca el {{.Expires}}</span></span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{if .Groups}}
+{{if .Query}}<p class="quiet">Resultados para «{{.Query}}»:</p>{{else if or .Expired .Soon}}<h2 class="section-title">Todos</h2>{{end}}
+{{range .Groups}}
+<section class="group">
+  <h2 class="label">{{.Label}}</h2>
+  <ul class="list">
+    {{range .Docs}}
+    <li class="row">
+      <a class="row-main" href="{{$.Base}}/doc/{{.ID}}">
+        <span class="title">{{.Title}}</span>
+        <span class="meta">{{with .Holder}}<span>{{.}}</span>{{end}}{{with .Issuer}}<span>{{.}}</span>{{end}}{{if .Files}}<span>{{.Files}} archivo{{if ne .Files 1}}s{{end}}</span>{{end}}</span>
+      </a>
+      {{if .Expires}}<span class="pill {{.State}}" title="{{.When}}">{{if eq .State "caducado"}}Caducado{{else}}{{.Expires}}{{end}}</span>{{else}}<span class="pill none">Sin caducidad</span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{else if .Query}}
+<div class="empty">
+  <p class="big">No hay nada con «{{.Query}}»</p>
+  <p>Se busca en el título, el titular, el emisor y el tipo. <a href="{{.Base}}/">Ver todos</a></p>
+</div>
+{{else}}
+<div class="empty">
+  <p class="big">Aún no hay documentos</p>
+  <p>Apunta el DNI, el pasaporte, el carné, la ITV o los seguros con su fecha de caducidad y la Agenda te avisará antes de que caduquen. Puedes guardar también el escaneo o una foto.</p>
+  <p class="actions"><a class="btn primary big" href="{{.Base}}/doc/nuevo"><span aria-hidden="true">+</span> Añadir el primero</a></p>
+</div>
+{{end}}
+
+{{if .Total}}
+<p class="actions"><a class="btn primary big wide" href="{{.Base}}/doc/nuevo"><span aria-hidden="true">+</span> Añadir</a></p>
+
+<form class="panel agenda" method="post" action="{{.Base}}/agenda">
+  <div class="panel-head">
+    <h2>Avisos</h2>
+    <p>Los avisos te llegan desde la Agenda, en el calendario «Vencimientos». Se actualiza sola con cada cambio; si algo no cuadra, actualízala a mano.</p>
+  </div>
+  <button class="btn">Actualizar la Agenda ahora</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

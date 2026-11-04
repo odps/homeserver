@@ -1,0 +1,35 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11100f" media="(prefers-color-scheme: dark)">
+<title>{{if .Title}}{{.Title}} · {{else if eq .Tab "secciones"}}Secciones · {{end}}Compra</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+{{if .Script}}<script src="{{.Base}}/static/lista.js" defer></script>
+{{end}}</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Compra, la lista"><span class="mark" aria-hidden="true"></span>Compra</a>
+    <nav class="tabs" aria-label="Secciones de Compra">
+      <a href="{{.Base}}/"{{if eq .Tab "lista"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h2.2l2 9.5h9.6L20 9.5H7.2"/><circle cx="9.5" cy="19.5" r="1.2"/><circle cx="16.5" cy="19.5" r="1.2"/></svg><span>Lista</span></a>
+      <a href="{{.Base}}/secciones"{{if eq .Tab "secciones"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 8.5l1.5-2 1.5 2M4 15.5l1.5 2 1.5-2"/></svg><span>Secciones</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tu lista, cifrada en tu servidor.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}

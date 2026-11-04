@@ -1,0 +1,26 @@
+{{define "secciones.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Compra</p>
+  <h1 class="date">Secciones</h1>
+  <p class="lead">Ponlas en el orden en que recorres tu súper: la lista sale así, de la entrada a la caja.</p>
+</section>
+
+<form class="order" method="post" action="{{.Base}}/secciones">
+  <ol class="order-list">
+    {{range .Order}}
+    <li class="order-row" id="sec-{{.Key}}">
+      <span class="order-n tnum">{{.N}}</span>
+      <span class="order-name">{{.Label}}</span>
+      <span class="order-btns">
+        <button class="btn small" name="subir" value="{{.Key}}" aria-label="Subir {{.Label}}"{{if .First}} disabled{{end}}><span aria-hidden="true">↑</span></button>
+        <button class="btn small" name="bajar" value="{{.Key}}" aria-label="Bajar {{.Label}}"{{if .Last}} disabled{{end}}><span aria-hidden="true">↓</span></button>
+      </span>
+    </li>
+    {{end}}
+  </ol>
+  <div class="dangerzone">
+    <p>¿Lo prefieres como venía?</p>
+    <button class="btn small" name="restablecer" value="1">Orden de siempre</button>
+  </div>
+</form>
+{{template "foot" .}}{{end}}

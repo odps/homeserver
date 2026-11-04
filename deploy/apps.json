@@ -5,7 +5,9 @@
     { "name": "asistente", "port": 8103, "title": "Asistente" },
     { "name": "noticias", "port": 8104, "title": "Noticias" },
     { "name": "agenda", "port": 8105, "title": "Agenda" },
-    { "name": "entreno", "port": 8106, "max_upload_mb": 5, "title": "Entreno" }
+    { "name": "entreno", "port": 8106, "max_upload_mb": 5, "title": "Entreno" },
+    { "name": "papeles", "port": 8107, "max_upload_mb": 20, "title": "Papeles" },
+    { "name": "compra", "port": 8108, "title": "Compra" }
   ],
   "services": ["netwatch", "gateway", "tailscale_web"]
 }

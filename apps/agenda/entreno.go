@@ -13,8 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/emersion/go-ical"
-
-	"homeserver/platform/app"
 )
 
 // Entreno: las rutinas de gimnasio con días fijos salen en el calendario de
@@ -109,7 +107,6 @@ func gymEvent(g gymRoutine, from time.Time, now time.Time) (*ical.Calendar, erro
 	}
 	m, _ := master(cal)
 	m.Props.SetText(ical.PropUID, fmt.Sprintf("%s%d@homeserver", gymPrefix, g.ID))
-	m.Props.SetText(gymMark, g.mark())
 	return cal, nil
 }
 
@@ -159,73 +156,22 @@ func (s *service) syncGym(ctx context.Context, owner string, list []gymRoutine) 
 	if err != nil {
 		return 0, 0, err
 	}
-	objs, err := s.store.listObjects(ctx, c.ID)
-	if err != nil {
-		return 0, 0, err
-	}
-	have := map[string]object{}
-	for _, o := range objs {
-		if strings.HasPrefix(o.Name, gymPrefix) {
-			have[o.Name] = o
-		}
-	}
-	now := s.now()
+	events := map[string]extEvent{}
 	for name, g := range want {
-		cal, err := gymEvent(g, now, now)
-		if err != nil {
-			return changed, removed, err
-		}
-		ifMatch, create := "", true
-		if o, ok := have[name]; ok {
-			ifMatch, create = o.ETag, false
-			if old, err := decodeCal(o.Data); err == nil {
-				if m, err := master(old); err == nil {
-					if p := m.Props.Get(gymMark); p != nil && p.Value == g.mark() {
-						continue // igual que estaba
-					}
-					keepSkips(m, cal, g)
-				}
-			}
-		}
-		if _, err := s.store.putObject(ctx, c.ID, name, cal, ifMatch, create, now); err != nil {
-			return changed, removed, err
-		}
-		changed++
+		events[name] = extEvent{mark: g.mark(),
+			build: func(now time.Time) (*ical.Calendar, error) { return gymEvent(g, now, now) },
+			carry: func(old *ical.Component, cal *ical.Calendar) { keepSkips(old, cal, g) }}
 	}
-	for name := range have {
-		if _, ok := want[name]; !ok {
-			if err := s.store.deleteObject(ctx, c.ID, name, ""); err != nil && !errors.Is(err, errNotFound) {
-				return changed, removed, err
-			}
-			removed++
-		}
-	}
-	return changed, removed, nil
+	return s.syncExternal(ctx, c.ID, gymPrefix, gymMark, events)
 }
 
 // gymSyncPost es POST /interno/entreno/rutinas, solo desde Entreno.
 func (w *web) gymSyncPost(rw http.ResponseWriter, r *http.Request) {
-	if !app.Internal(r) {
-		http.Error(rw, "solo para las apps del servidor", http.StatusForbidden)
-		return
-	}
 	var in struct {
 		User     string       `json:"usuario"`
 		Routines []gymRoutine `json:"rutinas"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&in); err != nil || in.User == "" {
-		http.Error(rw, "petición no válida", http.StatusBadRequest)
-		return
-	}
-	rw.Header().Set("Content-Type", "application/json")
-	// Solo para quien ya usa la agenda: no se crea una cuenta por esto.
-	users, err := w.svc.store.users(r.Context())
-	if err != nil {
-		http.Error(rw, "error", http.StatusInternalServerError)
-		return
-	}
-	if !slices.Contains(users, in.User) {
-		json.NewEncoder(rw).Encode(map[string]any{"agenda": false})
+	if !w.internalJSON(rw, r, &in.User, &in) {
 		return
 	}
 	changed, removed, err := w.svc.syncGym(r.Context(), in.User, in.Routines)

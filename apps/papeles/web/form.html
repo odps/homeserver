@@ -1,0 +1,40 @@
+{{define "form.html"}}{{template "head" .}}
+{{$f := .Form}}
+<section class="hero compact">
+  <p class="eyebrow">{{if $f.ID}}<a href="{{.Base}}/doc/{{$f.ID}}">{{$f.Title}}</a>{{else}}<a href="{{.Base}}/">Documentos</a>{{end}}</p>
+  <h1 class="date">{{if $f.ID}}Editar{{else}}Nuevo documento{{end}}</h1>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/doc/{{$f.ID}}">
+  <label class="field">Tipo
+    <select name="tipo" required>
+      {{range .Types}}<option value="{{.Key}}"{{if eq .Key $f.Type}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <label class="field">Título <input name="titulo" value="{{$f.Title}}" maxlength="120" required placeholder="Por ejemplo, DNI de Ana"></label>
+  <label class="field">Titular <span class="help">si no es tuyo</span> <input name="titular" value="{{$f.Holder}}" maxlength="80" autocomplete="off"></label>
+  <label class="field">Número <input name="numero" value="{{$f.Number}}" maxlength="60" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+  <label class="field">Emisor o compañía <input name="emisor" value="{{$f.Issuer}}" maxlength="120" placeholder="Por ejemplo, Seguro Ejemplo"></label>
+  <div class="two">
+    <label class="field">Emisión <input type="date" name="emision" value="{{$f.Issued}}"></label>
+    <label class="field">Caducidad <input type="date" name="caducidad" value="{{$f.Expires}}"></label>
+  </div>
+  <div class="two">
+    <label class="field">Se renueva cada <span class="help">meses; 12 si es anual</span> <input type="number" name="cada_meses" value="{{$f.Months}}" min="0" max="120" inputmode="numeric"></label>
+    <label class="field">Importe <span class="help">€</span> <input name="importe" value="{{$f.Amount}}" inputmode="decimal" maxlength="16" placeholder="0,00"></label>
+  </div>
+  <label class="field">Avisos <span class="help">días antes, separados por comas</span> <input name="avisos" value="{{$f.Alerts}}" maxlength="40" placeholder="Los del tipo"></label>
+  <details class="topic">
+    <summary><span class="topic-name">Avisos de cada tipo</span><span class="chev" aria-hidden="true"></span></summary>
+    <div class="topic-body">
+      <p class="help">Vacío: los del tipo. 0: sin avisos. Los avisos te llegan desde la Agenda.</p>
+      <ul class="type-alerts">{{range .Types}}<li><span>{{.Label}}</span> <span class="muted">{{.Alerts}}</span></li>{{end}}</ul>
+    </div>
+  </details>
+  <label class="field">Notas <textarea name="notas" rows="4" maxlength="4000" autocomplete="off">{{$f.Note}}</textarea></label>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/{{if $f.ID}}doc/{{$f.ID}}{{end}}">Cancelar</a>
+  </div>
+</form>
+{{template "foot" .}}{{end}}

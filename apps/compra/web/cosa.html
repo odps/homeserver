@@ -1,0 +1,33 @@
+{{define "cosa.html"}}{{template "head" .}}
+{{$it := .Item}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/#i-{{$it.ID}}">La lista</a></p>
+  <h1 class="date">{{$it.Name}}</h1>
+  <div class="hero-meta">
+    <span>{{$it.SectionTxt}}</span>
+    {{if $it.Done}}<span>Tachada</span>{{end}}
+    {{with $it.Added}}<span>Añadida el {{.}}{{with $it.Source}} por {{.}}{{end}}</span>{{end}}
+  </div>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/cosa/{{$it.ID}}">
+  <label class="field">Nombre<input name="nombre" value="{{$it.Name}}" maxlength="80" required autocomplete="off"></label>
+  <div class="form-grid">
+    <label class="field">Cantidad <span class="help">«2 l», «1 kg», «x6»</span><input name="cantidad" value="{{$it.Qty}}" maxlength="30" autocomplete="off"></label>
+    <label class="field">Sección
+      <select name="seccion">{{range .Options}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+    </label>
+  </div>
+  <label class="field">Nota <span class="help">marca, tamaño…</span><input name="nota" value="{{$it.Note}}" maxlength="200" autocomplete="off"></label>
+  <p class="help">Si cambias la sección, se recuerda para la próxima vez.</p>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/#i-{{$it.ID}}">Cancelar</a>
+  </div>
+</form>
+
+<form class="dangerzone" method="post" action="{{.Base}}/cosa/{{$it.ID}}/borrar">
+  <p>¿Ya no hace falta? Se quita sin pasar al historial.</p>
+  <button class="btn danger small">Quitar de la lista</button>
+</form>
+{{template "foot" .}}{{end}}
