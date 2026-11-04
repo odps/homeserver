@@ -25,6 +25,16 @@
     {{range $f.Days}}<label class="day"><input type="checkbox" name="dia" value="{{.Value}}"{{if .Checked}} checked{{end}}><span>{{.Label}}</span></label>{{end}}
   </fieldset>
 
+  <fieldset class="agenda-set">
+    <legend>Agenda <span class="help">con días fijos</span></legend>
+    <label class="check"><input type="checkbox" name="agenda" value="1"{{if $f.Agenda}} checked{{end}}> Ponerla en el calendario «Rutinas» de la Agenda</label>
+    <div class="item-nums">
+      <label class="num">Hora<input type="time" name="hora" value="{{$f.Hour}}" step="300"></label>
+      <label class="num">Duración (min)<input name="minutos" value="{{$f.Minutes}}" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="75"></label>
+    </div>
+    <p class="help">Sin hora sale como de todo el día y no ocupa al buscar huecos. Si un día no vas, sáltalo en la Agenda o díselo a Talia.</p>
+  </fieldset>
+
   <input type="hidden" name="filas" value="{{len $f.Rows}}">
   <h2 class="label rows-title">Ejercicios</h2>
   <p class="help">Rango: repeticiones (o segundos, o metros) mínimas y máximas. Al llegar arriba con el RIR objetivo se sube la carga. Las filas sin ejercicio no se guardan.</p>

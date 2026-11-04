@@ -1,0 +1,100 @@
+{{define "progreso-bars"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<rect class="bar{{if .Now}} now{{end}}" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="3"><title>{{.Title}}</title></rect>{{if .Value}}<text class="val{{if .Alt}} alt{{end}}" x="{{.VX}}" y="{{.VY}}" text-anchor="middle">{{.Value}}</text>{{end}}<text class="tick{{if .Alt}} alt{{end}}" x="{{.VX}}" y="{{.LY}}" text-anchor="middle">{{.Label}}</text>{{end}}
+      {{with .GoalY}}<line class="goal" x1="{{$x0}}" x2="{{$x1}}" y1="{{.}}" y2="{{.}}"/>{{end}}
+    </svg>{{end}}
+
+{{define "progreso.html"}}{{template "head" .}}
+{{$p := .Progress}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/">Inicio</a></p>
+  <h1 class="date">Progreso</h1>
+  <div class="hero-meta">
+    <span>Últimas 12 semanas, de lunes a domingo, desde la del {{$p.From}}</span>
+  </div>
+</section>
+
+<section class="group progress">
+  <h2 class="label">Sesiones de gimnasio por semana</h2>
+  {{with $p.Gym}}
+  <figure class="chart bars">
+    <figcaption class="label">Sesiones <span class="now-key">— la barra intensa es esta semana</span></figcaption>
+    {{template "progreso-bars" .}}
+  </figure>
+  <p class="chart-note tnum">Media: <strong>{{$p.GymAvg}}</strong> por semana (sin contar esta) · <strong>{{$p.GymTwo}} de 12</strong> semanas con 2 sesiones o más.</p>
+  {{else}}
+  <p class="quiet">Aún no hay sesiones de gimnasio en las últimas 12 semanas. Cuando apuntes alguna, aquí verás cuántas haces cada semana.</p>
+  {{end}}
+</section>
+
+<section class="group progress">
+  <h2 class="label">Series por grupo muscular</h2>
+  {{with $p.Muscles}}
+  <figure class="chart hbars">
+    <figcaption class="label">Series por semana, media de las últimas 4 semanas</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      <rect class="band" x="{{.BandX}}" y="{{.Top}}" width="{{.BandW}}" height="{{.Span}}"/>
+      <line class="band-edge" x1="{{.LowX}}" x2="{{.LowX}}" y1="{{.Top}}" y2="{{.Bottom}}"/>
+      <line class="band-edge" x1="{{.HighX}}" x2="{{.HighX}}" y1="{{.Top}}" y2="{{.Bottom}}"/>
+      {{range .Ticks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Rows}}<text class="name" x="{{.NX}}" y="{{.NY}}" text-anchor="end">{{.Name}}</text><rect class="hbar" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="3"><title>{{.Title}}</title></rect><text class="val" x="{{.VX}}" y="{{.NY}}">{{.Value}}</text>{{end}}
+    </svg>
+  </figure>
+  <p class="legend"><span class="swatch" aria-hidden="true"></span>La franja va de 10 a 20 series por semana: lo que se suele recomendar a cada grupo para ganar músculo.</p>
+  <p class="quiet">Cuentan las series de trabajo (las que llevan al menos el 80 % de la carga más alta de ese ejercicio ese día; sin carga, todas) de los músculos principales de cada ejercicio. Tus ejercicios propios van a «Otros».</p>
+  {{else}}
+  <p class="quiet">No hay series apuntadas en las últimas 4 semanas.</p>
+  {{end}}
+</section>
+
+<section class="group progress">
+  <h2 class="label">Peso corporal</h2>
+  {{with $p.Weight}}
+  <figure class="chart">
+    <figcaption class="label">Media de cada semana (kg)</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      <polyline class="line" points="{{.Line}}"/>
+      {{range .Dots}}<circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="4.5"><title>{{.Title}}</title></circle>{{end}}
+      {{if .NowX}}<circle class="dot now" cx="{{.NowX}}" cy="{{.NowY}}" r="4.5"/>{{end}}
+    </svg>
+  </figure>
+  {{with .Change}}<p class="chart-note tnum">{{.}}</p>{{end}}
+  {{else}}
+  <p class="quiet">No hay pesajes en las últimas 12 semanas. Apúntalos en <a href="{{.Base}}/cuerpo">Cuerpo</a>.</p>
+  {{end}}
+</section>
+
+<section class="group progress">
+  <h2 class="label">Calorías y proteína</h2>
+  {{with $p.Kcal}}
+  <figure class="chart bars kcal-chart kcal-weeks">
+    <figcaption class="label">Kcal al día, media de cada semana{{with $p.KcalGoal}} <span class="goal-key">— objetivo, {{.}}</span>{{end}}</figcaption>
+    {{template "progreso-bars" .}}
+  </figure>
+  <p class="quiet">Cada media solo cuenta los días con algo apuntado.</p>
+  {{else}}
+  <p class="quiet">No hay comida apuntada en las últimas 12 semanas.</p>
+  {{end}}
+  {{with $p.Protein}}<p class="chart-note tnum">{{.}}</p>{{end}}
+</section>
+
+<section class="group progress">
+  <h2 class="label">Récords recientes</h2>
+  {{with $p.Records}}
+  <ul class="list records">{{range .}}
+    <li class="row"><a class="row-main" href="{{$.Base}}/ejercicio/{{.Key}}">
+      <span class="title">{{.Name}}</span>
+      <span class="meta">{{.Date}} · antes, {{.Prev}}</span>
+      <span class="rec-v tnum">{{.Value}}</span>
+    </a></li>{{end}}
+  </ul>
+  <p class="quiet">1RM estimado: el mejor de las últimas 4 semanas, cuando supera todo lo anterior.</p>
+  {{else}}
+  <p class="quiet">Sin récords en las últimas 4 semanas: ningún ejercicio ha superado su mejor 1RM estimado.</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

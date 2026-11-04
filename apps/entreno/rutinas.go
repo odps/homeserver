@@ -33,7 +33,10 @@ type routineItem struct {
 type routine struct {
 	ID       int64         `json:"id"`
 	Name     string        `json:"nombre"`
-	Days     []int         `json:"dias,omitempty"` // días de la semana (0 domingo … 6 sábado)
+	Days     []int         `json:"dias,omitempty"`       // días de la semana (0 domingo … 6 sábado)
+	Hour     string        `json:"hora,omitempty"`       // HH:MM para la agenda; vacío: todo el día
+	Minutes  int           `json:"minutos,omitempty"`    // duración, si hay hora
+	NoAgenda bool          `json:"sin_agenda,omitempty"` // no ponerla en el calendario
 	Items    []routineItem `json:"ejercicios"`
 	Position int           `json:"-"`
 }
@@ -57,6 +60,22 @@ func (r *routine) check() error {
 	}
 	sort.Ints(days)
 	r.Days = days
+	r.Hour = strings.TrimSpace(r.Hour)
+	if r.Hour == "" {
+		r.Minutes = 0
+	} else {
+		t, err := time.Parse("15:04", r.Hour)
+		if err != nil {
+			return errors.New("la hora va en formato HH:MM")
+		}
+		r.Hour = t.Format("15:04")
+		if r.Minutes == 0 {
+			r.Minutes = 75
+		}
+		if r.Minutes < 15 || r.Minutes > 300 {
+			return errors.New("la duración va de 15 a 300 minutos")
+		}
+	}
 	for i := range r.Items {
 		it := &r.Items[i]
 		if _, ok := lookup(it.Key); !ok && !strings.HasPrefix(it.Key, "u") {

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"homeserver/platform/app"
@@ -27,8 +28,10 @@ type routineView struct {
 	ID    int64
 	Index int // en las sugerencias
 	Name  string
-	Days  string // «lunes y jueves»
+	Days  string // «lunes y jueves · 18:00»
 	Items []routineLine
+	// En la agenda: tiene días fijos y no se ha quitado de ella.
+	Agenda bool
 }
 
 type routineLine struct {
@@ -40,6 +43,9 @@ type routineForm struct {
 	ID      int64
 	Name    string
 	Days    []dayBox
+	Hour    string // HH:MM o vacío
+	Minutes string
+	Agenda  bool // ponerla en la agenda (si tiene días)
 	Rows    []itemRow
 	Confirm bool // pide confirmar el borrado
 }
@@ -120,7 +126,10 @@ func itemText(it routineItem) string {
 }
 
 func viewRoutine(r routine, custom map[string]string) routineView {
-	v := routineView{ID: r.ID, Name: r.Name, Days: daysText(r.Days)}
+	v := routineView{ID: r.ID, Name: r.Name, Days: daysText(r.Days), Agenda: len(r.Days) > 0 && !r.NoAgenda}
+	if len(r.Days) > 0 && r.Hour != "" {
+		v.Days += " · " + r.Hour
+	}
 	for _, it := range r.Items {
 		v.Items = append(v.Items, routineLine{Key: it.Key, Name: exerciseName(it.Key, "", custom), Text: itemText(it), Note: it.Note})
 	}
@@ -215,6 +224,7 @@ func (w *web) detectSave(rw http.ResponseWriter, r *http.Request, who app.Identi
 			return
 		}
 	}
+	w.svc.syncAgendaQuiet(ctx, who.User)
 	if all || id == 0 {
 		back(rw, r, "/rutinas", "detectadas")
 		return
@@ -226,7 +236,7 @@ func (w *web) detectSave(rw http.ResponseWriter, r *http.Request, who app.Identi
 // («» si es interno).
 func routineErr(err error) string {
 	msg := err.Error()
-	if errors.Is(err, errRoutine) || strings.HasPrefix(msg, "el nombre") || strings.HasPrefix(msg, "ejercicio desconocido") {
+	if errors.Is(err, errRoutine) || strings.HasPrefix(msg, "el nombre") || strings.HasPrefix(msg, "la hora") || strings.HasPrefix(msg, "la duración") || strings.HasPrefix(msg, "ejercicio desconocido") {
 		return capFirst(msg) + "."
 	}
 	return ""
@@ -268,7 +278,10 @@ func (w *web) routineEdit(rw http.ResponseWriter, r *http.Request, who app.Ident
 
 // formOf prepara el formulario de una rutina, con las filas vacías al final.
 func formOf(x routine) routineForm {
-	f := routineForm{ID: x.ID, Name: x.Name}
+	f := routineForm{ID: x.ID, Name: x.Name, Hour: x.Hour, Agenda: !x.NoAgenda}
+	if x.Minutes > 0 {
+		f.Minutes = strconv.Itoa(x.Minutes)
+	}
 	for _, b := range weekLabels {
 		b.Checked = containsInt(x.Days, b.Value)
 		f.Days = append(f.Days, b)
@@ -337,6 +350,7 @@ func (w *web) routineSave(rw http.ResponseWriter, r *http.Request, who app.Ident
 				return
 			}
 		default:
+			w.svc.syncAgendaQuiet(ctx, who.User)
 			if r.PostForm.Get("accion") == "filas" {
 				back(rw, r, fmt.Sprintf("/rutina/%d", id), "guardada")
 				return
@@ -354,8 +368,21 @@ func (w *web) routineSave(rw http.ResponseWriter, r *http.Request, who app.Ident
 // persona («» si está bien).
 func readRoutineForm(r *http.Request, id int64, custom map[string]string) (routine, routineForm, string) {
 	pf := r.PostForm
-	x := routine{ID: id, Name: strings.TrimSpace(pf.Get("nombre"))}
-	f := routineForm{ID: id, Name: x.Name}
+	x := routine{ID: id, Name: strings.TrimSpace(pf.Get("nombre")), Hour: strings.TrimSpace(pf.Get("hora")), NoAgenda: pf.Get("agenda") != "1"}
+	f := routineForm{ID: id, Name: x.Name, Hour: x.Hour, Minutes: strings.TrimSpace(pf.Get("minutos")), Agenda: !x.NoAgenda}
+	msg := ""
+	if f.Minutes != "" {
+		m, err := strconv.Atoi(f.Minutes)
+		if err != nil || m < 15 || m > 300 {
+			msg = "La duración va en minutos, de 15 a 300."
+		}
+		x.Minutes = m
+	}
+	if x.Hour != "" {
+		if _, err := time.Parse("15:04", x.Hour); err != nil {
+			msg = firstMsg(msg, "La hora va en formato HH:MM, por ejemplo 18:30.")
+		}
+	}
 	for _, v := range pf["dia"] {
 		if d, err := strconv.Atoi(v); err == nil && d >= 0 && d <= 6 && !containsInt(x.Days, d) {
 			x.Days = append(x.Days, d)
@@ -367,7 +394,6 @@ func readRoutineForm(r *http.Request, id int64, custom map[string]string) (routi
 	}
 	n, _ := strconv.Atoi(pf.Get("filas"))
 	n = clamp(n, 0, maxRoutineRows)
-	msg := ""
 	for i := range n {
 		get := func(p string) string { return strings.TrimSpace(pf.Get(fmt.Sprintf("%s_%d", p, i))) }
 		row := itemRow{Key: get("k"), Sets: get("s"), Min: get("mn"), Max: get("mx"), RIR: get("r"), Rest: get("d"), Note: get("n")}
@@ -443,5 +469,6 @@ func (w *web) routineDelete(rw http.ResponseWriter, r *http.Request, who app.Ide
 		w.fail(rw, "borrar rutina", err)
 		return
 	}
+	w.svc.syncAgendaQuiet(r.Context(), who.User)
 	back(rw, r, "/rutinas", "rutina-borrada")
 }

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strings"
+
+	"homeserver/platform/app"
 )
 
 // Peticiones de otras apps del propio servidor (no pasan por la pasarela):
@@ -15,16 +16,8 @@ import (
 
 const summarySystem = `Redactas resúmenes breves para una persona. Escribes en español de España, en texto plano (sin Markdown), con frases claras y neutrales. Usa solo la información que se te da; no inventes nada ni opines.`
 
-// internalOnly rechaza lo que llega por la pasarela (que siempre pone
-// X-Forwarded-Prefix) o desde fuera del propio servidor.
-func internalOnly(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	ip := net.ParseIP(host)
-	return err == nil && ip != nil && ip.IsLoopback() && r.Header.Get("X-Forwarded-Prefix") == ""
-}
-
 func (a *agent) internalSummary(w http.ResponseWriter, r *http.Request) {
-	if !internalOnly(r) {
+	if !app.Internal(r) {
 		http.Error(w, "solo para las apps del servidor", http.StatusForbidden)
 		return
 	}

@@ -83,6 +83,9 @@ type pageData struct {
 	// Cardio
 	Cardio *cardioPage
 
+	// Progreso
+	Progress *progressPage
+
 	// Comida: el día, buscar, Open Food Facts, los habituales y los objetivos
 	Nutri  *nutriPage
 	Search *foodSearch
@@ -247,6 +250,7 @@ func (w *web) routes(mux *http.ServeMux) {
 		files.ServeHTTP(rw, r)
 	})))
 	mux.HandleFunc("GET /{$}", w.user(w.home))
+	mux.HandleFunc("GET /progreso", w.user(w.progressPage))
 	mux.HandleFunc("GET /apuntar", w.user(w.recordForm))
 	mux.HandleFunc("POST /apuntar", w.user(w.recordPost))
 	mux.HandleFunc("POST /alias", w.user(w.aliasPost))
@@ -266,6 +270,8 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /rutina/{id}", w.user(w.routineEdit))
 	mux.HandleFunc("POST /rutina/{id}", w.user(w.routineSave))
 	mux.HandleFunc("POST /rutina/{id}/borrar", w.user(w.routineDelete))
+	mux.HandleFunc("POST /rutinas/agenda", w.user(w.agendaPost))
+	mux.HandleFunc("POST /interno/hoy", w.internalToday)
 	mux.HandleFunc("GET /gimnasio", w.user(w.gymPage))
 	mux.HandleFunc("POST /gimnasio/serie", w.user(w.gymSetPost))
 	mux.HandleFunc("POST /api/serie", w.user(w.apiSet))
@@ -349,7 +355,9 @@ var flashes = map[string]string{
 	"foto": "Foto guardada.", "foto-borrada": "Foto borrada.",
 	"cardio": "Cardio apuntado.", "cardio-borrado": "Cardio borrado.",
 	"comida-borrada": "Borrado.", "copiado": "Copiado a hoy.", "habitual": "Guardado en tus alimentos.",
-	"ya-habitual": "Ya estaba en tus alimentos.", "alimento-borrado": "Alimento borrado.", "objetivos": "Objetivos guardados.",
+	"agenda": "Rutinas al día en la Agenda.", "agenda-no": "No usas la Agenda: pide que te la asignen en Usuarios.",
+	"agenda-error": "La Agenda no responde ahora; se intentará otra vez al guardar una rutina.",
+	"ya-habitual":  "Ya estaba en tus alimentos.", "alimento-borrado": "Alimento borrado.", "objetivos": "Objetivos guardados.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }

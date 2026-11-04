@@ -81,50 +81,82 @@ func cardioOptions() []option {
 // weekLabel es «27 oct» (sin año: son las últimas semanas).
 func weekLabel(t time.Time) string { return fmt.Sprintf("%d %s", t.Day(), shortMonth(t.Month())) }
 
-// cardioBars dibuja los minutos de cada semana (de la más antigua a la actual).
-func cardioBars(weeks []cardioWeek) *barChart {
-	const W, H, padL, padR, padT, padB = 480, 220, 44, 8, 22, 30
-	c := &barChart{W: W, H: H, X0: padL, X1: W - padR, YBottom: H - padB}
-	top := 0.0
-	var mins []string
-	for _, wk := range weeks {
-		m := float64(wk.Seconds) / 60
-		top = math.Max(top, m)
-		mins = append(mins, strconv.Itoa(int(math.Round(m))))
+// weekBarOpts ajusta weekBars a cada gráfica.
+type weekBarOpts struct {
+	H, PadL int
+	Min     float64              // la escala llega al menos hasta aquí
+	Empty   float64              // escala si todo es cero
+	Goal    float64              // línea de referencia (0: sin ella)
+	Whole   bool                 // pasos enteros en el eje (para contar cosas)
+	Tick    func(float64) string // etiquetas del eje
+	Value   func(float64) string // cifra encima de cada barra (no sale si es 0)
+}
+
+// weekBars dibuja un valor por semana, de la más antigua a la actual (que
+// se marca), con una línea de referencia opcional. El título de cada barra y
+// la descripción de la gráfica los pone quien la llama.
+func weekBars(mondays []time.Time, vals []float64, o weekBarOpts) *kcalChart {
+	const W, padR, padT, padB = 480, 8, 22, 30
+	H, padL := o.H, o.PadL
+	c := &kcalChart{barChart: barChart{W: W, H: H, X0: padL, X1: W - padR, YBottom: H - padB}}
+	top := math.Max(o.Goal, o.Min)
+	for _, v := range vals {
+		top = math.Max(top, v)
 	}
 	if top == 0 {
-		top = 60
+		top = o.Empty
 	}
 	step := niceStep(top / 3)
+	if o.Whole {
+		step = math.Ceil(step)
+	}
 	hi := math.Ceil(top/step) * step
 	plotH := float64(H - padT - padB)
 	y := func(v float64) float64 { return padT + (hi-v)/hi*plotH }
 	for v := 0.0; v <= hi+step/2; v += step {
-		c.YTicks = append(c.YTicks, chartTick{X: strconv.Itoa(padL - 8), Y: f1(y(v)), Label: trimNum(v), Anchor: "end"})
+		c.YTicks = append(c.YTicks, chartTick{X: strconv.Itoa(padL - 8), Y: f1(y(v)), Label: o.Tick(v), Anchor: "end"})
 	}
-	slot := float64(W-padL-padR) / float64(len(weeks))
+	slot := float64(W-padL-padR) / float64(len(vals))
 	bw := slot * 0.62
-	for i, wk := range weeks {
-		m := float64(wk.Seconds) / 60
-		h := m / hi * plotH
-		if m > 0 && h < 2 {
+	for i, v := range vals {
+		h := v / hi * plotH
+		if v > 0 && h < 2 {
 			h = 2
 		}
-		x := padL + slot*float64(i) + (slot-bw)/2
+		x := float64(padL) + slot*float64(i) + (slot-bw)/2
 		b := bar{X: f1(x), Y: f1(float64(H-padB) - h), W: f1(bw), H: f1(h), VX: f1(x + bw/2), VY: f1(float64(H-padB) - h - 6),
-			Label: weekLabel(wk.Monday), LY: strconv.Itoa(H - 8), Alt: (len(weeks)-1-i)%2 == 1, Now: i == len(weeks)-1}
-		if m > 0 {
-			b.Value = mins[i]
+			Label: weekLabel(mondays[i]), LY: strconv.Itoa(H - 8), Alt: (len(vals)-1-i)%2 == 1, Now: i == len(vals)-1}
+		if v > 0 {
+			b.Value = o.Value(v)
 		}
+		c.Bars = append(c.Bars, b)
+	}
+	if o.Goal > 0 {
+		c.GoalY = f1(y(o.Goal))
+	}
+	return c
+}
+
+// cardioBars dibuja los minutos de cada semana (de la más antigua a la actual).
+func cardioBars(weeks []cardioWeek) *barChart {
+	mondays := make([]time.Time, len(weeks))
+	vals := make([]float64, len(weeks))
+	mins := make([]string, len(weeks))
+	round := func(v float64) string { return strconv.Itoa(int(math.Round(v))) }
+	for i, wk := range weeks {
+		mondays[i], vals[i] = wk.Monday, float64(wk.Seconds)/60
+		mins[i] = round(vals[i])
+	}
+	c := weekBars(mondays, vals, weekBarOpts{H: 220, PadL: 44, Empty: 60, Tick: trimNum, Value: round})
+	for i, wk := range weeks {
 		sesiones := "sesiones"
 		if wk.Count == 1 {
 			sesiones = "sesión"
 		}
-		b.Title = fmt.Sprintf("Semana del %s: %d %s, %s min", weekLabel(wk.Monday), wk.Count, sesiones, mins[i])
-		c.Bars = append(c.Bars, b)
+		c.Bars[i].Title = fmt.Sprintf("Semana del %s: %d %s, %s min", weekLabel(wk.Monday), wk.Count, sesiones, mins[i])
 	}
 	c.Label = fmt.Sprintf("Minutos de cardio por semana, de la semana del %s a esta: %s", weekLabel(weeks[0].Monday), strings.Join(mins, ", "))
-	return c
+	return &c.barChart
 }
 
 func (w *web) cardioRowOf(c cardioLog) cardioRow {

@@ -249,7 +249,11 @@ func addTools(server *mcp.Server, svc *service) {
 				for _, it := range r.Items {
 					exs = append(exs, fmt.Sprintf("%s: %d × %d–%d · RIR %d · %d s de descanso", exerciseName(it.Key, "", custom), it.Sets, it.Min, it.Max, it.RIR, it.RestSec))
 				}
-				out = append(out, map[string]any{"id": r.ID, "nombre": r.Name, "dias": ds, "ejercicios": exs})
+				x := map[string]any{"id": r.ID, "nombre": r.Name, "dias": ds, "ejercicios": exs}
+				if r.Hour != "" && len(r.Days) > 0 {
+					x["hora"] = fmt.Sprintf("%s (%d min)", r.Hour, r.Minutes)
+				}
+				out = append(out, x)
 			}
 			if out == nil {
 				out = []map[string]any{}

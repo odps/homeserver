@@ -208,6 +208,14 @@ func TestWebRender(t *testing.T) {
 	for k, v := range extraWants {
 		wants[k] = v
 	}
+	// Progreso (web_progreso_test.go).
+	extra, extraWants = progressRenderCases(t, w)
+	for _, c := range extra {
+		cases = append(cases, page{c.file, c.tmpl, c.data})
+	}
+	for k, v := range extraWants {
+		wants[k] = v
+	}
 
 	dir := os.Getenv("ENTRENO_PREVIEW_DIR")
 	base := "/entreno"

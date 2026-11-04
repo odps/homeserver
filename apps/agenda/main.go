@@ -39,12 +39,17 @@ func setup(env *app.Env, box *sealpkg.Box) error {
 	if assistant == "" {
 		assistant = "http://127.0.0.1:8103"
 	}
+	gym := os.Getenv("ENTRENO_URL")
+	if gym == "" {
+		gym = "http://127.0.0.1:8106"
+	}
 	seal, err := loadSealer(os.Getenv("DATA_DIR"))
 	if err != nil {
 		return err
 	}
 	st := store{env.DB, box}
-	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant), now: time.Now, geo: geo.New()}
+	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant),
+		gym: gymToday(gym), now: time.Now, geo: geo.New()}
 	go svc.run(context.Background())
 	(&web{svc: svc, dav: newDAV(st)}).routes(env.Mux)
 	addTools(env.MCP, svc)

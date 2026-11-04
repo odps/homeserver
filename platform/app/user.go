@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -35,3 +36,12 @@ func UserFrom(h http.Header) Identity {
 
 // User es UserFrom para una petición HTTP.
 func User(r *http.Request) Identity { return UserFrom(r.Header) }
+
+// Internal dice si la petición viene de otra app del propio servidor (desde
+// 127.0.0.1 y sin pasar por la pasarela, que siempre pone X-Forwarded-Prefix).
+// Lo usan las rutas /interno/… entre apps, que no llevan identidad.
+func Internal(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	ip := net.ParseIP(host)
+	return err == nil && ip != nil && ip.IsLoopback() && r.Header.Get("X-Forwarded-Prefix") == ""
+}

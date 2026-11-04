@@ -19,6 +19,7 @@ type service struct {
 	imports *imports
 	photos  *photoFiles      // fotos de progreso, cifradas en disco
 	off     *offClient       // Open Food Facts (productos envasados)
+	agenda  *agendaClient    // nil: sin agenda (tests)
 	now     func() time.Time // nil: time.Now
 }
 

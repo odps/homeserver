@@ -153,6 +153,7 @@ func (w *web) routes(mux *http.ServeMux) {
 		files.ServeHTTP(rw, r)
 	})))
 	mux.Handle("/dav/", w.dav)
+	mux.HandleFunc("POST /interno/entreno/rutinas", w.gymSyncPost)
 	mux.HandleFunc("GET /{$}", w.user(w.home))
 	mux.HandleFunc("GET /evento/nuevo", w.user(w.newEntry))
 	mux.HandleFunc("POST /evento", w.user(w.createEntry))

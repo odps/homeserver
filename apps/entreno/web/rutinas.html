@@ -21,7 +21,8 @@
   <article class="ex rutina">
     <header class="ex-head">
       <h2><a href="{{$.Base}}/rutina/{{.ID}}">{{.Name}}</a></h2>
-      <span class="tag">{{with .Days}}{{.}}{{else}}Sin día fijo{{end}}</span>
+      <span class="tag">{{with .Days}}{{.}}{{else}}Sin día fijo{{end}}</span>{{if .Agenda}}
+      <span class="tag ok" title="Sale en el calendario «Rutinas» de la Agenda">En la agenda</span>{{end}}
     </header>
     <ol class="exlist rutina-items">{{range .Items}}
       <li><span class="ex-name">{{.Name}}</span> <span class="ex-sum">{{.Text}}</span>{{with .Note}} <span class="muted">— {{.}}</span>{{end}}</li>{{end}}
@@ -33,6 +34,10 @@
   </article>
   {{end}}
 </div>
+<form class="agenda-sync" method="post" action="{{$.Base}}/rutinas/agenda">
+  <p class="help">Las rutinas con días fijos salen en el calendario «Rutinas» de la Agenda y en el resumen de la mañana. Se actualizan solas al guardar.</p>
+  <button class="btn small">Actualizar la Agenda ahora</button>
+</form>
 {{else}}
 <section class="empty">
   <p class="big">Aún no tienes rutinas.</p>
