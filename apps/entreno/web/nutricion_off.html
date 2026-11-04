@@ -1,0 +1,60 @@
+{{define "nutricion_off.html"}}{{template "head" .}}
+{{$p := .OFF}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/nutricion/buscar?dia={{$p.ISO}}&amp;comida={{$p.Meal}}{{with $p.Query}}&amp;q={{.}}{{end}}">Buscar alimento</a></p>
+  <h1 class="date">Open Food Facts</h1>
+  <div class="hero-meta"><span>Productos envasados · se apunta {{$p.DayText}}</span></div>
+</section>
+
+<section class="panel off-box">
+  <form class="search" method="get" action="{{.Base}}/nutricion/off" role="search">
+    <input type="hidden" name="dia" value="{{$p.ISO}}">
+    <input type="hidden" name="comida" value="{{$p.Meal}}">
+    <label class="vh" for="off-q">Producto</label>
+    <input type="search" id="off-q" name="q" value="{{$p.Query}}" maxlength="80" placeholder="yogur proteínas marca…" autocomplete="off" required>
+    <button class="btn primary">Buscar</button>
+  </form>
+  <form class="search barcode" method="get" action="{{.Base}}/nutricion/off">
+    <input type="hidden" name="dia" value="{{$p.ISO}}">
+    <input type="hidden" name="comida" value="{{$p.Meal}}">
+    <label class="vh" for="codigo">Código de barras</label>
+    <input id="codigo" name="codigo" value="{{$p.Code}}" inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14" placeholder="Código de barras: 8410000000000" autocomplete="off" required>
+    <button class="btn">Buscar el código</button>
+  </form>
+  <p class="help privacy">Se consulta Open Food Facts (datos ODbL); solo se envía lo que buscas.</p>
+</section>
+
+{{if $p.Searched}}
+<section class="group">
+  <h2 class="label">Resultados</h2>
+  {{with $p.Results}}
+  <ul class="results">{{range .}}
+    <li class="result">
+      <div class="result-head">
+        <p class="result-name">{{.Title}}</p>
+        <p class="meta tnum"><span>{{.Per}}: {{.Values}}</span>{{with .Serving}}<span>{{.}}</span>{{end}}<span class="muted">{{.Code}}</span></p>
+      </div>
+      <form class="add-row two" method="post" action="{{$.Base}}/nutricion/off/anadir">
+        <input type="hidden" name="dia" value="{{$p.ISO}}">
+        <input type="hidden" name="codigo" value="{{.Code}}">
+        <label class="num">{{if eq .Unit "ml"}}Mililitros{{else}}Gramos{{end}}
+          <input name="cantidad" value="{{.Amount}}" inputmode="decimal" maxlength="7" autocomplete="off" required></label>
+        <label class="num">Comida
+          <select name="comida">{{range $p.Slots}}<option value="{{.Key}}"{{if eq .Key $p.Meal}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+        <button class="btn primary">Apuntar</button>
+      </form>
+      {{if .SavedID}}<p class="help"><a href="{{$.Base}}/nutricion/alimento/{{.SavedID}}">Ya está en tus alimentos</a></p>{{else}}
+      <form class="save-generic" method="post" action="{{$.Base}}/nutricion/off/guardar">
+        <input type="hidden" name="codigo" value="{{.Code}}">
+        <button class="btn ghost small">Guardar como habitual</button>
+      </form>{{end}}
+    </li>{{end}}
+  </ul>
+  <p class="quiet">Los valores son los que la gente ha subido a Open Food Facts: revísalos con la etiqueta si algo no cuadra.</p>
+  {{else}}
+  {{if not $.Error}}<p class="quiet">No hay productos con valores para esa búsqueda.</p>{{end}}
+  {{end}}
+</section>
+{{end}}
+<p class="quiet">¿No está? <a href="{{.Base}}/nutricion/alimento/nuevo{{with $p.Query}}?nombre={{.}}{{end}}">Créalo a mano</a> con los valores de la etiqueta.</p>
+{{template "foot" .}}{{end}}

@@ -210,7 +210,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   /* backdrop-filter haría de la barra el contenedor de las pestañas fijas */
   .bar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
   .bar-in { padding-block: .35rem; }
-  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 0 0 env(safe-area-inset-bottom); border-radius: 0; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; padding: 0 0 env(safe-area-inset-bottom); border-radius: 0; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
   .tabs a { flex-direction: column; justify-content: center; gap: .15rem; min-height: 3.9rem; padding: .3rem 0; border-radius: 0; font-size: .7rem; letter-spacing: .01em; color: var(--muted); min-width: 0; }
   .tabs a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .tabs svg { display: block; }
@@ -393,4 +393,100 @@ body.tab-gimnasio .foot { padding-bottom: calc(7rem + var(--tabbar)); }
   /* El peso rápido: fecha y peso arriba, el botón debajo a lo ancho. */
   .quickadd-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quickadd-row .btn { grid-column: 1 / -1; }
+}
+
+/* Comida: el día, la búsqueda, los habituales y los objetivos */
+@media (min-width: 48rem) and (max-width: 62rem) {
+  /* Seis pestañas junto a la marca: algo más juntas. */
+  .tabs a { padding-inline: .7rem; }
+}
+.day-nav { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .9rem; }
+.day-nav .btn { font-variant-numeric: tabular-nums; }
+.totals { display: grid; gap: .9rem; padding-block: 1.1rem 1.2rem; }
+.meter-row { display: grid; gap: .35rem; }
+.meter-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem .8rem; margin: 0; }
+.meter-v { font-size: .95rem; color: var(--ink-2); }
+.meter-v strong { font: 600 clamp(1.35rem, 5vw, 1.6rem)/1.1 var(--serif); color: var(--ink); }
+.meter { display: block; width: 100%; height: .55rem; border-radius: 999px; overflow: hidden; }
+.meter-bg { fill: var(--rule-soft); }
+.meter-fill { fill: var(--accent); }
+.over .meter-fill { fill: var(--danger); }
+.done .meter-fill { fill: var(--ok); }
+.meter-left { margin: 0; color: var(--ink-2); font-size: .86rem; }
+.over .meter-left { color: var(--danger); font-weight: 600; }
+.done .meter-left { color: var(--ok); font-weight: 600; }
+.macros-small { margin: 0; padding-top: .7rem; border-top: 1px solid var(--rule-soft); color: var(--ink-2); font-size: .9rem; }
+.totals .quiet { margin: 0; }
+.totals a, .hints a, .missing a { color: var(--accent); font-weight: 600; }
+.log-food textarea { min-height: 4.6rem; font: 400 1.02rem/1.45 var(--sans); }
+.log-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .6rem; }
+.log-row .btn { min-width: 8rem; }
+.missing { margin-top: 1rem; padding: .3rem 1rem .5rem; border-radius: 12px; background: var(--danger-soft); }
+.missing-title { margin: .5rem 0 0; font-size: .85rem; font-weight: 650; color: var(--ink-2); }
+.missing .row { flex-wrap: wrap; gap: 0 .8rem; border-bottom-color: color-mix(in srgb, var(--danger) 18%, transparent); }
+.missing .row:last-child { border-bottom: 0; }
+.missing .row-main { padding: .55rem 0; }
+.missing-links { display: inline-flex; gap: 1rem; font-size: .9rem; }
+.freq-title { margin: 1.5rem 0 .6rem; }
+.freq-title .help { text-transform: none; letter-spacing: 0; }
+.freq { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .45rem; }
+.freq-btn { width: 100%; justify-content: flex-start; text-align: left; gap: .6rem; padding: .55rem .8rem; font-weight: 500; }
+.freq-btn .plus { flex: none; display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.freq-text { display: grid; gap: .1rem; min-width: 0; }
+.freq-name { font-weight: 600; overflow-wrap: anywhere; }
+.freq-meta { color: var(--muted); font-size: .82rem; }
+.meal { margin-top: .8rem; padding: .3rem 1.1rem .9rem; background: var(--card); border: 1px solid var(--rule-soft); border-radius: calc(var(--r) + 2px); }
+.meal-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .1rem .8rem; padding: .6rem 0 .5rem; border-bottom: 1px solid var(--rule-soft); }
+.meal-head h3 { margin: 0; font: 600 1.2rem/1.2 var(--serif); }
+.meal-total { color: var(--ink-2); font-size: .84rem; }
+.meal .row:last-child { border-bottom: 0; }
+.meal .row-main { padding: .65rem 0; }
+.entry-name { font-weight: 550; }
+.entry-name .tag { margin-left: .2rem; vertical-align: .1em; }
+.meal-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; padding-top: .7rem; border-top: 1px solid var(--rule-soft); }
+.meal-actions form { margin: 0; }
+.save-meal { flex: 1 1 14rem; }
+.save-meal summary { list-style: none; width: fit-content; }
+.save-meal summary::-webkit-details-marker { display: none; }
+.save-meal[open] summary { border-color: var(--ink-2); }
+.save-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .5rem; max-width: 30rem; }
+.save-form .field { margin-top: .6rem; }
+.repeat { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; margin-top: 1rem; }
+.kcal-chart .goal { stroke: var(--ok); stroke-width: 2; stroke-dasharray: 6 5; }
+.goal-key { text-transform: none; letter-spacing: 0; color: var(--ok); font-weight: 600; }
+.food-search { margin: .4rem 0 0; }
+.results { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; }
+.result { padding: .85rem 1.1rem 1rem; background: var(--card); border: 1px solid var(--rule-soft); border-radius: calc(var(--r) + 2px); min-width: 0; }
+.result-head p { margin: 0; }
+.result-name { font: 600 1.05rem/1.3 var(--sans); }
+.result-name .tag { margin-left: .2rem; vertical-align: .1em; }
+.add-row { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 9rem) auto; align-items: end; gap: .5rem; margin-top: .8rem; }
+.add-row .num { font-size: .74rem; }
+.add-row.two { grid-template-columns: minmax(0, 7rem) minmax(0, 10rem) auto; }
+.food-search select { flex: 1 1 8rem; width: auto; }
+.add-row .num .help { font-size: .74rem; letter-spacing: 0; }
+.save-generic { margin: .4rem 0 0; }
+.save-generic .btn { padding-inline: 0; }
+.result > .help { margin: .6rem 0 0; }
+.result > .help a { color: var(--accent); font-weight: 600; }
+.off-box .search + .search { margin-top: .6rem; }
+.off-box .help a { color: var(--accent); font-weight: 600; }
+.barcode input { font-variant-numeric: tabular-nums; }
+.macros-grid { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.items-field { display: block; }
+.items-field .plainlist { margin-top: .4rem; font-weight: 400; }
+.hints { margin-top: 1.2rem; padding: .8rem 1rem; border-radius: 12px; background: var(--rule-soft); color: var(--ink-2); font-size: .9rem; }
+.hints p { margin: 0; }
+.hints p + p { margin-top: .5rem; }
+.food-line { display: flex; flex-wrap: wrap; gap: .1rem .5rem; color: var(--ink-2); font-size: .95rem; }
+.food-line strong { font: 600 1.3rem/1.2 var(--serif); color: var(--ink); }
+@media (max-width: 47.99rem) {
+  .meal, .result { padding-inline: .9rem; }
+  .add-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .add-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .add-row.two .btn { grid-column: 1 / -1; }
+  .food-search input[type=search] { flex-basis: 100%; }
+  .kcal-chart .val { font-size: 15px; }
+  .food-line .sep { display: none; }
+  .food-line { flex-direction: column; }
 }

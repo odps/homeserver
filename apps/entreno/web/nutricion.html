@@ -1,0 +1,137 @@
+{{define "nutricion.html"}}{{template "head" .}}
+{{$n := .Nutri}}
+<section class="hero compact">
+  <p class="eyebrow">Comida</p>
+  <h1 class="date">{{$n.Date}}</h1>
+  <nav class="day-nav" aria-label="Cambiar de día">
+    <a class="btn small" href="{{.Base}}/nutricion?dia={{$n.Prev}}" rel="prev"><span aria-hidden="true">←</span> {{$n.PrevText}}</a>
+    {{if not $n.IsToday}}<a class="btn small" href="{{.Base}}/nutricion">Hoy</a>
+    <a class="btn small" href="{{.Base}}/nutricion?dia={{$n.Next}}" rel="next">{{$n.NextText}} <span aria-hidden="true">→</span></a>{{end}}
+  </nav>
+  <div class="hero-meta">
+    <a href="{{.Base}}/nutricion/buscar?dia={{$n.ISO}}&amp;comida={{$n.Form.Meal}}">Buscar alimento</a>
+    <a href="{{.Base}}/nutricion/alimentos">Tus alimentos</a>
+    <a href="{{.Base}}/nutricion/objetivos">Objetivos</a>
+  </div>
+</section>
+
+{{with $n.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{$.Base}}/nutricion/apunte/{{.ID}}/borrar">
+  <p><strong>¿Borrar esto?</strong> {{.Date}}: {{.Main}} · {{.Values}}. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar</button>
+    <a class="btn ghost" href="{{$.Base}}/nutricion?dia={{$n.ISO}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<section class="card totals" aria-label="Total del día">
+  {{range $n.Totals.Meters}}
+  <div class="meter-row{{if .Over}} over{{end}}{{if .Done}} done{{end}}">
+    <p class="meter-head"><span class="stat-k">{{.Label}}</span><span class="meter-v tnum"><strong>{{.Value}}</strong>{{with .Goal}} <span class="muted">/ {{.}}</span>{{end}}</span></p>
+    {{if .Goal}}<svg class="meter" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="meter-bg" width="100" height="6"/><rect class="meter-fill" width="{{.Pct}}" height="6"/></svg>
+    <p class="meter-left">{{.Left}}</p>{{end}}
+  </div>
+  {{end}}
+  <p class="macros-small tnum">{{range $i, $m := $n.Totals.Small}}{{if $i}} · {{end}}{{$m.Label}} <strong>{{$m.Value}}</strong>{{with $m.Goal}} / {{.}}{{end}}{{end}}</p>
+  {{if not $n.Totals.HasGoals}}<p class="quiet">Sin objetivos. <a href="{{.Base}}/nutricion/objetivos">Ponte unos</a> para ver cuánto te queda.</p>{{end}}
+  {{if $n.Totals.Guess}}<p class="quiet">Parte de lo apuntado son valores aproximados.</p>{{end}}
+</section>
+
+<form class="panel form log-food" id="apuntar" method="post" action="{{.Base}}/nutricion/apuntar">
+  <input type="hidden" name="dia" value="{{$n.ISO}}">
+  <div class="panel-head">
+    <h2>Apuntar</h2>
+    <p>Separa cada cosa con comas. Se busca en tus alimentos y en una tabla básica.</p>
+  </div>
+  <label class="field">Qué has comido
+    <textarea name="texto" rows="2" maxlength="2000" placeholder="200 g de arroz, 2 huevos" required>{{$n.Form.Text}}</textarea></label>
+  <div class="log-row">
+    <label class="field">Comida
+      <select name="comida">{{range $n.Slots}}<option value="{{.Key}}"{{if eq .Key $n.Form.Meal}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <button class="btn primary">Apuntar</button>
+  </div>
+  {{with $n.Form.Missing}}
+  <div class="missing">
+    <p class="missing-title">No encuentro:</p>
+    <ul class="list">{{range .}}
+      <li class="row"><span class="row-main"><span class="title">{{.}}</span></span>
+        <span class="missing-links"><a href="{{$.Base}}/nutricion/buscar?q={{.}}&amp;dia={{$n.ISO}}&amp;comida={{$n.Form.Meal}}">Buscar</a> <a href="{{$.Base}}/nutricion/alimento/nuevo?nombre={{.}}">Crear alimento</a></span></li>{{end}}
+    </ul>
+  </div>
+  {{end}}
+  {{with $n.Frequents}}
+  <h3 class="label freq-title">Frecuentes <span class="help">con un toque, en la comida elegida</span></h3>
+  <ul class="freq">{{range .}}
+    <li><button class="btn freq-btn" formaction="{{$.Base}}/nutricion/rapido" formnovalidate name="item" value="{{.Item}}"><span class="plus" aria-hidden="true">+</span><span class="freq-text"><span class="freq-name">{{.Name}}</span> <span class="freq-meta tnum">{{.Amount}} · {{.Kcal}}</span></span></button></li>{{end}}
+  </ul>
+  {{end}}
+</form>
+
+<section class="group">
+  <h2 class="label">{{if $n.IsToday}}Lo de hoy{{else}}Lo de este día{{end}}</h2>
+  {{range $n.Groups}}
+  <article class="meal">
+    <header class="meal-head"><h3>{{.Label}}</h3><span class="meal-total tnum">{{.Total}}</span></header>
+    <ul class="list">{{range .Entries}}
+      <li class="row">
+        <div class="row-main"><span class="entry-name">{{.Main}}{{if .Guess}} <span class="tag">aprox.</span>{{end}}</span><span class="meta tnum">{{.Values}}</span></div>
+        <a class="btn ghost small" href="{{$.Base}}/nutricion?dia={{$n.ISO}}&amp;borrar={{.ID}}">Borrar…</a>
+      </li>{{end}}
+    </ul>
+    <div class="meal-actions">
+      {{if not $n.IsToday}}
+      <form method="post" action="{{$.Base}}/nutricion/copiar">
+        <input type="hidden" name="desde" value="{{$n.ISO}}">
+        <input type="hidden" name="comida" value="{{.Key}}">
+        <button class="btn small">Copiar a hoy</button>
+      </form>
+      {{end}}
+      <details class="save-meal">
+        <summary class="btn small">Guardar como habitual</summary>
+        <form class="save-form" method="post" action="{{$.Base}}/nutricion/guardar-comida">
+          <input type="hidden" name="dia" value="{{$n.ISO}}">
+          <input type="hidden" name="comida" value="{{.Key}}">
+          <label class="field">Nombre <span class="help">para apuntarlo entero con un toque</span>
+            <input name="nombre" maxlength="80" placeholder="{{.SaveName}}" autocomplete="off"></label>
+          <button class="btn small primary">Guardar</button>
+        </form>
+      </details>
+    </div>
+  </article>
+  {{else}}
+  <p class="quiet">Nada apuntado {{if $n.IsToday}}hoy{{else}}este día{{end}}.</p>
+  {{end}}
+  {{with $n.Repeat}}
+  <form class="repeat" method="post" action="{{$.Base}}/nutricion/copiar">
+    <input type="hidden" name="desde" value="{{.}}">
+    <button class="btn">Repetir ayer</button>
+    <span class="help">Copia a hoy todo lo de ayer.</span>
+  </form>
+  {{end}}
+</section>
+
+{{with $n.Week}}
+<section class="group">
+  <h2 class="label">Últimos 7 días</h2>
+  <dl class="stats">
+    <div class="stat"><dt class="stat-k">Media</dt><dd class="stat-v tnum">{{.AvgKcal}}</dd><dd class="stat-s">kcal al día</dd></div>
+    <div class="stat"><dt class="stat-k">Proteína</dt><dd class="stat-v tnum">{{.AvgProt}} g</dd><dd class="stat-s">al día de media</dd></div>
+    <div class="stat"><dt class="stat-k">Apuntados</dt><dd class="stat-v tnum">{{.Days}} de 7</dd><dd class="stat-s">días</dd></div>
+    {{if .HasProt}}<div class="stat"><dt class="stat-k">Proteína cumplida</dt><dd class="stat-v tnum">{{.ProtDays}}</dd><dd class="stat-s">{{if eq .ProtDays 1}}día{{else}}días{{end}}</dd></div>{{end}}
+  </dl>
+  <p class="quiet">La media solo cuenta los días con algo apuntado.</p>
+  {{with .Chart}}
+  <figure class="chart bars kcal-chart">
+    <figcaption class="label">Kcal por día{{with $n.Week.Goal}} <span class="goal-key">— objetivo, {{.}}</span>{{end}}</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<rect class="bar{{if .Now}} now{{end}}" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="3"><title>{{.Title}}</title></rect>{{if .Value}}<text class="val" x="{{.VX}}" y="{{.VY}}" text-anchor="middle">{{.Value}}</text>{{end}}<text class="tick" x="{{.VX}}" y="{{.LY}}" text-anchor="middle">{{.Label}}</text>{{end}}
+      {{with .GoalY}}<line class="goal" x1="{{$x0}}" x2="{{$x1}}" y1="{{.}}" y2="{{.}}"/>{{end}}
+    </svg>
+  </figure>
+  {{end}}
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

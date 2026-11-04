@@ -1,0 +1,76 @@
+{{define "nutricion_buscar.html"}}{{template "head" .}}
+{{$s := .Search}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/nutricion?dia={{$s.ISO}}">Comida</a></p>
+  <h1 class="date">Buscar alimento</h1>
+  <div class="hero-meta"><span>Se apunta {{$s.DayText}}, en {{$s.MealLabel}}</span><a href="{{.Base}}/nutricion/alimentos">Tus alimentos</a></div>
+</section>
+
+<form class="search food-search" method="get" action="{{.Base}}/nutricion/buscar" role="search">
+  <input type="hidden" name="dia" value="{{$s.ISO}}">
+  <label class="vh" for="q">Alimento</label>
+  <input type="search" id="q" name="q" value="{{$s.Query}}" maxlength="80" placeholder="arroz, yogur griego…" autocomplete="off" required>
+  <label class="vh" for="comida">Comida en la que se apunta</label>
+  <select id="comida" name="comida">{{range $s.Slots}}<option value="{{.Key}}"{{if eq .Key $s.Meal}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+  <button class="btn primary">Buscar</button>
+</form>
+
+{{if $s.Searched}}
+<section class="group">
+  <h2 class="label">Resultados</h2>
+  {{with $s.Results}}
+  <ul class="results">{{range .}}
+    <li class="result">
+      <div class="result-head">
+        <p class="result-name">{{.Name}}{{if .Own}} <span class="tag accent">habitual</span>{{end}}</p>
+        <p class="meta tnum"><span>{{.Per}}: {{.Values}}</span>{{with .UnitInfo}}<span>{{.}}</span>{{end}}</p>
+        {{with .Items}}<p class="meta">{{join . " · "}}</p>{{end}}
+      </div>
+      <form class="add-row" method="post" action="{{$.Base}}/nutricion/anadir">
+        <input type="hidden" name="dia" value="{{$s.ISO}}">
+        <input type="hidden" name="q" value="{{$s.Query}}">
+        {{if .Own}}<input type="hidden" name="alimento" value="{{.ID}}">{{else}}<input type="hidden" name="generico" value="{{.Key}}">{{end}}
+        <label class="num">Cantidad
+          <input name="cantidad" value="{{.Amount}}" inputmode="decimal" maxlength="7" autocomplete="off" required></label>
+        {{$unit := .Unit}}
+        <label class="num">Unidad
+          <select name="unidad">{{range .Units}}<option value="{{.Key}}"{{if eq .Key $unit}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+        <input type="hidden" name="comida" value="{{$s.Meal}}">
+        <button class="btn primary">Apuntar</button>
+      </form>
+      {{if not .Own}}{{if .Saved}}<p class="help">Ya está en tus alimentos.</p>{{else}}
+      <form class="save-generic" method="post" action="{{$.Base}}/nutricion/alimentos/generico">
+        <input type="hidden" name="generico" value="{{.Key}}">
+        <button class="btn ghost small">Guardar como habitual</button>
+      </form>{{end}}{{end}}
+    </li>{{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">No encuentro «{{$s.Query}}» en tus alimentos ni en la tabla básica.</p>
+  {{end}}
+</section>
+{{end}}
+
+<section class="panel off-box">
+  <div class="panel-head">
+    <h2>¿No está?</h2>
+    <p>Busca en Open Food Facts (productos envasados), por nombre o por el código de barras.</p>
+  </div>
+  <form class="search" method="get" action="{{.Base}}/nutricion/off" role="search">
+    <input type="hidden" name="dia" value="{{$s.ISO}}">
+    <input type="hidden" name="comida" value="{{$s.Meal}}">
+    <label class="vh" for="off-q">Producto</label>
+    <input type="search" id="off-q" name="q" value="{{$s.Query}}" maxlength="80" placeholder="yogur proteínas marca…" autocomplete="off" required>
+    <button class="btn">Buscar en Open Food Facts</button>
+  </form>
+  <form class="search barcode" method="get" action="{{.Base}}/nutricion/off">
+    <input type="hidden" name="dia" value="{{$s.ISO}}">
+    <input type="hidden" name="comida" value="{{$s.Meal}}">
+    <label class="vh" for="codigo">Código de barras</label>
+    <input id="codigo" name="codigo" inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14" placeholder="Código de barras: 8410000000000" autocomplete="off" required>
+    <button class="btn">Buscar el código</button>
+  </form>
+  <p class="help privacy">Se consulta Open Food Facts (datos ODbL); solo se envía lo que buscas.</p>
+  <p class="help">¿Tampoco está? <a href="{{.Base}}/nutricion/alimento/nuevo{{with $s.Query}}?nombre={{.}}{{end}}">Créalo a mano</a> con los valores de la etiqueta.</p>
+</section>
+{{template "foot" .}}{{end}}

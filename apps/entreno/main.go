@@ -32,7 +32,7 @@ func main() {
 }
 
 func setup(env *app.Env, box *seal.Box, dir string) error {
-	svc := &service{store: store{env.DB, box}, log: env.Log, imports: newImports(), photos: newPhotoFiles(dir, box)}
+	svc := &service{store: store{env.DB, box}, log: env.Log, imports: newImports(), photos: newPhotoFiles(dir, box), off: newOFF()}
 	(&web{svc: svc}).routes(env.Mux)
 	addTools(env.MCP, svc)
 	return nil

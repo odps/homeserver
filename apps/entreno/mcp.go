@@ -315,6 +315,7 @@ func addTools(server *mcp.Server, svc *service) {
 			return nil, map[string]bool{"borrada": true}, svc.store.deleteSession(ctx, who.User, in.ID)
 		})
 	addBodyTools(server, svc)
+	addNutritionTools(server, svc)
 }
 
 // searchCatalog busca en el catálogo por palabras del nombre o los alias.

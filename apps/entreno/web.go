@@ -61,7 +61,7 @@ type pageData struct {
 	Version  string
 	Base     string // /entreno detrás de la pasarela
 	Name     string
-	Tab      string // inicio, gimnasio, rutinas, ejercicios, cuerpo, apuntar, importar
+	Tab      string // inicio, gimnasio, rutinas, ejercicios, cuerpo, comida, apuntar, importar
 	Title    string // título de la página si no basta con la pestaña (Cardio)
 	Script   bool   // carga gimnasio.js (con su CSP)
 	Flash    string
@@ -73,6 +73,7 @@ type pageData struct {
 	Sessions []sessionCard
 	Hoy      *todayCard // «Hoy toca»
 	BodyCard *bodyCard
+	FoodCard *foodCard
 
 	// Cuerpo, el formulario de un día y cada foto
 	Body  *bodyView
@@ -81,6 +82,14 @@ type pageData struct {
 
 	// Cardio
 	Cardio *cardioPage
+
+	// Comida: el día, buscar, Open Food Facts, los habituales y los objetivos
+	Nutri  *nutriPage
+	Search *foodSearch
+	OFF    *offPage
+	Foods  *foodsPage
+	Food   *foodForm
+	Goals  *goalsForm
 
 	// Sesión
 	Session sessionDetail
@@ -273,6 +282,25 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /cardio", w.user(w.cardioPage))
 	mux.HandleFunc("POST /cardio", w.user(w.cardioPost))
 	mux.HandleFunc("POST /cardio/{id}/borrar", w.user(w.cardioDelete))
+	mux.HandleFunc("GET /nutricion", w.user(w.nutriPage))
+	mux.HandleFunc("POST /nutricion/apuntar", w.user(w.nutriLogPost))
+	mux.HandleFunc("POST /nutricion/rapido", w.user(w.nutriQuickPost))
+	mux.HandleFunc("POST /nutricion/apunte/{id}/borrar", w.user(w.nutriDelete))
+	mux.HandleFunc("POST /nutricion/guardar-comida", w.user(w.nutriSaveMeal))
+	mux.HandleFunc("POST /nutricion/copiar", w.user(w.nutriCopy))
+	mux.HandleFunc("GET /nutricion/buscar", w.user(w.foodSearchPage))
+	mux.HandleFunc("POST /nutricion/anadir", w.user(w.foodAddPost))
+	mux.HandleFunc("GET /nutricion/off", w.user(w.offPage))
+	mux.HandleFunc("POST /nutricion/off/anadir", w.user(w.offAddPost))
+	mux.HandleFunc("POST /nutricion/off/guardar", w.user(w.offSavePost))
+	mux.HandleFunc("GET /nutricion/alimentos", w.user(w.foodsPage))
+	mux.HandleFunc("POST /nutricion/alimentos/generico", w.user(w.genericSavePost))
+	mux.HandleFunc("GET /nutricion/alimento/nuevo", w.user(w.foodNew))
+	mux.HandleFunc("GET /nutricion/alimento/{id}", w.user(w.foodEdit))
+	mux.HandleFunc("POST /nutricion/alimento/{id}", w.user(w.foodSave))
+	mux.HandleFunc("POST /nutricion/alimento/{id}/borrar", w.user(w.foodDelete))
+	mux.HandleFunc("GET /nutricion/objetivos", w.user(w.goalsPage))
+	mux.HandleFunc("POST /nutricion/objetivos", w.user(w.goalsPost))
 }
 
 // user exige la identidad que pone la pasarela.
@@ -320,6 +348,8 @@ var flashes = map[string]string{
 	"peso":       "Peso apuntado.", "guardado": "Guardado.", "dia-borrado": "Día borrado.",
 	"foto": "Foto guardada.", "foto-borrada": "Foto borrada.",
 	"cardio": "Cardio apuntado.", "cardio-borrado": "Cardio borrado.",
+	"comida-borrada": "Borrado.", "copiado": "Copiado a hoy.", "habitual": "Guardado en tus alimentos.",
+	"ya-habitual": "Ya estaba en tus alimentos.", "alimento-borrado": "Alimento borrado.", "objetivos": "Objetivos guardados.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }
@@ -421,6 +451,11 @@ func (w *web) home(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 		w.svc.log.Error("entreno web", "op", "inicio cuerpo", "err", err)
 	} else {
 		d.BodyCard = w.bodyCardOf(trend(logs, today))
+	}
+	if card, err := w.homeFoodCard(ctx, who.User); err != nil {
+		w.svc.log.Error("entreno web", "op", "inicio comida", "err", err)
+	} else {
+		d.FoodCard = card
 	}
 	w.render(rw, r, "inicio.html", d)
 }

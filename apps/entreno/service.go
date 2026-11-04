@@ -18,6 +18,7 @@ type service struct {
 	log     *slog.Logger
 	imports *imports
 	photos  *photoFiles      // fotos de progreso, cifradas en disco
+	off     *offClient       // Open Food Facts (productos envasados)
 	now     func() time.Time // nil: time.Now
 }
 

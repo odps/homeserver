@@ -1,0 +1,32 @@
+{{define "nutricion_objetivos.html"}}{{template "head" .}}
+{{$g := .Goals}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/nutricion">Comida</a></p>
+  <h1 class="date">Objetivos del día</h1>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/nutricion/objetivos">
+  <div class="panel-head">
+    <h2>Lo que quieres comer al día</h2>
+    <p>Deja en blanco lo que no quieras controlar. Con todo en blanco, se quitan los objetivos.</p>
+  </div>
+  <div class="form-grid macros-grid">
+    <label class="field">Kcal
+      <input name="kcal" value="{{$g.Kcal}}" inputmode="decimal" maxlength="5" placeholder="2400" autocomplete="off"></label>
+    <label class="field">Proteína <span class="help">g</span>
+      <input name="proteina" value="{{$g.Prot}}" inputmode="decimal" maxlength="5" placeholder="150" autocomplete="off"></label>
+    <label class="field">Hidratos <span class="help">g</span>
+      <input name="hidratos" value="{{$g.Carb}}" inputmode="decimal" maxlength="5" autocomplete="off"></label>
+    <label class="field">Grasa <span class="help">g</span>
+      <input name="grasa" value="{{$g.Fat}}" inputmode="decimal" maxlength="5" autocomplete="off"></label>
+  </div>
+  <div class="hints">
+    {{with $g.Hint}}<p>{{.}}</p>{{else}}<p>Con tu peso apuntado en <a href="{{$.Base}}/cuerpo">Cuerpo</a>, aquí verás cuánta proteína se suele recomendar para quien entrena.</p>{{end}}
+    <p>Las kcal dependen de tu gasto; si no lo sabes, apunta unas semanas y mira cómo cambia tu peso.</p>
+  </div>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/nutricion">Cancelar</a>
+  </div>
+</form>
+{{template "foot" .}}{{end}}

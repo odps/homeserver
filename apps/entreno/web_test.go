@@ -200,6 +200,14 @@ func TestWebRender(t *testing.T) {
 	for k, v := range extraWants {
 		wants[k] = v
 	}
+	// Comida (web_nutricion_test.go).
+	extra, extraWants = nutriRenderCases(t, w)
+	for _, c := range extra {
+		cases = append(cases, page{c.file, c.tmpl, c.data})
+	}
+	for k, v := range extraWants {
+		wants[k] = v
+	}
 
 	dir := os.Getenv("ENTRENO_PREVIEW_DIR")
 	base := "/entreno"

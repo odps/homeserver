@@ -1,0 +1,62 @@
+{{define "nutricion_alimento.html"}}{{template "head" .}}
+{{$f := .Food}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/nutricion/alimentos">Tus alimentos</a></p>
+  <h1 class="date">{{if $f.New}}Nuevo alimento{{else}}{{$f.Name}}{{end}}</h1>
+  {{with $f.Origin}}<div class="hero-meta"><span>Valores de: {{.}}</span></div>{{end}}
+</section>
+
+{{if $f.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/nutricion/alimento/{{$f.ID}}/borrar">
+  <p><strong>¿Borrar «{{$f.Name}}»?</strong> Lo ya apuntado no cambia. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar</button>
+    <a class="btn ghost" href="{{.Base}}/nutricion/alimento/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<form class="panel form" method="post" action="{{.Base}}/nutricion/alimento/{{if $f.New}}nuevo{{else}}{{$f.ID}}{{end}}">
+  <div class="panel-head">
+    <h2>{{if $f.New}}Crear{{else}}Cambiar{{end}}</h2>
+    <p>Copia los valores de la etiqueta: por 100 g, por 100 ml o por unidad. Lo que ya está apuntado no cambia.</p>
+  </div>
+  <label class="field">Nombre
+    <input name="nombre" value="{{$f.Name}}" maxlength="80" placeholder="Yogur griego natural" autocomplete="off" required></label>
+  <div class="form-grid">
+    <label class="field">Valores
+      <select name="base">{{range $f.Bases}}<option value="{{.Key}}"{{if eq .Key $f.Base}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    <label class="field">Unidad <span class="help">si son por unidad</span>
+      <input name="unidad" value="{{$f.Unit}}" maxlength="30" placeholder="yogur, batido, ración" autocomplete="off"></label>
+  </div>
+  <div class="form-grid macros-grid">
+    <label class="field">Kcal
+      <input name="kcal" value="{{$f.Kcal}}" inputmode="decimal" maxlength="7" placeholder="120" autocomplete="off"></label>
+    <label class="field">Proteína <span class="help">g</span>
+      <input name="proteina" value="{{$f.Prot}}" inputmode="decimal" maxlength="7" placeholder="10,5" autocomplete="off"></label>
+    <label class="field">Hidratos <span class="help">g</span>
+      <input name="hidratos" value="{{$f.Carb}}" inputmode="decimal" maxlength="7" autocomplete="off"></label>
+    <label class="field">Grasa <span class="help">g</span>
+      <input name="grasa" value="{{$f.Fat}}" inputmode="decimal" maxlength="7" autocomplete="off"></label>
+  </div>
+  <label class="field">Ración <span class="help">g, ml o unidades que se apuntan con un toque</span>
+    <input name="racion" value="{{$f.Portion}}" inputmode="decimal" maxlength="7" placeholder="100 g, o 1 si es por unidad" autocomplete="off"></label>
+  {{with $f.Items}}
+  <div class="field items-field">Lleva
+    <ul class="plainlist">{{range .}}<li>{{.}}</li>{{end}}</ul></div>
+  {{end}}
+  <label class="field">Nota <span class="help">opcional</span>
+    <input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/nutricion/alimentos">Cancelar</a>
+  </div>
+</form>
+
+{{if and (not $f.New) (not $f.Confirm)}}
+<div class="dangerzone">
+  <p>¿Ya no lo usas? Bórralo: lo apuntado con él se queda.</p>
+  <a class="btn danger small" href="{{.Base}}/nutricion/alimento/{{$f.ID}}?borrar=1">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

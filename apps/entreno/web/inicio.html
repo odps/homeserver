@@ -7,6 +7,7 @@
     <a href="{{.Base}}/ejercicios">Tus ejercicios</a>
     <a href="{{.Base}}/cuerpo">Tu cuerpo</a>
     <a href="{{.Base}}/cardio">Cardio</a>
+    <a href="{{.Base}}/nutricion">Comida</a>
   </div>
 </section>
 
@@ -43,6 +44,14 @@
     {{with .Avg7}}<span class="stat"><span class="stat-k">Media 7 días</span><span class="stat-v tnum">{{.}}</span></span>{{end}}
     {{with .Week}}<span class="stat"><span class="stat-k">Esta semana</span><span class="stat-v tnum">{{.}}</span></span>{{end}}
   </span>
+  <span class="arrow" aria-hidden="true">→</span>
+</a>
+{{end}}
+
+{{with .FoodCard}}
+<a class="card body-card food-card" href="{{$.Base}}/nutricion">
+  <span class="label">Comida de hoy</span>
+  <span class="food-line"><span class="tnum"><strong>{{.Kcal}}</strong>{{with .KcalGoal}} / {{.}}{{end}} kcal</span> <span class="sep" aria-hidden="true">·</span> <span class="tnum"><strong>{{.Prot}}</strong>{{with .ProtGoal}} / {{.}}{{end}} g proteína</span></span>
   <span class="arrow" aria-hidden="true">→</span>
 </a>
 {{end}}
