@@ -28,11 +28,11 @@ func main() {
 		os.Exit(1)
 	}
 	app.Run(app.App{Name: "entreno", Title: "Entreno", Migrations: migrations,
-		Setup: func(env *app.Env) error { return setup(env, box) }})
+		Setup: func(env *app.Env) error { return setup(env, box, dir) }})
 }
 
-func setup(env *app.Env, box *seal.Box) error {
-	svc := &service{store: store{env.DB, box}, log: env.Log, imports: newImports()}
+func setup(env *app.Env, box *seal.Box, dir string) error {
+	svc := &service{store: store{env.DB, box}, log: env.Log, imports: newImports(), photos: newPhotoFiles(dir, box)}
 	(&web{svc: svc}).routes(env.Mux)
 	addTools(env.MCP, svc)
 	return nil

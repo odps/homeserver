@@ -1,0 +1,84 @@
+{{define "cardio.html"}}{{template "head" .}}
+{{$c := .Cardio}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/">Inicio</a></p>
+  <h1 class="date">Cardio</h1>
+  <div class="hero-meta">
+    <a href="#apuntar-cardio">Apuntar cardio</a>
+    <a href="{{.Base}}/cuerpo">Tu cuerpo</a>
+  </div>
+</section>
+
+{{with $c.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{$.Base}}/cardio/{{.ID}}/borrar">
+  <p><strong>¿Borrar este cardio?</strong> {{.Date}}: {{.Text}}. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar</button>
+    <a class="btn ghost" href="{{$.Base}}/cardio">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Esta semana</h2>
+  <dl class="stats">
+    <div class="stat"><dt class="stat-k">Sesiones</dt><dd class="stat-v tnum">{{$c.Week.Count}}</dd></div>
+    <div class="stat"><dt class="stat-k">Tiempo</dt><dd class="stat-v tnum">{{$c.Week.Time}}</dd></div>
+    <div class="stat"><dt class="stat-k">Distancia</dt><dd class="stat-v tnum">{{$c.Week.Km}} km</dd></div>
+  </dl>
+  {{with $c.Chart}}
+  <figure class="chart bars">
+    <figcaption class="label">Minutos por semana</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<rect class="bar{{if .Now}} now{{end}}" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="3"><title>{{.Title}}</title></rect>{{if .Value}}<text class="val" x="{{.VX}}" y="{{.VY}}" text-anchor="middle">{{.Value}}</text>{{end}}<text class="tick{{if .Alt}} alt{{end}}" x="{{.VX}}" y="{{.LY}}" text-anchor="middle">{{.Label}}</text>{{end}}
+    </svg>
+  </figure>
+  {{end}}
+</section>
+
+<form class="panel form" id="apuntar-cardio" method="post" action="{{.Base}}/cardio">
+  <div class="panel-head">
+    <h2>Apuntar cardio</h2>
+    <p>Basta con el tipo y la duración. El ritmo lo calcula la app.</p>
+  </div>
+  <label class="field">Tipo
+    <select name="tipo">{{range $c.Types}}<option value="{{.Key}}"{{if eq .Key $c.Form.Type}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <div class="form-grid">
+    <label class="field">Fecha
+      <input type="date" name="fecha" value="{{$c.Form.Date}}" max="{{.Tomorrow}}" required></label>
+    <label class="field">Hora <span class="help">opcional</span>
+      <input type="time" name="hora" value="{{$c.Form.Time}}"></label>
+    <label class="field">Duración <span class="help">45 o 45:30</span>
+      <input name="duracion" value="{{$c.Form.Dur}}" maxlength="8" placeholder="45:30" autocomplete="off" required></label>
+    <label class="field">Distancia <span class="help">km</span>
+      <input name="distancia" value="{{$c.Form.Km}}" inputmode="decimal" maxlength="7" placeholder="5,2" autocomplete="off"></label>
+    <label class="field">Pulso medio <span class="help">ppm</span>
+      <input name="pulso" value="{{$c.Form.HR}}" inputmode="numeric" maxlength="3" placeholder="145" autocomplete="off"></label>
+    <label class="field">Kcal
+      <input name="kcal" value="{{$c.Form.Kcal}}" inputmode="numeric" maxlength="5" placeholder="320" autocomplete="off"></label>
+    <label class="field">Esfuerzo <span class="help">1 a 10</span>
+      <select name="esfuerzo"><option value=""{{if eq $c.Form.RPE ""}} selected{{end}}>—</option>{{range $c.Efforts}}<option value="{{.}}"{{if eq (printf "%d" .) $c.Form.RPE}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  </div>
+  <label class="field">Nota <span class="help">opcional</span>
+    <input name="nota" value="{{$c.Form.Note}}" maxlength="300" autocomplete="off"></label>
+  <div class="actions">
+    <button class="btn primary big">Apuntar</button>
+  </div>
+</form>
+
+<section class="group">
+  <h2 class="label">Últimas sesiones</h2>
+  {{with $c.Recent}}
+  <ul class="list">{{range .}}
+    <li class="row">
+      <div class="row-main"><span class="title">{{.Date}} <span class="muted tnum">{{.Time}}</span></span><span class="cardio-line">{{.Text}}</span>{{with .Note}}<span class="meta">{{.}}</span>{{end}}</div>
+      <a class="btn ghost small" href="{{$.Base}}/cardio?borrar={{.ID}}">Borrar…</a>
+    </li>{{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">Aún no hay cardio apuntado.</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

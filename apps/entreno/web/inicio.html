@@ -5,6 +5,8 @@
   <div class="hero-meta">
     <a href="{{.Base}}/rutinas">Tus rutinas</a>
     <a href="{{.Base}}/ejercicios">Tus ejercicios</a>
+    <a href="{{.Base}}/cuerpo">Tu cuerpo</a>
+    <a href="{{.Base}}/cardio">Cardio</a>
   </div>
 </section>
 
@@ -26,15 +28,35 @@
 {{end}}{{end}}
 
 <div class="toolbar">
-  <div class="quick wide two">
+  <div class="quick wide three">
     <a class="btn primary big" href="{{.Base}}/apuntar"><span aria-hidden="true">+</span> Apuntar</a>
+    <a class="btn big" href="{{.Base}}/cardio"><span aria-hidden="true">+</span> Cardio</a>
     <a class="btn big" href="{{.Base}}/importar">Importar de WhatsApp</a>
   </div>
 </div>
 
+{{with .BodyCard}}
+<a class="card body-card" href="{{$.Base}}/cuerpo">
+  <span class="label">Cuerpo</span>
+  <span class="stats">
+    <span class="stat"><span class="stat-k">Último peso</span><span class="stat-v tnum">{{.Last}}</span><span class="stat-s">{{.LastDate}}</span></span>
+    {{with .Avg7}}<span class="stat"><span class="stat-k">Media 7 días</span><span class="stat-v tnum">{{.}}</span></span>{{end}}
+    {{with .Week}}<span class="stat"><span class="stat-k">Esta semana</span><span class="stat-v tnum">{{.}}</span></span>{{end}}
+  </span>
+  <span class="arrow" aria-hidden="true">→</span>
+</a>
+{{end}}
+
 {{with .Sessions}}
 <ol class="sessions">
   {{range .}}
+  {{if .Cardio}}
+  <li class="session cardio-card">
+    <a class="session-head" href="{{$.Base}}/cardio"><span class="session-date">{{.Date}}</span><span class="head-end"><span class="tag accent">Cardio</span><span class="arrow" aria-hidden="true">→</span></span></a>
+    <p class="cardio-line">{{.Cardio}}</p>
+    {{with .Notes}}<p class="notes">{{range $i, $n := .}}{{if $i}} · {{end}}{{$n}}{{end}}</p>{{end}}
+  </li>
+  {{else}}
   <li class="session">
     <a class="session-head" href="{{$.Base}}/sesion/{{.ID}}"><span class="session-date">{{.Date}}</span><span class="arrow" aria-hidden="true">→</span></a>
     {{with .Lines}}<ul class="exlist">{{range .}}
@@ -42,6 +64,7 @@
     </ul>{{end}}
     {{with .Notes}}<p class="notes">{{range $i, $n := .}}{{if $i}} · {{end}}{{$n}}{{end}}</p>{{end}}
   </li>
+  {{end}}
   {{end}}
 </ol>
 {{else}}

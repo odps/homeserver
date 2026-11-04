@@ -17,7 +17,7 @@ func newTestService(t *testing.T) *service {
 	t.Helper()
 	box, _ := seal.Load("")
 	pool := dbtest.Migrated(t, migrations)
-	return &service{store: store{pool, box}, log: slog.New(slog.DiscardHandler), imports: newImports()}
+	return &service{store: store{pool, box}, log: slog.New(slog.DiscardHandler), imports: newImports(), photos: newPhotoFiles(t.TempDir(), box)}
 }
 
 // noPlain falla si algún byte de la tabla contiene el texto en claro.

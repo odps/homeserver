@@ -192,6 +192,14 @@ func TestWebRender(t *testing.T) {
 		"gimnasio-elegida":   {"Rutina", "2026-10-27: 2×20 m · 22 kg", "25 m · 22 kg", "Revisa la serie"},
 		"gimnasio-vacio":     {"Aún no tienes rutinas", "/rutinas/detectar", "/apuntar"},
 	}
+	// Cuerpo, fotos y cardio (web_cuerpo_test.go).
+	extra, extraWants := bodyRenderCases(t, w)
+	for _, c := range extra {
+		cases = append(cases, page{c.file, c.tmpl, c.data})
+	}
+	for k, v := range extraWants {
+		wants[k] = v
+	}
 
 	dir := os.Getenv("ENTRENO_PREVIEW_DIR")
 	base := "/entreno"
@@ -209,7 +217,7 @@ func TestWebRender(t *testing.T) {
 				}
 				d.Form = &f
 			}
-			d.Version, d.Base, d.Today = "v0.0.0-test", base, "2026-11-03"
+			d.Version, d.Base, d.Today, d.Tomorrow = "v0.0.0-test", base, "2026-11-03", "2026-11-04"
 			var buf bytes.Buffer
 			if err := pages.ExecuteTemplate(&buf, p.tmpl, d); err != nil {
 				t.Fatalf("%s: %v", p.tmpl, err)
@@ -274,7 +282,8 @@ func newWebEnv(t *testing.T) *webEnv {
 	box, _ := seal.Load("")
 	pool := dbtest.Migrated(t, migrations)
 	now := time.Date(2026, 11, 3, 19, 30, 0, 0, madrid)
-	svc := &service{store: store{pool, box}, log: slog.New(slog.DiscardHandler), imports: newImports(), now: func() time.Time { return now }}
+	svc := &service{store: store{pool, box}, log: slog.New(slog.DiscardHandler), imports: newImports(), now: func() time.Time { return now },
+		photos: newPhotoFiles(t.TempDir(), box)}
 	mux := http.NewServeMux()
 	(&web{svc: svc}).routes(mux)
 	srv := httptest.NewServer(mux)

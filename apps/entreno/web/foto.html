@@ -1,0 +1,30 @@
+{{define "foto.html"}}{{template "head" .}}
+{{$p := .Photo}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/cuerpo#fotos">Fotos</a></p>
+  <h1 class="date">{{$p.Date}}</h1>
+  <div class="hero-meta"><span>{{$p.Pose}}</span></div>
+</section>
+
+{{if $p.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/fotos/{{$p.ID}}/borrar">
+  <p><strong>¿Borrar esta foto?</strong> Se borra de tu servidor y no se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar la foto</button>
+    <a class="btn ghost" href="{{.Base}}/fotos/{{$p.ID}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<figure class="photo-full">
+  <img src="{{.Base}}/foto/{{$p.ID}}" alt="Foto de progreso: {{$p.Pose}}, {{$p.Date}}"{{if $p.W}} width="{{$p.W}}" height="{{$p.H}}"{{end}}>
+  {{with $p.Note}}<figcaption>{{.}}</figcaption>{{end}}
+</figure>
+
+{{if not $p.Confirm}}
+<div class="dangerzone">
+  <p>¿Ya no la quieres? Al borrarla desaparece de tu servidor.</p>
+  <a class="btn danger small" href="{{.Base}}/fotos/{{$p.ID}}?borrar=1">Borrar la foto…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

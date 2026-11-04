@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#11100f" media="(prefers-color-scheme: dark)">
-<title>{{if eq .Tab "apuntar"}}Apuntar · {{else if eq .Tab "ejercicios"}}Ejercicios · {{else if eq .Tab "importar"}}Importar · {{else if eq .Tab "gimnasio"}}Gimnasio · {{else if eq .Tab "rutinas"}}Rutinas · {{end}}Entreno</title>
+<title>{{if .Title}}{{.Title}} · {{else if eq .Tab "apuntar"}}Apuntar · {{else if eq .Tab "ejercicios"}}Ejercicios · {{else if eq .Tab "importar"}}Importar · {{else if eq .Tab "gimnasio"}}Gimnasio · {{else if eq .Tab "rutinas"}}Rutinas · {{else if eq .Tab "cuerpo"}}Cuerpo · {{end}}Entreno</title>
 <link rel="stylesheet" href="{{.Base}}/static/app.css">
 <link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
 {{if .Script}}<script src="{{.Base}}/static/gimnasio.js" defer></script>
@@ -21,6 +21,7 @@
       <a href="{{.Base}}/gimnasio"{{if eq .Tab "gimnasio"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10"/><rect x="3.5" y="8" width="3.5" height="8" rx="1"/><rect x="17" y="8" width="3.5" height="8" rx="1"/><path d="M2 11v2M22 11v2"/></svg><span>Gimnasio</span></a>
       <a href="{{.Base}}/rutinas"{{if eq .Tab "rutinas"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="5.5" width="15" height="14.5" rx="2"/><path d="M8.5 3.5v4M15.5 3.5v4M4.5 10.5h15M8.5 14h3M8.5 17h6"/></svg><span>Rutinas</span></a>
       <a href="{{.Base}}/ejercicios"{{if eq .Tab "ejercicios"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r="1.25"/><circle cx="4.75" cy="12" r="1.25"/><circle cx="4.75" cy="17.5" r="1.25"/></svg><span>Ejercicios</span></a>
+      <a href="{{.Base}}/cuerpo"{{if eq .Tab "cuerpo"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M8.25 10.5a5 5 0 0 1 7.5 0"/><path d="M12 12.5l1.6-3"/></svg><span>Cuerpo</span></a>
     </nav>
   </div>
 </header>

@@ -17,6 +17,7 @@ type service struct {
 	store   store
 	log     *slog.Logger
 	imports *imports
+	photos  *photoFiles      // fotos de progreso, cifradas en disco
 	now     func() time.Time // nil: time.Now
 }
 

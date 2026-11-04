@@ -1,0 +1,54 @@
+{{define "cuerpo_dia.html"}}{{template "head" .}}
+{{$f := .Day}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/cuerpo">Cuerpo</a></p>
+  <h1 class="date">{{$f.Date}}</h1>
+  <div class="hero-meta"><span>{{if $f.Exists}}Lo que guardes sustituye lo apuntado este día{{else}}Aún no hay nada apuntado este día{{end}}</span></div>
+</section>
+
+{{if $f.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/cuerpo/dia/borrar">
+  <input type="hidden" name="fecha" value="{{$f.ISO}}">
+  <p><strong>¿Borrar lo apuntado este día?</strong> Se borran el peso, la grasa, las medidas y la nota, y no se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar el día</button>
+    <a class="btn ghost" href="{{.Base}}/cuerpo/dia?fecha={{$f.ISO}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<form class="day-pick" method="get" action="{{.Base}}/cuerpo/dia">
+  <label class="field">Otro día
+    <input type="date" name="fecha" value="{{$f.ISO}}" max="{{.Tomorrow}}" required></label>
+  <button class="btn">Ver</button>
+</form>
+
+<form class="panel form" method="post" action="{{.Base}}/cuerpo/dia">
+  <input type="hidden" name="fecha" value="{{$f.ISO}}">
+  <div class="form-grid">
+    <label class="field">Peso <span class="help">kg</span>
+      <input name="peso" value="{{$f.Kg}}" inputmode="decimal" maxlength="6" placeholder="78,4" autocomplete="off"></label>
+    <label class="field">Grasa <span class="help">%, si te lo da la báscula</span>
+      <input name="grasa" value="{{$f.Fat}}" inputmode="decimal" maxlength="5" placeholder="18" autocomplete="off"></label>
+  </div>
+  <h2 class="label rows-title">Medidas <span class="help">en cm, con cinta métrica</span></h2>
+  <div class="form-grid sites">{{range $f.Sites}}
+    <label class="field">{{.Label}} <span class="help">{{.Hint}}</span>
+      <input name="m_{{.Key}}" value="{{.Value}}" inputmode="decimal" maxlength="6" autocomplete="off"></label>{{end}}
+  </div>
+  <label class="field">Nota <span class="help">opcional</span>
+    <input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+  <p class="help">Lo que dejes en blanco no se guarda. Si lo dejas todo en blanco, se borra el día.</p>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/cuerpo">Cancelar</a>
+  </div>
+</form>
+
+{{if and $f.Exists (not $f.Confirm)}}
+<div class="dangerzone">
+  <p>¿Está mal? Bórralo y vuelve a apuntarlo.</p>
+  <a class="btn danger small" href="{{.Base}}/cuerpo/dia?fecha={{$f.ISO}}&borrar=1">Borrar el día…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

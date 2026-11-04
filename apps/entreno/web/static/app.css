@@ -210,7 +210,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   /* backdrop-filter haría de la barra el contenedor de las pestañas fijas */
   .bar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
   .bar-in { padding-block: .35rem; }
-  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0 0 env(safe-area-inset-bottom); border-radius: 0; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 0 0 env(safe-area-inset-bottom); border-radius: 0; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
   .tabs a { flex-direction: column; justify-content: center; gap: .15rem; min-height: 3.9rem; padding: .3rem 0; border-radius: 0; font-size: .7rem; letter-spacing: .01em; color: var(--muted); min-width: 0; }
   .tabs a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .tabs svg { display: block; }
@@ -314,8 +314,75 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @keyframes pulso { 50% { transform: scale(1.02); } }
 body.tab-gimnasio .foot { padding-bottom: calc(7rem + var(--tabbar)); }
 
+/* Inicio: tres botones (Apuntar arriba, a lo ancho) y la tarjeta del cuerpo */
+.quick.three { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.quick.three > :first-child { grid-column: 1 / -1; }
+.quick.three .btn:not(:first-child) { padding-inline: .7rem; font-size: .98rem; text-align: center; text-wrap: balance; }
+@media (min-width: 48rem) {
+  .quick.three { grid-template-columns: 1.4fr 1fr 1fr; }
+  .quick.three > :first-child { grid-column: auto; }
+}
+.body-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .3rem .8rem; text-decoration: none; }
+.body-card .label { grid-column: 1 / -1; margin: 0; color: var(--accent); }
+.body-card .arrow { grid-column: 2; grid-row: 2; }
+.body-card:hover .arrow { transform: translateX(4px); color: var(--accent); }
+.cardio-card .session-head { border-bottom: 0; }
+.head-end { display: inline-flex; align-items: center; gap: .6rem; }
+.cardio-line { margin: 0; font-size: .94rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.cardio-card .cardio-line { margin-top: .1rem; }
+
+/* Cifras: peso, medias, totales de la semana */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .9rem 1.2rem; margin: 0; }
+.stat { display: grid; align-content: start; gap: .1rem; min-width: 0; margin: 0; }
+.stat dd { margin: 0; }
+.stat-k { font: 650 .7rem/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.stat-v { font: 600 clamp(1.35rem, 5vw, 1.7rem)/1.15 var(--serif); color: var(--ink); white-space: nowrap; }
+.stat-s { color: var(--muted); font-size: .8rem; }
+.group > .stats { padding: 1rem 1.2rem; background: var(--card); border: 1px solid var(--rule-soft); border-radius: calc(var(--r) + 2px); }
+.group > .stats + .quiet { max-width: 40rem; }
+.group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 1rem; }
+.group-head .more { margin: 0; }
+.sub { margin: 1.4rem 0 .6rem; font: 600 1.15rem/1.2 var(--serif); }
+.sub::first-letter { text-transform: uppercase; }
+
+/* Formularios del cuerpo y del cardio */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); column-gap: .8rem; }
+.form-grid.sites { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+.panel-title { margin: 0; font: 600 1.25rem/1.2 var(--serif); }
+.quickadd { margin-block: 1rem; padding-block: 1rem 1.2rem; }
+.quickadd-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: .6rem; }
+.quickadd-row .field { margin-top: .6rem; }
+.day-pick { display: flex; align-items: flex-end; gap: .6rem; max-width: 26rem; margin-top: .4rem; }
+.day-pick .field { flex: 1; margin-top: 0; }
+.privacy { margin: 1rem 0 0; }
+.measures th[scope=row] { text-transform: none; letter-spacing: 0; font: 600 .92rem/1.3 var(--sans); color: var(--ink); border-bottom-color: var(--rule-soft); padding-top: .45rem; }
+.measures tr:last-child th { border-bottom: 0; }
+
+/* Fotos de progreso */
+.thumbs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: .5rem; }
+.thumb { position: relative; display: block; overflow: hidden; border-radius: 12px; background: var(--rule-soft); text-decoration: none; }
+.thumb img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; object-fit: cover; transition: transform .3s var(--ease); }
+.thumb:hover img { transform: scale(1.03); }
+.thumb-cap { position: absolute; left: .35rem; bottom: .35rem; padding: .2rem .45rem; border-radius: 999px; background: color-mix(in srgb, var(--paper) 88%, transparent); color: var(--ink); font: 650 .72rem/1.2 var(--sans); }
+.photo-day .sub { font-size: 1rem; margin-top: 1.1rem; }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.compare-pose { padding: .8rem; background: var(--card); border: 1px solid var(--rule-soft); border-radius: calc(var(--r) + 2px); }
+.compare-title { margin: 0 0 .5rem; font: 650 .72rem/1.2 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.photo-full { margin: .4rem 0 0; }
+.photo-full img { display: block; width: auto; max-width: 100%; height: auto; max-height: 80vh; border-radius: calc(var(--r) + 2px); background: var(--rule-soft); }
+.photo-full figcaption { margin-top: .6rem; color: var(--ink-2); font-size: .92rem; }
+
+/* Cardio: barras por semana */
+.bars .bar { fill: color-mix(in srgb, var(--accent) 40%, var(--card)); }
+.bars .bar.now { fill: var(--accent); }
+.bars .val { fill: var(--ink-2); font: 600 11px/1 var(--sans); font-variant-numeric: tabular-nums; }
+
 @media (max-width: 47.99rem) {
   .item-nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .bars .tick.alt { display: none; }
+  .bars .val { font-size: 15px; }
+  .group > .stats { padding-inline: .9rem; }
   .gym-ex { padding-inline: .9rem; }
 }
 @media (max-width: 26rem) {
@@ -323,4 +390,7 @@ body.tab-gimnasio .foot { padding-bottom: calc(7rem + var(--tabbar)); }
   .serie-form { grid-template-columns: 1.6rem repeat(3, minmax(0, 1fr)); }
   .serie-btn { grid-column: 1 / -1; }
   .timer-label { display: none; }
+  /* El peso rápido: fecha y peso arriba, el botón debajo a lo ancho. */
+  .quickadd-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quickadd-row .btn { grid-column: 1 / -1; }
 }

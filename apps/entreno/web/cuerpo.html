@@ -1,0 +1,131 @@
+{{define "cuerpo.html"}}{{template "head" .}}
+{{$b := .Body}}
+<section class="hero compact">
+  <p class="eyebrow">Cuerpo</p>
+  <h1 class="date">Tu cuerpo</h1>
+  <div class="hero-meta">
+    <a href="{{.Base}}/cuerpo/dia?fecha={{.Today}}">Apuntar medidas</a>
+    <a href="#fotos">Fotos</a>
+    <a href="{{.Base}}/cardio">Cardio</a>
+  </div>
+</section>
+
+<section class="group">
+  <h2 class="label">Peso</h2>
+  {{with $b.Trend}}
+  <dl class="stats">
+    <div class="stat"><dt class="stat-k">Último</dt><dd class="stat-v tnum">{{.Last}}</dd><dd class="stat-s">{{.LastDate}}</dd></div>
+    <div class="stat"><dt class="stat-k">Media 7 días</dt><dd class="stat-v tnum">{{with .Avg7}}{{.}}{{else}}—{{end}}</dd>{{if not .Avg7}}<dd class="stat-s">sin pesajes esta semana</dd>{{end}}</div>
+    <div class="stat"><dt class="stat-k">Esta semana</dt><dd class="stat-v tnum">{{with .Week}}{{.}}{{else}}—{{end}}</dd><dd class="stat-s">frente a la semana anterior</dd></div>
+    <div class="stat"><dt class="stat-k">En 4 semanas</dt><dd class="stat-v tnum">{{with .Month}}{{.}}{{else}}—{{end}}</dd><dd class="stat-s">frente a hace un mes</dd></div>
+  </dl>
+  <p class="quiet">El peso sube y baja de un día a otro por el agua, la sal o la comida. Por eso aquí se comparan medias de 7 días y no pesajes sueltos.</p>
+  {{else}}
+  <p class="quiet">Aún no hay pesajes. Apunta el primero aquí abajo.</p>
+  {{end}}
+
+  <form class="panel form quickadd" method="post" action="{{.Base}}/cuerpo/peso">
+    <h3 class="panel-title">Apuntar peso</h3>
+    <div class="quickadd-row">
+      <label class="field">Fecha
+        <input type="date" name="fecha" value="{{$b.Weight.Date}}" max="{{.Tomorrow}}" required></label>
+      <label class="field">Peso <span class="help">kg</span>
+        <input name="peso" value="{{$b.Weight.Kg}}" inputmode="decimal" maxlength="6" placeholder="78,4" autocomplete="off" required></label>
+      <button class="btn primary">Apuntar</button>
+    </div>
+  </form>
+
+  {{with $b.Chart}}
+  <figure class="chart">
+    <figcaption class="label">Peso por día (kg)</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      <polyline class="line" points="{{.Line}}"/>
+      {{range .Dots}}<circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="4.5"><title>{{.Title}}</title></circle>{{end}}
+    </svg>
+  </figure>
+  {{end}}
+</section>
+
+<section class="group" id="medidas">
+  <div class="group-head">
+    <h2 class="label">Medidas</h2>
+    <a class="more" href="{{.Base}}/cuerpo/dia?fecha={{.Today}}">Apuntar medidas <span aria-hidden="true">→</span></a>
+  </div>
+  {{with $b.Measures}}
+  <div class="scroll">
+  <table class="history measures">
+    <thead><tr><th scope="col">Medida</th><th scope="col">Última</th><th scope="col">Desde la anterior</th><th scope="col">Desde la primera</th></tr></thead>
+    <tbody>{{range .}}
+      <tr><th scope="row">{{.Label}}</th><td class="nowrap">{{.Last}} <span class="muted">{{.LastDate}}</span></td><td class="tnum nowrap">{{with .Prev}}{{.}}{{else}}—{{end}}</td><td class="tnum">{{if .First}}<span class="nowrap">{{.First}}</span> <span class="muted nowrap">desde el {{.FirstDate}}</span>{{else}}—{{end}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="quiet">Aún no hay medidas. Con una cinta métrica y una vez al mes basta: cintura, cadera, brazo…</p>
+  {{end}}
+</section>
+
+<section class="group" id="fotos">
+  <h2 class="label">Fotos de progreso</h2>
+  <form class="panel form" method="post" action="{{.Base}}/fotos" enctype="multipart/form-data">
+    <div class="panel-head">
+      <h2>Subir una foto</h2>
+      <p>Mejor siempre con la misma luz, a la misma distancia y a la misma hora del día.</p>
+    </div>
+    <div class="form-grid">
+      <label class="field">Fecha
+        <input type="date" name="fecha" value="{{$b.Upload.Date}}" max="{{.Tomorrow}}" required></label>
+      <label class="field">Pose
+        <select name="pose">{{range $b.Poses}}<option value="{{.Key}}"{{if eq .Key $b.Upload.Pose}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    </div>
+    <label class="field">Nota <span class="help">opcional</span>
+      <input name="nota" value="{{$b.Upload.Note}}" maxlength="200" autocomplete="off"></label>
+    <label class="field">Foto <span class="help">JPEG o PNG, hasta 15 MB</span>
+      <input type="file" name="foto" accept="image/jpeg,image/png" required></label>
+    <div class="actions">
+      <button class="btn primary">Subir foto</button>
+    </div>
+    <p class="help privacy">Las fotos se guardan cifradas en tu servidor, sin datos de ubicación, y nunca pasan por la IA.</p>
+  </form>
+
+  {{with $b.Compare}}
+  <h3 class="sub">Antes y ahora</h3>
+  <div class="compare">{{range .}}
+    <div class="compare-pose">
+      <p class="compare-title">{{.Pose}}</p>
+      <div class="pair">
+        <a class="thumb" href="{{$.Base}}/fotos/{{.Before.ID}}"><img src="{{$.Base}}/foto/{{.Before.ID}}/mini" alt="{{.Before.Alt}}" loading="lazy"><span class="thumb-cap">{{.Before.Date}}</span></a>
+        <a class="thumb" href="{{$.Base}}/fotos/{{.After.ID}}"><img src="{{$.Base}}/foto/{{.After.ID}}/mini" alt="{{.After.Alt}}" loading="lazy"><span class="thumb-cap">{{.After.Date}}</span></a>
+      </div>
+    </div>{{end}}
+  </div>
+  {{end}}
+
+  {{range $b.PhotoDays}}
+  <div class="photo-day">
+    <h3 class="sub">{{.Date}}</h3>
+    <ul class="thumbs">{{range .Photos}}
+      <li><a class="thumb" href="{{$.Base}}/fotos/{{.ID}}"><img src="{{$.Base}}/foto/{{.ID}}/mini" alt="{{.Alt}}" loading="lazy"><span class="thumb-cap">{{.Pose}}</span></a></li>{{end}}
+    </ul>
+  </div>
+  {{else}}
+  <p class="quiet">Aún no hay fotos. Con una de frente, otra de perfil y otra de espalda cada pocas semanas se ve muy bien el cambio.</p>
+  {{end}}
+  {{with $b.PhotoMore}}<p class="quiet">Y {{.}} más antiguas, que no se enseñan aquí.</p>{{end}}
+
+</section>
+
+<section class="group">
+  <h2 class="label">Últimos 30 días</h2>
+  {{with $b.Logs}}
+  <ul class="list">{{range .}}
+    <li class="row"><a class="row-main" href="{{$.Base}}/cuerpo/dia?fecha={{.ISO}}"><span class="title">{{.Date}}</span><span class="meta">{{with .Text}}<span>{{.}}</span>{{end}}{{with .Note}}<span class="muted">{{.}}</span>{{end}}</span></a><span class="arrow" aria-hidden="true">→</span></li>{{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">Nada apuntado en los últimos 30 días.</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

@@ -58,18 +58,29 @@ const (
 
 // pageData es lo que reciben las plantillas. Cada página usa su parte.
 type pageData struct {
-	Version string
-	Base    string // /entreno detrás de la pasarela
-	Name    string
-	Tab     string // inicio, gimnasio, rutinas, ejercicios, apuntar, importar
-	Script  bool   // carga gimnasio.js (con su CSP)
-	Flash   string
-	Error   string
-	Today   string // AAAA-MM-DD
+	Version  string
+	Base     string // /entreno detrás de la pasarela
+	Name     string
+	Tab      string // inicio, gimnasio, rutinas, ejercicios, cuerpo, apuntar, importar
+	Title    string // título de la página si no basta con la pestaña (Cardio)
+	Script   bool   // carga gimnasio.js (con su CSP)
+	Flash    string
+	Error    string
+	Today    string // AAAA-MM-DD
+	Tomorrow string // la fecha más lejana que se deja apuntar
 
-	// Inicio
+	// Inicio: sesiones y cardio, mezclados por fecha
 	Sessions []sessionCard
 	Hoy      *todayCard // «Hoy toca»
+	BodyCard *bodyCard
+
+	// Cuerpo, el formulario de un día y cada foto
+	Body  *bodyView
+	Day   *bodyDayForm
+	Photo *photoPage
+
+	// Cardio
+	Cardio *cardioPage
 
 	// Sesión
 	Session sessionDetail
@@ -112,6 +123,10 @@ type sessionCard struct {
 	Source string
 	Lines  []exLine
 	Notes  []string
+	Cardio string // si no está vacío, es una sesión de cardio: «Correr — 5.2 km en 28:30 · …»
+
+	day string    // AAAA-MM-DD, para ordenar
+	at  time.Time //
 }
 
 type exLine struct {
@@ -245,6 +260,19 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /gimnasio", w.user(w.gymPage))
 	mux.HandleFunc("POST /gimnasio/serie", w.user(w.gymSetPost))
 	mux.HandleFunc("POST /api/serie", w.user(w.apiSet))
+	mux.HandleFunc("GET /cuerpo", w.user(w.bodyPage))
+	mux.HandleFunc("POST /cuerpo/peso", w.user(w.weightPost))
+	mux.HandleFunc("GET /cuerpo/dia", w.user(w.bodyDayPage))
+	mux.HandleFunc("POST /cuerpo/dia", w.user(w.bodyDayPost))
+	mux.HandleFunc("POST /cuerpo/dia/borrar", w.user(w.bodyDayDelete))
+	mux.HandleFunc("POST /fotos", w.user(w.photoUpload))
+	mux.HandleFunc("GET /fotos/{id}", w.user(w.photoView))
+	mux.HandleFunc("POST /fotos/{id}/borrar", w.user(w.photoDelete))
+	mux.HandleFunc("GET /foto/{id}", w.user(w.photoFile(false)))
+	mux.HandleFunc("GET /foto/{id}/mini", w.user(w.photoFile(true)))
+	mux.HandleFunc("GET /cardio", w.user(w.cardioPage))
+	mux.HandleFunc("POST /cardio", w.user(w.cardioPost))
+	mux.HandleFunc("POST /cardio/{id}/borrar", w.user(w.cardioDelete))
 }
 
 // user exige la identidad que pone la pasarela.
@@ -266,6 +294,7 @@ func (w *web) now() time.Time { return w.svc.clock().In(madrid) }
 func (w *web) render(rw http.ResponseWriter, r *http.Request, name string, d pageData) {
 	d.Version, d.Base = version.Version, base(r)
 	d.Today = w.now().Format("2006-01-02")
+	d.Tomorrow = w.now().AddDate(0, 0, 1).Format("2006-01-02")
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if d.Script {
 		rw.Header().Set("Content-Security-Policy", cspGym)
@@ -288,6 +317,9 @@ var flashes = map[string]string{
 	"apuntado": "Apuntado.", "borrada": "Sesión borrada.", "nada": "No se ha apuntado nada.",
 	"guardada": "Rutina guardada.", "rutina-borrada": "Rutina borrada.",
 	"detectadas": "Rutinas guardadas: revísalas y ajústalas a tu gusto.",
+	"peso":       "Peso apuntado.", "guardado": "Guardado.", "dia-borrado": "Día borrado.",
+	"foto": "Foto guardada.", "foto-borrada": "Foto borrada.",
+	"cardio": "Cardio apuntado.", "cardio-borrado": "Cardio borrado.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }
@@ -357,21 +389,59 @@ func (w *web) home(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 		w.fail(rw, "inicio", err)
 		return
 	}
+	// El cardio de las mismas fechas que las sesiones (si hay 10, desde la
+	// más antigua; si hay menos, los 10 últimos).
+	from, limit := time.Time{}, 10
+	if len(list) == 10 {
+		from, limit = list[9].Day, 40
+	}
+	cardio, err := w.svc.store.cardioList(ctx, who.User, from, w.now().AddDate(0, 0, 1), limit)
+	if err != nil {
+		w.fail(rw, "inicio", err)
+		return
+	}
 	custom, _ := w.svc.store.customNames(ctx, who.User)
 	d := pageData{Name: who.Name, Tab: "inicio", Flash: flash(r)}
 	for _, x := range list {
-		c := sessionCard{ID: x.ID, Date: w.shortDate(x.Day), Source: x.Source, Notes: x.Notes}
+		c := sessionCard{ID: x.ID, Date: w.shortDate(x.Day), Source: x.Source, Notes: x.Notes, day: x.Day.Format("2006-01-02"), at: x.Started}
 		for _, e := range x.Exercises {
 			c.Lines = append(c.Lines, exLine{Key: e.Key, Name: exerciseName(e.Key, e.Name, custom), Summary: summarize(e)})
 		}
 		d.Sessions = append(d.Sessions, c)
 	}
+	d.Sessions = w.withCardio(d.Sessions, cardio)
 	if card, err := w.todayCard(ctx, who.User); err != nil {
 		w.svc.log.Error("entreno web", "op", "hoy toca", "err", err)
 	} else {
 		d.Hoy = card
 	}
+	today := w.now()
+	logs, err := w.svc.store.bodyLogs(ctx, who.User, dayOf(today).AddDate(0, 0, -60), dayOf(today).AddDate(0, 0, 1))
+	if err != nil {
+		w.svc.log.Error("entreno web", "op", "inicio cuerpo", "err", err)
+	} else {
+		d.BodyCard = w.bodyCardOf(trend(logs, today))
+	}
 	w.render(rw, r, "inicio.html", d)
+}
+
+// withCardio mete las sesiones de cardio entre las del gimnasio, de la más
+// reciente a la más antigua.
+func (w *web) withCardio(cards []sessionCard, cardio []cardioLog) []sessionCard {
+	for _, c := range cardio {
+		card := sessionCard{ID: c.ID, Date: w.shortDate(c.Day), Cardio: cardioText(c), day: c.Day.Format("2006-01-02"), at: c.Start}
+		if c.Note != "" {
+			card.Notes = []string{c.Note}
+		}
+		cards = append(cards, card)
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		if cards[i].day != cards[j].day {
+			return cards[i].day > cards[j].day
+		}
+		return cards[i].at.After(cards[j].at)
+	})
+	return cards
 }
 
 // todayText es la línea para el resumen de la mañana.
