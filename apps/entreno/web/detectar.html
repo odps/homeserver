@@ -1,0 +1,40 @@
+{{define "detectar.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/rutinas">Rutinas</a></p>
+  <h1 class="date">{{with .Suggest}}{{if eq (len .) 1}}Una rutina{{else}}{{len .}} rutinas{{end}} en tu historial{{else}}Nada que proponer{{end}}</h1>
+  <div class="hero-meta"><span>De las sesiones de los últimos 4 meses</span></div>
+</section>
+
+{{with .Suggest}}
+<p class="lead">Son los grupos de ejercicios que repites. Guarda las que te sirvan y ajústalas después: series, rango, RIR y descanso salen de lo que sueles hacer.</p>
+<div class="exercises">
+  {{range .}}
+  <article class="ex rutina">
+    <header class="ex-head">
+      <h2>{{.Name}}</h2>
+      <span class="tag">{{with .Days}}{{.}}{{else}}Sin día fijo{{end}}</span>
+    </header>
+    <ol class="exlist rutina-items">{{range .Items}}
+      <li><span class="ex-name">{{.Name}}</span> <span class="ex-sum">{{.Text}}</span></li>{{end}}
+    </ol>
+    <form class="actions" method="post" action="{{$.Base}}/rutinas/detectar">
+      <input type="hidden" name="n" value="{{.Index}}">
+      <button class="btn primary small">Guardar esta</button>
+    </form>
+  </article>
+  {{end}}
+</div>
+{{if gt (len .) 1}}
+<form class="actions" method="post" action="{{$.Base}}/rutinas/detectar">
+  <input type="hidden" name="todas" value="1">
+  <button class="btn big">Guardar las {{len .}}</button>
+  <a class="btn ghost" href="{{$.Base}}/rutinas">Cancelar</a>
+</form>
+{{end}}
+{{else}}
+<section class="empty">
+  <p class="big">No encuentro rutinas.</p>
+  <p>Hacen falta al menos 3 sesiones con casi los mismos ejercicios en los últimos 4 meses. Sigue <a href="{{.Base}}/apuntar">apuntando</a> o <a href="{{.Base}}/rutinas/nueva">crea una a mano</a>.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

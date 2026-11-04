@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -88,13 +89,71 @@ func TestWebRender(t *testing.T) {
 		Sample:  []sampleRow{{Date: "mar 3 nov", Names: []nameTag{{Name: "Jalón al pecho"}, {Name: "Glorbix", Unknown: true}}}, {Date: "dom 1 nov", Names: []nameTag{{Name: "Sentadilla trasera con barra"}}}},
 		Unknown: []unknownRow{{Index: 0, Name: "Glorbix", Count: 14}, {Index: 1, Name: "Pressa", Count: 1}}}
 
+	// Rutinas y modo gimnasio.
+	push := routine{ID: 5, Name: "Empuje", Days: []int{4, 1}, Items: []routineItem{
+		{Key: "bench_press", Sets: 4, Min: 6, Max: 8, RIR: 2, RestSec: 150},
+		{Key: "hollow_hold", Sets: 3, Min: 30, Max: 45, RIR: 1, RestSec: 60, Note: "lumbar pegada al suelo"},
+		{Key: "u7", Sets: 3, Min: 12, Max: 15, RIR: 2, RestSec: 75}}}
+	legs := routine{ID: 6, Name: "Pierna (cuádriceps)", Items: []routineItem{{Key: "back_squat", Sets: 3, Min: 5, Max: 7, RIR: 2, RestSec: 180}}}
+	routines := []routineView{viewRoutine(push, custom), viewRoutine(legs, custom)}
+	if v := routines[0]; v.Days != "lunes y jueves" || v.Items[0].Text != "4 × 6–8 · RIR 2 · descanso 2 min 30 s" || v.Items[1].Text != "3 × 30–45 s · RIR 1 · descanso 1 min" {
+		t.Errorf("rutina: %+v", v)
+	}
+	if got := daysText([]int{0, 3, 1}); got != "lunes, miércoles y domingo" {
+		t.Errorf("días = %q", got)
+	}
+	suggest := []routineView{routines[1], routines[0]}
+	suggest[1].Index = 1
+	newForm := formOf(routine{})
+	editForm := formOf(push)
+	editForm.Confirm = true
+
+	bench := done{SessionID: 40, Day: day(-7), Entry: exerciseLog{Key: "bench_press", Sets: []setLog{{Reps: 8, Kg: 60, RIR: rirP(2)}, {Reps: 8, Kg: 60, RIR: rirP(2)}}}}
+	plan := []planItem{
+		{Key: "bench_press", Name: "Press de banca con barra", Kind: "reps", Last: &bench, Sets: 3, Goal: "3×6 · 55 kg · RIR 2", Stalled: true, RestSec: 150,
+			Advice: "Llevas 3 sesiones sin progresar con 60 kg. Toca una semana de descarga.", Target: setLog{Reps: 6, Kg: 55, RIR: rirP(2)},
+			DoneToday: []setLog{{Reps: 6, Kg: 55, RIR: rirP(2)}}},
+		{Key: "hollow_hold", Name: "Hollow hold", Kind: "time", Sets: 3, Goal: "3×30 s · RIR 1", RestSec: 60, Target: setLog{Seconds: 30, RIR: rirP(1)},
+			Advice: "Primera vez: elige una carga con la que llegues a 30–45 s dejando 1 en reserva."},
+		{Key: "farmer_carry", Name: "Paseo del granjero", Kind: "distance", Sets: 2, Goal: "2×25 m · 22 kg", RestSec: 90, Target: setLog{Meters: 25, Kg: 22},
+			LastText: "2026-10-27: 2×20 m · 22 kg", Advice: "Misma carga y un poco más que la última vez.",
+			DoneToday: []setLog{{Meters: 25, Kg: 22}, {Meters: 25, Kg: 22}}},
+	}
+	gym := &gymView{RoutineID: 5, Name: "Empuje", Days: "lunes y jueves", Others: []routineLink{{ID: 5, Name: "Empuje", Current: true}, {ID: 6, Name: "Pierna"}}}
+	for _, p := range plan {
+		gym.Items = append(gym.Items, w.gymItemOf(p))
+	}
+	if b := gym.Items[0]; b.Last != "mar 27 oct: 2×8 · 60 kg · RIR 2" || len(b.Sets) != 3 || !b.Sets[0].Done || b.Sets[0].Text != "6 reps · 55 kg · RIR 2" ||
+		b.Sets[1].Done || b.Sets[1].Amount != "6" || b.Sets[1].Kg != "55" || b.Sets[1].RIR != "2" || !reSetID.MatchString(b.Sets[1].ID) || b.Sets[1].ID == b.Sets[2].ID {
+		t.Errorf("gimnasio, press: %+v", b)
+	}
+	if h := gym.Items[1]; h.Field != "seg" || h.Sets[0].Amount != "30" || h.Sets[0].Kg != "" {
+		t.Errorf("gimnasio, por tiempo: %+v", h)
+	}
+	if f := gym.Items[2]; f.Field != "m" || f.Done != 2 || f.Sets[1].Text != "25 m · 22 kg" {
+		t.Errorf("gimnasio, por distancia: %+v", f)
+	}
+
 	type page struct {
 		file, tmpl string
 		data       pageData
 	}
 	cases := []page{
-		{"inicio", "inicio.html", pageData{Tab: "inicio", Name: "Olga", Sessions: cards, Flash: "Sesión borrada."}},
-		{"inicio-vacio", "inicio.html", pageData{Tab: "inicio"}},
+		{"inicio", "inicio.html", pageData{Tab: "inicio", Name: "Olga", Sessions: cards, Flash: "Sesión borrada.",
+			Hoy: &todayCard{ID: 5, Name: "Empuje", Count: 3, Stalled: []string{"Press de banca con barra", custom["u7"]}}}},
+		{"inicio-sin-rutinas", "inicio.html", pageData{Tab: "inicio", Sessions: cards[:1], Hoy: &todayCard{None: true}}},
+		{"inicio-vacio", "inicio.html", pageData{Tab: "inicio", Hoy: &todayCard{None: true}}},
+		{"rutinas", "rutinas.html", pageData{Tab: "rutinas", Routines: routines, Flash: "Rutina guardada."}},
+		{"rutinas-vacio", "rutinas.html", pageData{Tab: "rutinas"}},
+		{"detectar", "detectar.html", pageData{Tab: "rutinas", Suggest: suggest}},
+		{"detectar-una", "detectar.html", pageData{Tab: "rutinas", Suggest: suggest[:1], Error: "Esa sugerencia ya no está: mira las de ahora."}},
+		{"detectar-vacio", "detectar.html", pageData{Tab: "rutinas"}},
+		{"rutina-nueva", "rutina.html", pageData{Tab: "rutinas", Form: &newForm, Groups: groups}},
+		{"rutina-editar", "rutina.html", pageData{Tab: "rutinas", Form: &editForm, Groups: groups, Error: "Ponle un nombre a la rutina."}},
+		{"gimnasio", "gimnasio.html", pageData{Tab: "gimnasio", Script: true, Gym: gym}},
+		{"gimnasio-elegida", "gimnasio.html", pageData{Tab: "gimnasio", Script: true, Error: "Revisa la serie: los números no son válidos.",
+			Gym: &gymView{RoutineID: 6, Name: "Pierna", Chosen: true, Others: gym.Others[:1], Items: gym.Items[2:]}}},
+		{"gimnasio-vacio", "gimnasio.html", pageData{Tab: "gimnasio", Script: true, Gym: &gymView{Empty: true}}},
 		{"apuntar", "apuntar.html", pageData{Tab: "apuntar", Date: "2026-11-03"}},
 		{"apuntar-error", "apuntar.html", pageData{Tab: "apuntar", Date: "2026-11-03", Text: "hoy nada", Error: "no he encontrado ningún ejercicio"}},
 		{"apuntar-desconocidos", "apuntar.html", pageData{Tab: "apuntar", Date: "2026-11-03", Text: "Lat machine 3x10 50kg\nBlorpo 3x12", Unknown: unknown, Groups: groups}},
@@ -119,6 +178,21 @@ func TestWebRender(t *testing.T) {
 			Sample: []sampleRow{{Date: "mar 3 nov", Names: []nameTag{{Name: "Jalón al pecho"}}}}}}},
 	}
 
+	// Lo que tiene que salir en cada página nueva.
+	wants := map[string][]string{
+		"inicio":             {"Hoy toca", "Empuje", "2 estancados", "Press de banca con barra", "Ir al gimnasio", "Importar de WhatsApp"},
+		"inicio-sin-rutinas": {"Aún no tienes rutinas", "/rutinas/detectar"},
+		"rutinas":            {"Empuje", "lunes y jueves", "Sin día fijo", "4 × 6–8 · RIR 2 · descanso 2 min 30 s", "lumbar pegada al suelo", "/gimnasio?rutina=5", "Nueva rutina", "Detectar desde tu historial"},
+		"rutinas-vacio":      {"Aún no tienes rutinas"},
+		"detectar":           {"2 rutinas en tu historial", `name="n" value="1"`, `name="todas" value="1"`, "Guardar las 2"},
+		"detectar-vacio":     {"No encuentro rutinas"},
+		"rutina-nueva":       {"Nueva rutina", `action="/entreno/rutina/0"`, `name="filas" value="3"`, `value="1"`, "domingo", "Guardar y añadir filas"},
+		"rutina-editar":      {`name="filas" value="6"`, `value="bench_press" selected`, `value="u7" selected`, `name="quitar_2"`, "Sí, borrar la rutina", `name="dia" value="1" checked`, `name="dia" value="4" checked`, "Ponle un nombre"},
+		"gimnasio":           {"Hoy toca", "La última vez", "mar 27 oct: 2×8 · 60 kg · RIR 2", "<strong>3×6 · 55 kg · RIR 2</strong>", `advice stalled`, "Estancado.", "2 min 30 s", "6 reps · 55 kg · RIR 2", `name="reps" value="6"`, `name="seg" value="30"`, `data-api="/entreno/api/serie"`, `id="ex-bench_press"`, `data-rest="150"`, "+15 s", "Saltar", "Sesión libre", `aria-current="true"`},
+		"gimnasio-elegida":   {"Rutina", "2026-10-27: 2×20 m · 22 kg", "25 m · 22 kg", "Revisa la serie"},
+		"gimnasio-vacio":     {"Aún no tienes rutinas", "/rutinas/detectar", "/apuntar"},
+	}
+
 	dir := os.Getenv("ENTRENO_PREVIEW_DIR")
 	base := "/entreno"
 	if dir != "" {
@@ -127,12 +201,29 @@ func TestWebRender(t *testing.T) {
 	for _, p := range cases {
 		t.Run(p.file, func(t *testing.T) {
 			d := p.data
+			if d.Form != nil { // renderRoutineForm añade las filas vacías
+				f := *d.Form
+				f.Rows = append(append([]itemRow{}, f.Rows...), make([]itemRow, emptyRows)...)
+				for i := range f.Rows {
+					f.Rows[i].I = i
+				}
+				d.Form = &f
+			}
 			d.Version, d.Base, d.Today = "v0.0.0-test", base, "2026-11-03"
 			var buf bytes.Buffer
 			if err := pages.ExecuteTemplate(&buf, p.tmpl, d); err != nil {
 				t.Fatalf("%s: %v", p.tmpl, err)
 			}
 			out := buf.String()
+			// El único script: el del modo gimnasio, como fichero.
+			script := `<script src="` + base + `/static/gimnasio.js" defer></script>`
+			if d.Script != strings.Contains(out, script) {
+				t.Errorf("%s: script = %v", p.file, !d.Script)
+			}
+			out = strings.Replace(out, script, "", 1)
+			if d.Form != nil && strings.Count(out, "Añadir ejercicio") != emptyRows {
+				t.Errorf("%s: %d filas vacías", p.file, strings.Count(out, "Añadir ejercicio"))
+			}
 			for _, bad := range []string{"ZgotmplZ", "<no value>", "style=", "<script", " on"} {
 				if bad == " on" {
 					if regexp.MustCompile(`\son[a-z]+=`).MatchString(out) {
@@ -142,6 +233,13 @@ func TestWebRender(t *testing.T) {
 				}
 				if strings.Contains(out, bad) {
 					t.Errorf("%s contiene %q", p.file, bad)
+				}
+			}
+			if dir == "" {
+				for _, want := range wants[p.file] {
+					if !strings.Contains(out, want) {
+						t.Errorf("%s: falta %q", p.file, want)
+					}
 				}
 			}
 			if !strings.Contains(out, `aria-current="page"`) {
@@ -157,7 +255,7 @@ func TestWebRender(t *testing.T) {
 	if dir != "" {
 		static, _ := fs.Sub(webFS, "web/static")
 		os.MkdirAll(filepath.Join(dir, "static"), 0o755)
-		for _, n := range []string{"app.css", "icon.svg"} {
+		for _, n := range []string{"app.css", "icon.svg", "gimnasio.js"} {
 			b, _ := fs.ReadFile(static, n)
 			os.WriteFile(filepath.Join(dir, "static", n), b, 0o644)
 		}
@@ -203,8 +301,12 @@ func (e *webEnv) do(method, path, user string, body io.Reader, ctype string) (in
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == 200 && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") && resp.Header.Get("Content-Security-Policy") != csp {
-		e.t.Errorf("%s %s sin CSP", method, path)
+	want := csp
+	if method == "GET" && strings.HasPrefix(path, "/gimnasio") {
+		want = cspGym
+	}
+	if resp.StatusCode == 200 && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") && resp.Header.Get("Content-Security-Policy") != want {
+		e.t.Errorf("%s %s sin su CSP", method, path)
 	}
 	return resp.StatusCode, resp.Header.Get("Location"), string(b)
 }
@@ -398,4 +500,259 @@ func mustID(t *testing.T, s string) int64 {
 		id = id*10 + int64(c-'0')
 	}
 	return id
+}
+
+var reRoutineLink = regexp.MustCompile(`^/rutina/(\d+)\?ok=guardada$`)
+
+// TestWebRoutines: crear una rutina con el formulario, cambiarla, que otra
+// persona no la vea ni la toque, y borrarla.
+func TestWebRoutines(t *testing.T) {
+	e := newWebEnv(t)
+	ctx := t.Context()
+	if code, body := e.get("/rutinas", "ana"); code != 200 || !strings.Contains(body, "Aún no tienes rutinas") {
+		t.Fatalf("rutinas vacío: %d", code)
+	}
+	if code, body := e.get("/rutinas/nueva", "ana"); code != 200 || !strings.Contains(body, `name="filas" value="3"`) || strings.Count(body, "Añadir ejercicio") != 3 {
+		t.Fatalf("formulario nuevo: %d", code)
+	}
+
+	form := url.Values{"nombre": {"Empuje"}, "dia": {"1", "4", "9"}, "filas": {"3"}, "accion": {"filas"},
+		"k_0": {"bench_press"}, "s_0": {"4"}, "mn_0": {"6"}, "mx_0": {"8"}, "r_0": {"2"}, "d_0": {"150"},
+		"k_1": {"lat_pulldown"}, "s_1": {"3"}, "mn_1": {"10"}, "mx_1": {"12"}, "r_1": {"1"}, "d_1": {"90"}, "n_1": {"agarre neutro"}}
+	code, loc, _ := e.post("/rutina/0", "ana", form)
+	m := reRoutineLink.FindStringSubmatch(loc)
+	if code != http.StatusSeeOther || m == nil {
+		t.Fatalf("crear: %d %q", code, loc)
+	}
+	id := m[1]
+	code, body := e.get(loc, "ana")
+	if code != 200 || !strings.Contains(body, `value="Empuje"`) || !strings.Contains(body, `name="dia" value="1" checked`) || !strings.Contains(body, `name="dia" value="4" checked`) ||
+		!strings.Contains(body, `name="filas" value="5"`) || !strings.Contains(body, `value="agarre neutro"`) || !strings.Contains(body, "Rutina guardada.") {
+		t.Fatalf("editar: %d\n%s", code, body)
+	}
+	noPlain(t, e.svc.store.db, "routines", "Empuje", "agarre neutro", "bench_press")
+
+	// Errores: se vuelve a enseñar lo escrito.
+	bad := url.Values{"nombre": {""}, "filas": {"1"}, "k_0": {"bench_press"}, "s_0": {"4"}}
+	if code, _, body = e.post("/rutina/"+id, "ana", bad); code != 200 || !strings.Contains(body, "Ponle un nombre") || !strings.Contains(body, `value="bench_press" selected`) {
+		t.Fatalf("sin nombre: %d", code)
+	}
+	bad = url.Values{"nombre": {"X"}, "filas": {"1"}, "k_0": {"no_existe"}}
+	if code, _, body = e.post("/rutina/0", "ana", bad); code != 200 || !strings.Contains(body, "no existe") {
+		t.Fatalf("ejercicio inventado: %d", code)
+	}
+	bad = url.Values{"nombre": {"X"}, "filas": {"1"}, "k_0": {"bench_press"}, "s_0": {"tres"}}
+	if code, _, body = e.post("/rutina/0", "ana", bad); code != 200 || !strings.Contains(body, "Revisa los números") {
+		t.Fatalf("números: %d", code)
+	}
+
+	// Cambiarla: otro nombre y quitar el jalón.
+	form.Set("nombre", "Empuje A")
+	form.Set("quitar_1", "1")
+	form.Set("accion", "guardar")
+	if code, loc, _ = e.post("/rutina/"+id, "ana", form); code != http.StatusSeeOther || loc != "/rutinas?ok=guardada" {
+		t.Fatalf("guardar: %d %q", code, loc)
+	}
+	if _, body = e.get("/rutinas", "ana"); !strings.Contains(body, "Empuje A") || !strings.Contains(body, "lunes y jueves") ||
+		!strings.Contains(body, "4 × 6–8 · RIR 2 · descanso 2 min 30 s") || strings.Contains(body, "agarre neutro") {
+		t.Fatalf("lista:\n%s", body)
+	}
+	list, err := e.svc.store.routines(ctx, "ana")
+	if err != nil || len(list) != 1 || len(list[0].Items) != 1 || list[0].Name != "Empuje A" {
+		t.Fatalf("guardada: %v %+v", err, list)
+	}
+
+	// Otra persona: 404 en todo.
+	for _, p := range []string{"/rutina/" + id, "/rutina/" + id + "?borrar=1", "/gimnasio?rutina=" + id} {
+		if code, _ = e.get(p, "bob"); code != 404 {
+			t.Errorf("bob ve %s: %d", p, code)
+		}
+	}
+	if code, _, _ = e.post("/rutina/"+id, "bob", form); code != 404 {
+		t.Errorf("bob cambia la rutina: %d", code)
+	}
+	if code, _, _ = e.post("/rutina/"+id+"/borrar", "bob", nil); code != 404 {
+		t.Errorf("bob borra la rutina: %d", code)
+	}
+	if _, body = e.get("/rutinas", "bob"); strings.Contains(body, "Empuje") {
+		t.Error("bob ve las rutinas de ana")
+	}
+	if list, _ = e.svc.store.routines(ctx, "ana"); len(list) != 1 || list[0].Name != "Empuje A" {
+		t.Fatalf("bob ha tocado la rutina: %+v", list)
+	}
+
+	// Borrar, con confirmación.
+	if _, body = e.get("/rutina/"+id+"?borrar=1", "ana"); !strings.Contains(body, "Sí, borrar la rutina") {
+		t.Fatal("falta la confirmación")
+	}
+	if code, loc, _ = e.post("/rutina/"+id+"/borrar", "ana", nil); code != http.StatusSeeOther || loc != "/rutinas?ok=rutina-borrada" {
+		t.Fatalf("borrar: %d %q", code, loc)
+	}
+	if code, _ = e.get("/rutina/"+id, "ana"); code != 404 {
+		t.Fatalf("rutina borrada: %d", code)
+	}
+	if code, _ = e.get("/rutina/abc", "ana"); code != 404 {
+		t.Fatalf("id no numérico: %d", code)
+	}
+}
+
+// api manda una serie a /api/serie.
+func (e *webEnv) api(user, body, ctype, site string) (int, map[string]any) {
+	e.t.Helper()
+	req, _ := http.NewRequest("POST", e.srv.URL+"/api/serie", strings.NewReader(body))
+	req.Header.Set("Content-Type", ctype)
+	if site != "" {
+		req.Header.Set("Sec-Fetch-Site", site)
+	}
+	if user != "" {
+		req.Header.Set("X-Auth-User", user)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+// TestWebGym: detectar la rutina del historial, el modo gimnasio y apuntar
+// series por formulario y por la API (sin duplicar al reenviar).
+func TestWebGym(t *testing.T) {
+	e := newWebEnv(t)
+	ctx := t.Context()
+	benchName := func() string { x, _ := byKey("bench_press"); return x.Name }()
+
+	code, body := e.get("/gimnasio", "ana")
+	if code != 200 || !strings.Contains(body, "Aún no tienes rutinas") || !strings.Contains(body, "/static/gimnasio.js") {
+		t.Fatalf("gimnasio vacío: %d", code)
+	}
+	if _, body = e.get("/", "ana"); strings.Contains(body, "/static/gimnasio.js") {
+		t.Fatal("el script sale fuera del gimnasio")
+	}
+	if code, body = e.get("/rutinas/detectar", "ana"); code != 200 || !strings.Contains(body, "No encuentro rutinas") {
+		t.Fatalf("detectar sin historial: %d", code)
+	}
+
+	// Tres martes con los mismos ejercicios.
+	text := "Bench 3x8 50kg rir 2\nLat machine 3x10 45kg rir 2\nSquat 3x6 60kg rir 2"
+	for _, d := range []int{13, 20, 27} {
+		if _, err := e.svc.record(ctx, "ana", text, time.Date(2026, 10, d, 19, 0, 0, 0, madrid), "web"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if code, body = e.get("/rutinas/detectar", "ana"); code != 200 || !strings.Contains(body, "Guardar esta") || !strings.Contains(body, "martes") || !strings.Contains(body, benchName) {
+		t.Fatalf("detectar: %d\n%s", code, body)
+	}
+	if code, _, body = e.post("/rutinas/detectar", "ana", url.Values{"n": {"7"}}); code != 200 || !strings.Contains(body, "ya no está") {
+		t.Fatalf("sugerencia que no existe: %d", code)
+	}
+	code, loc, _ := e.post("/rutinas/detectar", "ana", url.Values{"n": {"0"}})
+	m := reRoutineLink.FindStringSubmatch(loc)
+	if code != http.StatusSeeOther || m == nil {
+		t.Fatalf("guardar la sugerencia: %d %q", code, loc)
+	}
+	rid := m[1]
+	if code, loc, _ = e.post("/rutinas/detectar", "bob", url.Values{"todas": {"1"}}); code != http.StatusSeeOther || loc != "/rutinas?ok=detectadas" {
+		t.Fatalf("bob guarda todas: %d %q", code, loc)
+	}
+	if list, _ := e.svc.store.routines(ctx, "bob"); len(list) != 0 {
+		t.Fatalf("bob tiene las rutinas de ana: %+v", list)
+	}
+
+	// Hoy (martes) toca esa rutina.
+	code, body = e.get("/gimnasio", "ana")
+	if code != 200 || !strings.Contains(body, "Hoy toca") || !strings.Contains(body, benchName) || !strings.Contains(body, "La última vez") ||
+		!strings.Contains(body, "mar 27 oct: 3×8 · 50 kg · RIR 2") || strings.Count(body, `class="serie-form"`) != 9 || !strings.Contains(body, `id="ex-bench_press"`) {
+		t.Fatalf("gimnasio: %d\n%s", code, body)
+	}
+	if _, body = e.get("/", "ana"); !strings.Contains(body, "Hoy toca") || !strings.Contains(body, `href="/gimnasio"`) {
+		t.Fatalf("inicio sin «Hoy toca»:\n%s", body)
+	}
+	if code, _ = e.get("/gimnasio?rutina="+rid, "ana"); code != 200 {
+		t.Fatalf("gimnasio con la rutina elegida: %d", code)
+	}
+	if code, _ = e.get("/gimnasio?rutina=999999", "ana"); code != 404 {
+		t.Fatalf("rutina que no existe: %d", code)
+	}
+
+	todaySets := func(key string) []setLog {
+		t.Helper()
+		today := dayOf(e.svc.clock())
+		list, err := e.svc.store.sessions(ctx, "ana", today, today, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []setLog
+		for _, x := range list {
+			for _, ex := range x.Exercises {
+				if ex.Key == key {
+					out = append(out, ex.Sets...)
+				}
+			}
+		}
+		return out
+	}
+
+	// Sin JavaScript: el formulario de la serie.
+	serie := url.Values{"key": {"bench_press"}, "reps": {"8"}, "kg": {"52,5"}, "rir": {"2"}, "rutina": {rid}, "id": {"abcdef0123456789"}}
+	if code, loc, _ = e.post("/gimnasio/serie", "ana", serie); code != http.StatusSeeOther || loc != "/gimnasio?rutina="+rid+"#ex-bench_press" {
+		t.Fatalf("serie: %d %q", code, loc)
+	}
+	if code, loc, _ = e.post("/gimnasio/serie", "ana", serie); code != http.StatusSeeOther {
+		t.Fatalf("serie repetida: %d", code)
+	}
+	if sets := todaySets("bench_press"); len(sets) != 1 || sets[0].Reps != 8 || sets[0].Kg != 52.5 || sets[0].RIR == nil || *sets[0].RIR != 2 {
+		t.Fatalf("serie apuntada: %+v", sets)
+	}
+	if _, body = e.get("/gimnasio", "ana"); !strings.Contains(body, "8 reps · 52.5 kg · RIR 2") || strings.Count(body, `class="serie-form"`) != 8 {
+		t.Fatalf("serie hecha:\n%s", body)
+	}
+	serie.Set("reps", "ocho")
+	if code, loc, _ = e.post("/gimnasio/serie", "ana", serie); code != http.StatusSeeOther || !strings.Contains(loc, "error=serie") {
+		t.Fatalf("serie mal escrita: %d %q", code, loc)
+	}
+
+	// Con JavaScript: JSON, y el mismo id dos veces no duplica.
+	js := `{"key":"bench_press","reps":8,"kg":52.5,"rir":1,"id":"00112233445566aa"}`
+	for i := range 2 {
+		code, out := e.api("ana", js, "application/json", "same-origin")
+		if code != 200 || out["ok"] != true || out["sesion"] == nil {
+			t.Fatalf("api (%d): %d %v", i, code, out)
+		}
+	}
+	if sets := todaySets("bench_press"); len(sets) != 2 || *sets[1].RIR != 1 {
+		t.Fatalf("api: %+v", sets)
+	}
+	if code, out := e.api("ana", `{"key":"hollow_hold","seg":45,"id":"99887766554433ff"}`, "application/json; charset=utf-8", ""); code != 200 || out["ok"] != true {
+		t.Fatalf("api por tiempo: %d %v", code, out)
+	}
+	if sets := todaySets("hollow_hold"); len(sets) != 1 || sets[0].Seconds != 45 {
+		t.Fatalf("api por tiempo: %+v", sets)
+	}
+	for _, c := range []struct {
+		name, user, body, ctype, site string
+		want                          int
+	}{
+		{"otro sitio", "ana", js, "application/json", "cross-site", http.StatusForbidden},
+		{"mismo sitio, otro origen", "ana", js, "application/json", "same-site", http.StatusForbidden},
+		{"no es JSON", "ana", "key=bench_press&reps=8", "application/x-www-form-urlencoded", "same-origin", http.StatusUnsupportedMediaType},
+		{"texto", "ana", js, "text/plain", "same-origin", http.StatusUnsupportedMediaType},
+		{"sin identidad", "", js, "application/json", "same-origin", http.StatusUnauthorized},
+		{"ejercicio inventado", "ana", `{"key":"no_existe","reps":8}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"ejercicio de otro", "bob", `{"key":"u1","reps":8}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"sin cantidad", "ana", `{"key":"bench_press","kg":50}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"negativo", "ana", `{"key":"bench_press","reps":-3}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"id raro", "ana", `{"key":"bench_press","reps":3,"id":"<x>"}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"demasiado grande", "ana", `{"key":"bench_press","reps":3,"id":"` + strings.Repeat("a", 5000) + `"}`, "application/json", "same-origin", http.StatusBadRequest},
+		{"roto", "ana", `{"key":`, "application/json", "same-origin", http.StatusBadRequest},
+	} {
+		if code, _ := e.api(c.user, c.body, c.ctype, c.site); code != c.want {
+			t.Errorf("api, %s: %d, quiero %d", c.name, code, c.want)
+		}
+	}
+	if sets := todaySets("bench_press"); len(sets) != 2 {
+		t.Fatalf("se han colado series: %+v", sets)
+	}
 }

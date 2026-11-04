@@ -3,13 +3,33 @@
   <p class="eyebrow">Entreno</p>
   <h1 class="date">Últimas sesiones</h1>
   <div class="hero-meta">
+    <a href="{{.Base}}/rutinas">Tus rutinas</a>
     <a href="{{.Base}}/ejercicios">Tus ejercicios</a>
-    <a href="{{.Base}}/importar">Importar de WhatsApp</a>
   </div>
 </section>
 
+{{with .Hoy}}{{if .None}}{{if $.Sessions}}
+<section class="card hoy">
+  <h2 class="label">Rutinas</h2>
+  <p class="hoy-title">Aún no tienes rutinas</p>
+  <p class="hoy-text">Con ellas, el modo gimnasio te dice qué hacer en cada serie. Salen de lo que ya has apuntado.</p>
+  <p class="actions tight"><a class="btn" href="{{$.Base}}/rutinas/detectar">Detectar desde tu historial</a></p>
+</section>
+{{end}}{{else}}
+<section class="card hoy">
+  <h2 class="label">Hoy toca</h2>
+  <p class="hoy-title"><a href="{{$.Base}}/gimnasio">{{.Name}}</a></p>
+  <p class="hoy-text">{{.Count}} ejercicio{{if ne .Count 1}}s{{end}}{{with .Stalled}} · {{len .}} estancado{{if ne (len .) 1}}s{{end}}{{end}}</p>
+  {{with .Stalled}}<ul class="hoy-stall">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  <p class="actions tight"><a class="btn primary big" href="{{$.Base}}/gimnasio">Ir al gimnasio <span aria-hidden="true">→</span></a></p>
+</section>
+{{end}}{{end}}
+
 <div class="toolbar">
-  <div class="quick wide"><a class="btn primary big" href="{{.Base}}/apuntar"><span aria-hidden="true">+</span> Apuntar</a></div>
+  <div class="quick wide two">
+    <a class="btn primary big" href="{{.Base}}/apuntar"><span aria-hidden="true">+</span> Apuntar</a>
+    <a class="btn big" href="{{.Base}}/importar">Importar de WhatsApp</a>
+  </div>
 </div>
 
 {{with .Sessions}}

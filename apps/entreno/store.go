@@ -368,3 +368,67 @@ func sortedKeys(m map[string]int) []string {
 	})
 	return out
 }
+
+// appendSet añade una serie al ejercicio en la sesión del día (crea la sesión
+// o el ejercicio si no están). Si la serie trae id y ya estaba, no la repite.
+func (s store) appendSet(ctx context.Context, owner string, at time.Time, key string, st setLog) (int64, error) {
+	var sid int64
+	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		day := dayOf(at).Format("2006-01-02")
+		// Una sola sesión por día y persona a la vez.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, owner+"|"+day); err != nil {
+			return err
+		}
+		err := tx.QueryRow(ctx, `SELECT id FROM sessions WHERE owner = $1 AND day = $2 ORDER BY id LIMIT 1`, owner, day).Scan(&sid)
+		if errors.Is(err, pgx.ErrNoRows) {
+			sealed, err := s.box.SealJSON(sealSession, sessionData{})
+			if err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `INSERT INTO sessions (owner, day, started_at, source, sealed) VALUES ($1, $2, $3, 'web', $4) RETURNING id`,
+				owner, day, at, sealed).Scan(&sid); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		var eid int64
+		var sealed []byte
+		err = tx.QueryRow(ctx, `SELECT id, sealed FROM entries WHERE session_id = $1 AND owner = $2 AND ex_token = $3 ORDER BY position DESC LIMIT 1`,
+			sid, owner, s.exToken(key)).Scan(&eid, &sealed)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.insertEntriesAt(ctx, tx, owner, sid, []exerciseLog{{Key: key, Sets: []setLog{st}}})
+		}
+		if err != nil {
+			return err
+		}
+		var e exerciseLog
+		if err := s.box.OpenJSON(sealEntry, sealed, &e); err != nil {
+			return err
+		}
+		if st.ID != "" {
+			for _, x := range e.Sets {
+				if x.ID == st.ID {
+					return nil
+				}
+			}
+		}
+		e.Sets = append(e.Sets, st)
+		b, err := s.box.SealJSON(sealEntry, e)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE entries SET sealed = $3 WHERE id = $1 AND owner = $2`, eid, owner, b)
+		return err
+	})
+	return sid, err
+}
+
+// insertEntriesAt añade ejercicios al final de una sesión.
+func (s store) insertEntriesAt(ctx context.Context, tx pgx.Tx, owner string, sid int64, exs []exerciseLog) error {
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT coalesce(max(position) + 1, 0) FROM entries WHERE session_id = $1`, sid).Scan(&n); err != nil {
+		return err
+	}
+	return s.insertEntries(ctx, tx, owner, sid, n, exs)
+}

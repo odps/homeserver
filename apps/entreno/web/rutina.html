@@ -1,0 +1,64 @@
+{{define "rutina.html"}}{{template "head" .}}
+{{$f := .Form}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/rutinas">Rutinas</a></p>
+  <h1 class="date">{{if $f.ID}}{{with $f.Name}}{{.}}{{else}}Rutina{{end}}{{else}}Nueva rutina{{end}}</h1>
+  {{if $f.ID}}<div class="hero-meta"><a href="{{.Base}}/gimnasio?rutina={{$f.ID}}">Empezar en el gimnasio</a></div>{{end}}
+</section>
+
+{{if $f.Confirm}}
+<form class="dangerzone confirm" method="post" action="{{.Base}}/rutina/{{$f.ID}}/borrar">
+  <p><strong>¿Borrar esta rutina?</strong> Tus sesiones apuntadas no se tocan.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrar la rutina</button>
+    <a class="btn ghost" href="{{.Base}}/rutina/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{end}}
+
+<form class="panel form rutina-form" method="post" action="{{.Base}}/rutina/{{$f.ID}}">
+  <label class="field">Nombre
+    <input name="nombre" value="{{$f.Name}}" maxlength="60" required autocomplete="off" placeholder="Empuje, Pierna, Torso A…"></label>
+
+  <fieldset class="days">
+    <legend>Días <span class="help">si no marcas ninguno, van en rotación</span></legend>
+    {{range $f.Days}}<label class="day"><input type="checkbox" name="dia" value="{{.Value}}"{{if .Checked}} checked{{end}}><span>{{.Label}}</span></label>{{end}}
+  </fieldset>
+
+  <input type="hidden" name="filas" value="{{len $f.Rows}}">
+  <h2 class="label rows-title">Ejercicios</h2>
+  <p class="help">Rango: repeticiones (o segundos, o metros) mínimas y máximas. Al llegar arriba con el RIR objetivo se sube la carga. Las filas sin ejercicio no se guardan.</p>
+  {{range $f.Rows}}{{$k := .Key}}
+  <fieldset class="item-row{{if not .Key}} empty-row{{end}}">
+    <legend>{{if .Key}}Ejercicio {{add .I 1}}{{else}}Añadir ejercicio{{end}}</legend>
+    <label class="field item-ex"><span class="vh">Ejercicio</span>
+      <select name="k_{{.I}}">
+        <option value=""{{if not $k}} selected{{end}}>— Elige un ejercicio —</option>
+        {{range $.Groups}}<optgroup label="{{.Label}}">{{range .Options}}<option value="{{.Key}}"{{if eq .Key $k}} selected{{end}}>{{.Name}}</option>{{end}}</optgroup>{{end}}
+      </select></label>
+    <div class="item-nums">
+      <label class="num">Series<input name="s_{{.I}}" value="{{.Sets}}" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="3"></label>
+      <label class="num">Mín<input name="mn_{{.I}}" value="{{.Min}}" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="8"></label>
+      <label class="num">Máx<input name="mx_{{.I}}" value="{{.Max}}" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="10"></label>
+      <label class="num">RIR<input name="r_{{.I}}" value="{{.RIR}}" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="2"></label>
+      <label class="num">Descanso (s)<input name="d_{{.I}}" value="{{.Rest}}" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="90"></label>
+    </div>
+    <label class="field">Nota <span class="help">opcional</span>
+      <input name="n_{{.I}}" value="{{.Note}}" maxlength="200" autocomplete="off" placeholder="Agarre neutro, pausa abajo…"></label>
+    {{if .Key}}<label class="quitar"><input type="checkbox" name="quitar_{{.I}}" value="1"> Quitar</label>{{end}}
+  </fieldset>
+  {{end}}
+  <div class="actions">
+    <button class="btn primary big" name="accion" value="guardar">Guardar</button>
+    <button class="btn" name="accion" value="filas">Guardar y añadir filas</button>
+    <a class="btn ghost" href="{{.Base}}/rutinas">Cancelar</a>
+  </div>
+</form>
+
+{{if and $f.ID (not $f.Confirm)}}
+<div class="dangerzone">
+  <p>¿Ya no la usas? Al borrarla, tus sesiones siguen ahí.</p>
+  <a class="btn danger small" href="{{.Base}}/rutina/{{$f.ID}}?borrar=1">Borrar la rutina…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

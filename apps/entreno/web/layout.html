@@ -6,20 +6,21 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#11100f" media="(prefers-color-scheme: dark)">
-<title>{{if eq .Tab "apuntar"}}Apuntar · {{else if eq .Tab "ejercicios"}}Ejercicios · {{else if eq .Tab "importar"}}Importar · {{end}}Entreno</title>
+<title>{{if eq .Tab "apuntar"}}Apuntar · {{else if eq .Tab "ejercicios"}}Ejercicios · {{else if eq .Tab "importar"}}Importar · {{else if eq .Tab "gimnasio"}}Gimnasio · {{else if eq .Tab "rutinas"}}Rutinas · {{end}}Entreno</title>
 <link rel="stylesheet" href="{{.Base}}/static/app.css">
 <link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
-</head>
+{{if .Script}}<script src="{{.Base}}/static/gimnasio.js" defer></script>
+{{end}}</head>
 <body class="tab-{{.Tab}}">
 <a class="skip" href="#contenido">Saltar al contenido</a>
 <header class="bar">
   <div class="bar-in">
     <a class="brand" href="{{.Base}}/" aria-label="Entreno, inicio"><span class="mark" aria-hidden="true"></span>Entreno</a>
     <nav class="tabs" aria-label="Secciones de Entreno">
-      <a href="{{.Base}}/"{{if eq .Tab "inicio"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9.5 20v-5.5h5V20"/></svg><span>Inicio</span></a>
-      <a href="{{.Base}}/apuntar"{{if eq .Tab "apuntar"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg><span>Apuntar</span></a>
-      <a href="{{.Base}}/ejercicios"{{if eq .Tab "ejercicios"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10"/><rect x="3.5" y="8" width="3.5" height="8" rx="1"/><rect x="17" y="8" width="3.5" height="8" rx="1"/><path d="M2 11v2M22 11v2"/></svg><span>Ejercicios</span></a>
-      <a href="{{.Base}}/importar"{{if eq .Tab "importar"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span>Importar</span></a>
+      <a href="{{.Base}}/"{{if or (eq .Tab "inicio") (eq .Tab "apuntar") (eq .Tab "importar")}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9.5 20v-5.5h5V20"/></svg><span>Inicio</span></a>
+      <a href="{{.Base}}/gimnasio"{{if eq .Tab "gimnasio"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10"/><rect x="3.5" y="8" width="3.5" height="8" rx="1"/><rect x="17" y="8" width="3.5" height="8" rx="1"/><path d="M2 11v2M22 11v2"/></svg><span>Gimnasio</span></a>
+      <a href="{{.Base}}/rutinas"{{if eq .Tab "rutinas"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="5.5" width="15" height="14.5" rx="2"/><path d="M8.5 3.5v4M15.5 3.5v4M4.5 10.5h15M8.5 14h3M8.5 17h6"/></svg><span>Rutinas</span></a>
+      <a href="{{.Base}}/ejercicios"{{if eq .Tab "ejercicios"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r="1.25"/><circle cx="4.75" cy="12" r="1.25"/><circle cx="4.75" cy="17.5" r="1.25"/></svg><span>Ejercicios</span></a>
     </nav>
   </div>
 </header>

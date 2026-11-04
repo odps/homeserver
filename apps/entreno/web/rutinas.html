@@ -1,0 +1,43 @@
+{{define "rutinas.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Rutinas</p>
+  <h1 class="date">{{if .Routines}}Tus rutinas{{else}}Sin rutinas{{end}}</h1>
+  <div class="hero-meta">
+    {{with .Routines}}<span>{{len .}} rutina{{if ne (len .) 1}}s{{end}}</span>{{end}}
+    <a href="{{.Base}}/gimnasio">Modo gimnasio</a>
+  </div>
+</section>
+
+<div class="toolbar">
+  <div class="quick wide two">
+    <a class="btn primary big" href="{{.Base}}/rutinas/nueva"><span aria-hidden="true">+</span> Nueva rutina</a>
+    <a class="btn big" href="{{.Base}}/rutinas/detectar">Detectar desde tu historial</a>
+  </div>
+</div>
+
+{{with .Routines}}
+<div class="exercises">
+  {{range .}}
+  <article class="ex rutina">
+    <header class="ex-head">
+      <h2><a href="{{$.Base}}/rutina/{{.ID}}">{{.Name}}</a></h2>
+      <span class="tag">{{with .Days}}{{.}}{{else}}Sin día fijo{{end}}</span>
+    </header>
+    <ol class="exlist rutina-items">{{range .Items}}
+      <li><span class="ex-name">{{.Name}}</span> <span class="ex-sum">{{.Text}}</span>{{with .Note}} <span class="muted">— {{.}}</span>{{end}}</li>{{end}}
+    </ol>
+    <p class="actions">
+      <a class="btn primary small" href="{{$.Base}}/gimnasio?rutina={{.ID}}">Empezar</a>
+      <a class="btn small" href="{{$.Base}}/rutina/{{.ID}}">Editar</a>
+    </p>
+  </article>
+  {{end}}
+</div>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no tienes rutinas.</p>
+  <p>Una rutina es un día fijo (empuje, tirón, pierna…) con sus ejercicios, series, rango de repeticiones, RIR y descanso. Con ella, el modo gimnasio te propone cada serie según la última vez.</p>
+  <p>Si ya has apuntado unas semanas, <a href="{{.Base}}/rutinas/detectar">las saco de tu historial</a>; si no, <a href="{{.Base}}/rutinas/nueva">crea una</a>.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

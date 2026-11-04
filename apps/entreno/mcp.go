@@ -191,6 +191,71 @@ func addTools(server *mcp.Server, svc *service) {
 			}
 			return nil, out, nil
 		})
+	mcp.AddTool(server, &mcp.Tool{Name: "entreno_hoy", Description: "Qué toca hoy en el gimnasio: la rutina del día (o la indicada) y, por ejercicio, lo de la última vez, lo propuesto para hoy (doble progresión con RIR, calculada por el programa) y si está estancado"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in todayIn) (*mcp.CallToolResult, todayOut, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, todayOut{}, err
+			}
+			now := svc.clock()
+			var r routine
+			if in.Rutina != "" {
+				list, err := svc.store.routines(ctx, who.User)
+				if err != nil {
+					return nil, todayOut{}, err
+				}
+				for _, x := range list {
+					if strings.EqualFold(fold(x.Name), fold(in.Rutina)) || strings.Contains(fold(x.Name), fold(in.Rutina)) {
+						r = x
+						break
+					}
+				}
+				if r.ID == 0 {
+					return nil, todayOut{}, fmt.Errorf("no hay ninguna rutina «%s»", in.Rutina)
+				}
+			} else {
+				var ok bool
+				if r, ok, err = svc.todayRoutine(ctx, who.User, now); err != nil {
+					return nil, todayOut{}, err
+				} else if !ok {
+					return nil, todayOut{}, errors.New("aún no hay rutinas: créalas en Entreno → Rutinas (pueden detectarse del historial)")
+				}
+			}
+			items, err := svc.plan(ctx, who.User, r, now)
+			out := todayOut{Rutina: r.Name, Ejercicios: items}
+			for _, it := range items {
+				out.HechasHoy += len(it.DoneToday)
+			}
+			return nil, out, err
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "entreno_rutinas", Description: "Las rutinas de la persona, con sus días y ejercicios (series, rango, RIR objetivo y descanso)"},
+		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, nil, err
+			}
+			list, err := svc.store.routines(ctx, who.User)
+			if err != nil {
+				return nil, nil, err
+			}
+			custom, _ := svc.store.customNames(ctx, who.User)
+			days := []string{"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"}
+			var out []map[string]any
+			for _, r := range list {
+				var ds, exs []string
+				for _, d := range r.Days {
+					ds = append(ds, days[d])
+				}
+				for _, it := range r.Items {
+					exs = append(exs, fmt.Sprintf("%s: %d × %d–%d · RIR %d · %d s de descanso", exerciseName(it.Key, "", custom), it.Sets, it.Min, it.Max, it.RIR, it.RestSec))
+				}
+				out = append(out, map[string]any{"id": r.ID, "nombre": r.Name, "dias": ds, "ejercicios": exs})
+			}
+			if out == nil {
+				out = []map[string]any{}
+			}
+			return nil, map[string]any{"rutinas": out}, nil
+		})
 	mcp.AddTool(server, &mcp.Tool{Name: "entreno_ficha", Description: "Cómo se hace un ejercicio: explicación (de wger o free-exercise-db), músculos y material. Cita la fuente si la usas"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in historyIn) (*mcp.CallToolResult, map[string]any, error) {
 			who, err := identity(req)
@@ -280,4 +345,14 @@ func searchCatalog(q string, limit int) []catalogRow {
 		out = append(out, catalogRow{Clave: h.e.Key, Nombre: h.e.Name, Musculo: h.e.Muscles})
 	}
 	return out
+}
+
+type todayIn struct {
+	Rutina string `json:"rutina,omitempty" jsonschema:"nombre de la rutina si no es la de hoy"`
+}
+
+type todayOut struct {
+	Rutina     string     `json:"rutina"`
+	Ejercicios []planItem `json:"ejercicios"`
+	HechasHoy  int        `json:"series_hechas_hoy"`
 }

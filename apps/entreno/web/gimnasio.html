@@ -1,0 +1,83 @@
+{{define "gimnasio.html"}}{{template "head" .}}
+{{$g := .Gym}}
+{{if $g.Empty}}
+<section class="hero compact">
+  <p class="eyebrow">Gimnasio</p>
+  <h1 class="date">Sin rutinas</h1>
+</section>
+<section class="empty">
+  <p class="big">Aún no tienes rutinas.</p>
+  <p>El modo gimnasio sigue una rutina: te dice lo que hiciste la última vez, lo que toca hoy y cuenta el descanso. Sácalas de lo que ya has apuntado o crea una.</p>
+  <p class="actions">
+    <a class="btn primary" href="{{.Base}}/rutinas/detectar">Detectar desde tu historial</a>
+    <a class="btn" href="{{.Base}}/rutinas/nueva">Nueva rutina</a>
+    <a class="btn ghost" href="{{.Base}}/apuntar">Sesión libre</a>
+  </p>
+</section>
+{{else}}
+<section class="hero compact">
+  <p class="eyebrow">{{if $g.Chosen}}Rutina{{else}}Hoy toca{{end}}</p>
+  <h1 class="date">{{$g.Name}}</h1>
+  <div class="hero-meta">
+    {{with $g.Days}}<span>{{.}}</span>{{end}}
+    <a href="{{.Base}}/apuntar">Sesión libre</a>
+    <a href="{{.Base}}/rutina/{{$g.RoutineID}}">Editar la rutina</a>
+  </div>
+</section>
+
+{{if gt (len $g.Others) 1}}
+<nav class="chips" aria-label="Cambiar de rutina">
+  {{range $g.Others}}<a href="{{$.Base}}/gimnasio?rutina={{.ID}}"{{if .Current}} aria-current="true"{{end}}>{{.Name}}</a>{{end}}
+</nav>
+{{end}}
+
+<div class="gym" data-api="{{.Base}}/api/serie">
+  {{range $g.Items}}{{$it := .}}
+  <article class="ex gym-ex{{if .Stalled}} stalled{{end}}" id="ex-{{.Key}}" data-key="{{.Key}}" data-rest="{{.RestSec}}" data-name="{{.Name}}">
+    <header class="ex-head">
+      <h2><a href="{{$.Base}}/ejercicio/{{.Key}}">{{.Name}}</a></h2>
+      <span class="tag{{if ge .Done .Total}} ok{{end}}" title="Series hechas hoy"><span class="gym-count">{{.Done}}</span>/{{.Total}}</span>
+    </header>
+    <dl class="gym-info">
+      <div><dt>La última vez</dt><dd>{{with .Last}}{{.}}{{else}}Primera vez{{end}}</dd></div>
+      <div><dt>Hoy</dt><dd><strong>{{.Goal}}</strong></dd></div>
+      <div><dt>Descanso</dt><dd>{{.Rest}}</dd></div>
+    </dl>
+    {{with .Advice}}<p class="advice{{if $it.Stalled}} stalled{{end}}">{{if $it.Stalled}}<strong>Estancado.</strong> {{end}}{{.}}</p>{{end}}
+    <ol class="series">
+      {{range .Sets}}{{if .Done}}
+      <li class="serie hecha"><span class="serie-done"><span class="serie-n">{{.N}}</span><span class="serie-val">{{.Text}}</span><span class="serie-ok">Hecha</span></span></li>
+      {{else}}
+      <li class="serie" data-n="{{.N}}">
+        <form class="serie-form" method="post" action="{{$.Base}}/gimnasio/serie">
+          <span class="serie-n">{{.N}}</span>
+          <label class="num">{{$it.Unit}}<input name="{{$it.Field}}" value="{{.Amount}}" type="number" min="1" step="{{$it.Step}}" inputmode="{{if eq $it.Step "1"}}numeric{{else}}decimal{{end}}" required></label>
+          <label class="num">kg<input name="kg" value="{{.Kg}}" type="number" min="0" max="1000" step="any" inputmode="decimal"></label>
+          <label class="num">RIR<input name="rir" value="{{.RIR}}" type="number" min="0" max="10" step="1" inputmode="numeric"></label>
+          <input type="hidden" name="key" value="{{$it.Key}}">
+          <input type="hidden" name="rutina" value="{{$g.RoutineID}}">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="btn primary serie-btn">Hecha</button>
+        </form>
+      </li>
+      {{end}}{{end}}
+    </ol>
+  </article>
+  {{end}}
+</div>
+
+<p class="actions"><a class="btn" href="{{.Base}}/apuntar">Sesión libre</a></p>
+
+<div class="dock">
+  <p class="dock-msg" id="cola" role="status" hidden></p>
+  <p class="dock-msg error" id="gym-error" role="alert" hidden></p>
+  <div class="timer" id="descanso" hidden>
+    <span class="timer-label">Descanso</span>
+    <span class="timer-time" id="descanso-t" role="timer">0:00</span>
+    <button type="button" class="btn small" id="descanso-mas">+15 s</button>
+    <button type="button" class="btn small primary" id="descanso-saltar">Saltar</button>
+  </div>
+  <p class="vh" id="descanso-aviso" role="status"></p>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

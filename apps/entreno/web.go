@@ -26,7 +26,8 @@ import (
 
 // Páginas servidas desde el servidor, sin JavaScript: las últimas sesiones,
 // apuntar, cada sesión, el historial de cada ejercicio (con su gráfica en
-// SVG) y la importación del chat de WhatsApp.
+// SVG), la importación del chat de WhatsApp y las rutinas. La única con
+// JavaScript es el modo gimnasio (web_gym.go), y funciona igual sin él.
 
 //go:embed web
 var webFS embed.FS
@@ -34,6 +35,7 @@ var webFS embed.FS
 var pages = template.Must(template.New("").Funcs(template.FuncMap{
 	"muscle": func(m string) string { return strings.ToLower(muscleLabel(m)) },
 	"join":   strings.Join,
+	"add":    func(a, b int) int { return a + b },
 	"lines": func(s string) []string { // un párrafo por línea
 		var out []string
 		for _, l := range strings.Split(s, "\n") {
@@ -59,13 +61,15 @@ type pageData struct {
 	Version string
 	Base    string // /entreno detrás de la pasarela
 	Name    string
-	Tab     string // inicio, apuntar, ejercicios, importar
+	Tab     string // inicio, gimnasio, rutinas, ejercicios, apuntar, importar
+	Script  bool   // carga gimnasio.js (con su CSP)
 	Flash   string
 	Error   string
 	Today   string // AAAA-MM-DD
 
 	// Inicio
 	Sessions []sessionCard
+	Hoy      *todayCard // «Hoy toca»
 
 	// Sesión
 	Session sessionDetail
@@ -92,6 +96,14 @@ type pageData struct {
 	// Importar
 	Preview *previewView
 	Done    *importDone
+
+	// Rutinas
+	Routines []routineView
+	Suggest  []routineView
+	Form     *routineForm
+
+	// Gimnasio
+	Gym *gymView
 }
 
 type sessionCard struct {
@@ -223,6 +235,16 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /importar", w.user(w.importUpload))
 	mux.HandleFunc("POST /importar/{id}", w.user(w.importConfirm))
 	mux.HandleFunc("GET /api/hoy/texto", w.user(w.todayText))
+	mux.HandleFunc("GET /rutinas", w.user(w.routinesPage))
+	mux.HandleFunc("GET /rutinas/nueva", w.user(w.routineNew))
+	mux.HandleFunc("GET /rutinas/detectar", w.user(w.detectPage))
+	mux.HandleFunc("POST /rutinas/detectar", w.user(w.detectSave))
+	mux.HandleFunc("GET /rutina/{id}", w.user(w.routineEdit))
+	mux.HandleFunc("POST /rutina/{id}", w.user(w.routineSave))
+	mux.HandleFunc("POST /rutina/{id}/borrar", w.user(w.routineDelete))
+	mux.HandleFunc("GET /gimnasio", w.user(w.gymPage))
+	mux.HandleFunc("POST /gimnasio/serie", w.user(w.gymSetPost))
+	mux.HandleFunc("POST /api/serie", w.user(w.apiSet))
 }
 
 // user exige la identidad que pone la pasarela.
@@ -245,7 +267,11 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, name string, d pag
 	d.Version, d.Base = version.Version, base(r)
 	d.Today = w.now().Format("2006-01-02")
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-	rw.Header().Set("Content-Security-Policy", csp)
+	if d.Script {
+		rw.Header().Set("Content-Security-Policy", cspGym)
+	} else {
+		rw.Header().Set("Content-Security-Policy", csp)
+	}
 	rw.Header().Set("Cache-Control", "no-store")
 	if err := pages.ExecuteTemplate(rw, name, d); err != nil {
 		w.svc.log.Error("plantilla", "pagina", name, "err", err)
@@ -260,6 +286,8 @@ func (w *web) fail(rw http.ResponseWriter, op string, err error) {
 
 var flashes = map[string]string{
 	"apuntado": "Apuntado.", "borrada": "Sesión borrada.", "nada": "No se ha apuntado nada.",
+	"guardada": "Rutina guardada.", "rutina-borrada": "Rutina borrada.",
+	"detectadas": "Rutinas guardadas: revísalas y ajústalas a tu gusto.",
 }
 
 func flash(r *http.Request) string { return flashes[r.URL.Query().Get("ok")] }
@@ -337,6 +365,11 @@ func (w *web) home(rw http.ResponseWriter, r *http.Request, who app.Identity) {
 			c.Lines = append(c.Lines, exLine{Key: e.Key, Name: exerciseName(e.Key, e.Name, custom), Summary: summarize(e)})
 		}
 		d.Sessions = append(d.Sessions, c)
+	}
+	if card, err := w.todayCard(ctx, who.User); err != nil {
+		w.svc.log.Error("entreno web", "op", "hoy toca", "err", err)
+	} else {
+		d.Hoy = card
 	}
 	w.render(rw, r, "inicio.html", d)
 }

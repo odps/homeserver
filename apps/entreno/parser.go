@@ -32,6 +32,7 @@ type setLog struct {
 	Meters  float64 `json:"m,omitempty"`
 	Kg      float64 `json:"kg,omitempty"`
 	RIR     *int    `json:"rir,omitempty"` // nil: no apuntado
+	ID      string  `json:"id,omitempty"`  // de la web en el gimnasio: evita duplicar al reenviar
 }
 
 // exerciseLog es un ejercicio de una sesión.
