@@ -34,7 +34,9 @@ for target in "${targets[@]}"; do
 	fi
 	cp deploy/apps.json "$stage/"
 	echo "$tag" > "$stage/VERSION"
-	tar -czf "dist/homeserver_${os}_${arch}.tar.gz" -C "$stage" .
+	# Permisos fijos: el updater respeta los del tar, y compilando en Windows
+	# (si GitHub Actions no está disponible) los binarios no saldrían ejecutables.
+	tar --mode=0755 --owner=0 --group=0 -czf "dist/homeserver_${os}_${arch}.tar.gz" -C "$stage" .
 done
 
 rm -rf dist/stage
