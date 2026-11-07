@@ -22,6 +22,12 @@ func identity(req *mcp.CallToolRequest) (app.Identity, error) {
 	return app.Identity{}, errors.New("este token no está asociado a ninguna persona: créalo «en nombre de» un usuario en el panel")
 }
 
+type moveIn struct {
+	Desde   string   `json:"desde" jsonschema:"clave del ejercicio con el que se apuntó (p. ej. bench_press)"`
+	A       string   `json:"a" jsonschema:"clave del ejercicio bueno (p. ej. dumbbell_bench_press)"`
+	Nombres []string `json:"nombres,omitempty" jsonschema:"solo lo escrito de estas maneras; vacío: todo (y también cambian las rutinas)"`
+}
+
 type recordIn struct {
 	Texto string `json:"texto" jsonschema:"lo hecho, una línea por ejercicio y en el formato de siempre: «Lat machine 3x10 50kg rir 2», «Farmer carry 3x20m 22kg», «Hollow hold 3x45s», «Rir 2» suelto para el anterior"`
 	Fecha string `json:"fecha,omitempty" jsonschema:"AAAA-MM-DD si no es hoy"`
@@ -289,6 +295,18 @@ func addTools(server *mcp.Server, svc *service) {
 				return nil, nil, err
 			}
 			return nil, map[string][]catalogRow{"ejercicios": searchCatalog(in.Texto, 15)}, nil
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "entreno_cambiar_ejercicio", Description: "Pasa lo apuntado como un ejercicio a otro, cuando se reconoció mal («el press banca era con mancuernas, no con barra»): las veces apuntadas y su historial, y lo que se apunte después con esos nombres. Claves con entreno_catalogo o entreno_ultimas. Confirma antes con la persona qué se pasa y a cuál"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in moveIn) (*mcp.CallToolResult, moveResult, error) {
+			who, err := identity(req)
+			if err != nil {
+				return nil, moveResult{}, err
+			}
+			res, err := svc.moveExercise(ctx, who.User, in.Desde, in.A, in.Nombres)
+			if err == nil && res.Moved == 0 {
+				err = errors.New("no había nada apuntado así en ese ejercicio")
+			}
+			return nil, res, err
 		})
 	mcp.AddTool(server, &mcp.Tool{Name: "entreno_alias", Description: "Recuerda que la persona llama así a un ejercicio («Pressa» = prensa de piernas), o crea un ejercicio propio con ese nombre («nuevo»). Después, entreno_registrar ya lo reconoce"},
 		func(ctx context.Context, req *mcp.CallToolRequest, in aliasIn) (*mcp.CallToolResult, map[string]string, error) {

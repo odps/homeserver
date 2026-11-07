@@ -1,0 +1,28 @@
+{{define "ejercicio_cambiar.html"}}{{template "head" .}}
+{{$m := .Move}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/ejercicio/{{$m.Key}}">{{$m.Name}}</a></p>
+  <h1 class="date">Pasar a otro ejercicio</h1>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/ejercicio/{{$m.Key}}/cambiar">
+  <p class="help">Si lo apuntado como «{{$m.Name}}» era en realidad otro ejercicio, pásalo aquí. Las veces apuntadas, sus series y tu historial pasan al ejercicio que elijas. Lo que apuntes después con esos nombres irá directo allí.</p>
+
+  <fieldset class="names">
+    <legend>Cómo lo escribiste <span class="help">pasa lo marcado</span></legend>
+    {{range $m.Names}}<label class="check"><input type="checkbox" name="nombre" value="{{.Name}}" checked> <span>«{{.Name}}»</span> <span class="muted">{{.Times}} {{if eq .Times 1}}vez{{else}}veces{{end}}</span></label>{{end}}
+  </fieldset>
+
+  <label class="field">Era este ejercicio
+    <select name="a" required>
+      <option value="">— Elige un ejercicio —</option>
+      {{range $m.Groups}}<optgroup label="{{.Label}}">{{range .Options}}<option value="{{.Key}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+    </select></label>
+  <p class="help">Si lo marcas todo, tus rutinas también cambian.</p>
+
+  <div class="actions">
+    <button class="btn primary big">Pasar</button>
+    <a class="btn ghost" href="{{.Base}}/ejercicio/{{$m.Key}}">Cancelar</a>
+  </div>
+</form>
+{{template "foot" .}}{{end}}

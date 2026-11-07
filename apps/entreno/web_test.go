@@ -167,6 +167,8 @@ func TestWebRender(t *testing.T) {
 		{"ejercicios-sin-resultados", "ejercicios.html", pageData{Tab: "ejercicios", Query: "zzz", Searched: true}},
 		{"ejercicios-vacio", "ejercicios.html", pageData{Tab: "ejercicios"}},
 		{"ejercicio", "ejercicio.html", pageData{Tab: "ejercicios", Exercise: hist}},
+		{"ejercicio-cambiar", "ejercicio_cambiar.html", pageData{Tab: "ejercicios", Move: &moveView{Key: "bench_press", Name: "Press de banca con barra",
+			Names: []writtenName{{"Press banca", 41}, {"Bench press", 3}, {"Panca piana", 1}}, Groups: catalogGroups()}}},
 		{"ejercicio-tiempo", "ejercicio.html", pageData{Tab: "ejercicios", Exercise: hollowHist}},
 		{"ejercicio-carga", "ejercicio.html", pageData{Tab: "ejercicios", Exercise: farmerHist}},
 		{"ejercicio-nuevo", "ejercicio.html", pageData{Tab: "ejercicios", Exercise: historyView{Key: "deadlift", Name: "Peso muerto", Muscles: "isquiotibiales, glúteo"}}},

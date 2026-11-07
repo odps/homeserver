@@ -115,6 +115,7 @@ type pageData struct {
 
 	// Ejercicio
 	Exercise historyView
+	Move     *moveView // pasar a otro ejercicio
 
 	// Importar
 	Preview *previewView
@@ -258,6 +259,8 @@ func (w *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sesion/{id}/borrar", w.user(w.deleteSession))
 	mux.HandleFunc("GET /ejercicios", w.user(w.exercisesPage))
 	mux.HandleFunc("GET /ejercicio/{key}", w.user(w.exercisePage))
+	mux.HandleFunc("GET /ejercicio/{key}/cambiar", w.user(w.movePage))
+	mux.HandleFunc("POST /ejercicio/{key}/cambiar", w.user(w.movePost))
 	mux.HandleFunc("GET /img/{key}/{n}", w.user(w.imagePage))
 	mux.HandleFunc("GET /importar", w.user(w.importPage))
 	mux.HandleFunc("POST /importar", w.user(w.importUpload))
@@ -355,7 +358,8 @@ var flashes = map[string]string{
 	"foto": "Foto guardada.", "foto-borrada": "Foto borrada.",
 	"cardio": "Cardio apuntado.", "cardio-borrado": "Cardio borrado.",
 	"comida-borrada": "Borrado.", "copiado": "Copiado a hoy.", "habitual": "Guardado en tus alimentos.",
-	"agenda": "Rutinas al día en la Agenda.", "agenda-no": "No usas la Agenda: pide que te la asignen en Usuarios.",
+	"cambiado": "Hecho: lo apuntado está ahora en este ejercicio, y lo que apuntes con esos nombres vendrá aquí.",
+	"agenda":   "Rutinas al día en la Agenda.", "agenda-no": "No usas la Agenda: pide que te la asignen en Usuarios.",
 	"agenda-error": "La Agenda no responde ahora; se intentará otra vez al guardar una rutina.",
 	"ya-habitual":  "Ya estaba en tus alimentos.", "alimento-borrado": "Alimento borrado.", "objetivos": "Objetivos guardados.",
 }
@@ -963,7 +967,7 @@ func (w *web) exercisePage(rw http.ResponseWriter, r *http.Request, who app.Iden
 		return
 	}
 	w.fillHistory(&h, list)
-	w.render(rw, r, "ejercicio.html", pageData{Name: who.Name, Tab: "ejercicios", Exercise: h})
+	w.render(rw, r, "ejercicio.html", pageData{Name: who.Name, Tab: "ejercicios", Exercise: h, Flash: flash(r)})
 }
 
 // metric es lo que enseña la gráfica de un ejercicio.

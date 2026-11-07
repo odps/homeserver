@@ -526,3 +526,10 @@ a.row-main:hover .rec-v { color: var(--accent); }
   .kcal-weeks .val.alt { display: none; }
   .progress .chart-note, .progress > .quiet, .progress > .legend { padding-inline: .2rem; }
 }
+
+/* Pasar a otro ejercicio */
+.move-link { margin: 1.4rem 0 0; font-size: .9rem; }
+.names { border: 0; padding: 0; margin: 1.1rem 0 1rem; min-width: 0; display: grid; gap: .2rem; }
+.names legend { padding: 0; margin-bottom: .5rem; font-size: .85rem; font-weight: 600; color: var(--ink-2); }
+.names .check { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; min-height: var(--tap); font-size: .95rem; cursor: pointer; }
+.names .check input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--accent); }
