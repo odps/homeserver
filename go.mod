@@ -3,24 +3,25 @@ module homeserver
 go 1.27.3
 
 require (
-	filippo.io/age v1.2.1
+	filippo.io/age v1.3.2
 	github.com/emersion/go-ical v0.0.0-20240127095438-fc1c9d8fb2b6
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/emersion/go-message v0.18.2
-	github.com/emersion/go-vcard v0.0.0-20230815062825-8fda7d206ec9
+	github.com/emersion/go-vcard v0.1.0
 	github.com/emersion/go-webdav v0.7.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/crypto v0.58.0
-	golang.org/x/image v0.46.0
+	golang.org/x/image v0.47.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	rsc.io/qr v0.2.0
 )
 
 require (
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
