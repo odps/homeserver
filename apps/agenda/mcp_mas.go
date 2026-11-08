@@ -46,6 +46,7 @@ type settingsView struct {
 	ResumenManana   bool     `json:"resumen_manana"`
 	ResumenHora     string   `json:"resumen_hora"`
 	ResumenConIA    bool     `json:"resumen_con_ia"`
+	ResumenCartera  bool     `json:"resumen_con_cartera"`
 	Avisos          bool     `json:"avisos"`
 	AvisoPorDefecto int      `json:"aviso_por_defecto_min"`
 	Casa            string   `json:"casa"`
@@ -60,6 +61,7 @@ type settingsIn struct {
 	ResumenManana   *bool     `json:"resumen_manana,omitempty" jsonschema:"resumen de la mañana por Telegram"`
 	ResumenHora     *string   `json:"resumen_hora,omitempty" jsonschema:"HH:MM"`
 	ResumenConIA    *bool     `json:"resumen_con_ia,omitempty" jsonschema:"incluir lo importante del correo resumido por la IA"`
+	ResumenCartera  *bool     `json:"resumen_con_cartera,omitempty" jsonschema:"incluir el valor de su cartera de inversión (app Cartera)"`
 	Avisos          *bool     `json:"avisos,omitempty" jsonschema:"avisos de eventos y tareas por Telegram"`
 	AvisoPorDefecto *int      `json:"aviso_por_defecto_min,omitempty" jsonschema:"minutos de antelación al crear un evento; 0 sin aviso"`
 	Casa            *string   `json:"casa,omitempty" jsonschema:"dirección de casa, origen de las rutas; vacío para quitarla"`
@@ -195,7 +197,7 @@ func (s *service) settingsView(ctx context.Context, owner string) (settingsView,
 	if err != nil {
 		return settingsView{}, err
 	}
-	v := settingsView{ResumenManana: p.SummaryOn, ResumenHora: p.SummaryAt, ResumenConIA: p.SummaryAI, Avisos: p.RemindersOn,
+	v := settingsView{ResumenManana: p.SummaryOn, ResumenHora: p.SummaryAt, ResumenConIA: p.SummaryAI, ResumenCartera: !p.NoWallet, Avisos: p.RemindersOn,
 		AvisoPorDefecto: p.DefaultMin, Casa: p.Home, CiudadTiempo: p.weatherCity(), Importantes: orNoStrings(p.MailImportant), Ignorados: orNoStrings(p.MailIgnore),
 		Cuentas: []string{}, Calendarios: []string{}}
 	accts, _ := s.store.accounts(ctx, owner)
@@ -243,6 +245,9 @@ func (s *service) changeSettings(ctx context.Context, owner string, in settingsI
 		if src != nil {
 			*dst = *src
 		}
+	}
+	if in.ResumenCartera != nil {
+		p.NoWallet = !*in.ResumenCartera
 	}
 	if in.CiudadTiempo != nil {
 		p.WeatherCity = strings.TrimSpace(*in.CiudadTiempo)

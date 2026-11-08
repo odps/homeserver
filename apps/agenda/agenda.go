@@ -26,6 +26,7 @@ type service struct {
 	summarizer func(ctx context.Context, prompt string) (string, error)  // nil: sin resumen de la IA
 	geo        *geo.Client                                               // nil: sin el tiempo en el resumen
 	gym        func(ctx context.Context, owner string) ([]string, error) // nil: sin Entreno en el resumen
+	wallet     func(ctx context.Context, owner string) ([]string, error) // nil: sin Cartera en el resumen
 	now        func() time.Time
 	summaries  sync.Map // usuario → día cuyo resumen se está preparando
 }
@@ -514,6 +515,18 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			s.log.Warn("resumen: entreno", "err", err)
 		}
 		section("🏋️ ENTRENO", lines)
+	}
+
+	if s.wallet != nil {
+		if p, err := s.store.prefs(ctx, owner); err == nil && !p.NoWallet {
+			wctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			lines, err := s.wallet(wctx, owner)
+			cancel()
+			if err != nil {
+				s.log.Warn("resumen: cartera", "err", err)
+			}
+			section("💰 CARTERA", lines)
+		}
 	}
 
 	tasks, err := s.tasks(ctx, owner)

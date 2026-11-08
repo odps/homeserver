@@ -1,0 +1,100 @@
+{{define "searchform"}}<form class="search" method="post" action="{{.Base}}/buscar">
+  {{if eq .Tab "seguimiento"}}<input type="hidden" name="desde" value="seguimiento">{{end}}
+  <label class="vh" for="q">Buscar un activo</label>
+  <div class="add-row">
+    <input id="q" name="q" value="{{.Query}}" maxlength="60" placeholder="BTC, Apple, IE00B4L5Y983…" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" required>
+    <button class="btn primary">Buscar</button>
+  </div>
+  <p class="help">Por símbolo, nombre o ISIN. Cripto en Kraken (o CoinGecko); acciones, ETF y fondos en Yahoo Finance.</p>
+</form>{{end}}
+
+{{define "results"}}{{if .Searched}}
+<section class="group" id="resultados">
+  <h2 class="label">Resultados para «{{.Query}}»</h2>
+  {{with .Failed}}<p class="note warn">{{.}}</p>{{end}}
+  {{if .Results}}
+  <ul class="rows results">
+    {{range .Results}}
+    <li class="row">
+      <div class="row-body">
+        <span class="row-main"><span class="row-title">{{.Symbol}}</span> <span class="muted">{{.Name}}</span></span>
+        <span class="row-meta">{{.KindLabel}}{{with .Market}} · {{.}}{{end}} · {{.Source}}</span>
+      </div>
+      <div class="row-actions">
+        {{if .Have}}<a class="btn small" href="{{$.Base}}/activo/{{.HaveID}}">Ya lo tienes</a>{{else}}
+        <form method="post" action="{{$.Base}}/activos/nuevo">
+          <input type="hidden" name="ref" value="{{.Ref}}"><input type="hidden" name="tipo" value="{{.Kind}}">{{with .ISIN}}<input type="hidden" name="isin" value="{{.}}">{{end}}
+          {{if eq $.Tab "seguimiento"}}<input type="hidden" name="seguir" value="1"><button class="btn small primary">Seguir</button>
+          {{else}}<button class="btn small primary">Añadir</button>{{end}}
+        </form>{{end}}
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">No ha salido nada. Prueba con el símbolo (BTC, AAPL), el ISIN o el nombre; si no tiene fuente, añádelo a mano.</p>
+  {{end}}
+</section>
+{{end}}{{end}}
+
+{{define "activos.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Cartera</p>
+  <h1 class="date">Activos</h1>
+  <div class="hero-meta"><a href="{{.Base}}/operacion/nueva">Apuntar una operación</a></div>
+</section>
+
+{{template "searchform" .}}
+{{template "results" .}}
+
+{{if .Positions}}
+<section class="group">
+  <h2 class="label">Lo que tienes</h2>
+  <ul class="rows">
+    {{range .Positions}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/activo/{{.ID}}">
+      <span class="row-main"><span class="row-title">{{.Symbol}}</span> <span class="muted">{{.Name}}</span></span>
+      <span class="row-side tnum">{{if .NoPrice}}sin precio{{else}}{{.Value}}{{end}}</span>
+      <span class="row-meta tnum">{{.Kind}} · {{.Qty}}{{with .Price}} · {{.}}{{end}}{{with .DayPct}} · hoy {{.}}{{end}}</span>
+      <span class="row-side2 tnum">{{if .GP}}<span class="chg {{.GPClass}}">{{.GP}} ({{.GPPct}})</span>{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{else if not .Searched}}
+<section class="empty">
+  <p class="big">Busca lo que tienes.</p>
+  <p>Añade cada activo una vez (aunque esté en varias plataformas) y luego apunta las compras, ventas y lo demás.</p>
+</section>
+{{end}}
+
+{{with .Closed}}
+<section class="group">
+  <h2 class="label">Ya no los tienes</h2>
+  <ul class="rows">
+    {{range .}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/activo/{{.ID}}">
+      <span class="row-main"><span class="row-title">{{.Symbol}}</span> <span class="muted">{{.Name}}</span></span>
+      <span class="row-side tnum">{{.Realized}}</span>
+      <span class="row-meta">{{.Kind}} · ganancia realizada</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<details class="panel fold" id="manual"{{if or .Manual.Symbol .Manual.Name}} open{{end}}>
+  <summary>Añadir a mano (sin fuente de precios)</summary>
+  <form method="post" action="{{.Base}}/activos/manual">
+    <p class="help">Para lo que no esté en Kraken, CoinGecko ni Yahoo: un fondo, un depósito… El precio lo pones tú y lo cambias en su ficha.</p>
+    <div class="form-grid">
+      <label class="field">Símbolo<input name="simbolo" value="{{.Manual.Symbol}}" maxlength="20" autocomplete="off"></label>
+      <label class="field">Nombre<input name="nombre" value="{{.Manual.Name}}" maxlength="80" autocomplete="off"></label>
+      <label class="field">Tipo<select name="tipo">{{range .AssetKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <label class="field">Moneda<input name="moneda" value="{{.Manual.Currency}}" maxlength="3" autocomplete="off" autocapitalize="characters"></label>
+      <label class="field">Precio por unidad<input name="precio" value="{{.Manual.Price}}" inputmode="decimal" autocomplete="off"></label>
+    </div>
+    <div class="actions"><button class="btn primary">Añadir</button></div>
+  </form>
+</details>
+{{template "foot" .}}{{end}}

@@ -433,3 +433,75 @@ func TestAgendaAlert(t *testing.T) {
 		t.Fatalf("con los avisos de la agenda apagados se sigue preguntando: %d", calls)
 	}
 }
+
+func TestCarteraAlert(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	bot := &fakeBot{}
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m tgMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		bot.mu.Lock()
+		bot.sent = append(bot.sent, m)
+		bot.mu.Unlock()
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+	g.alerts.telegramAPI = tg.URL
+	writeEnvFile(g.assistantPath("claves.env"), map[string]string{"TELEGRAM_TOKEN": "123:abc", "TELEGRAM_USER_ID": "42"})
+	g.alerts.phone = func(context.Context) phoneStatus { return phoneStatus{} }
+	calls := 0
+	cartera := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/avisos" || r.Header.Get("X-Auth-User") != "ana" {
+			http.NotFound(w, r)
+			return
+		}
+		calls++
+		if calls > 1 {
+			w.Write([]byte(`[]`))
+			return
+		}
+		w.Write([]byte(`[{"tipo":"cartera","texto":"📈 BTC ha superado 70.000 €: ahora 70.250 € (+3,1 % hoy)"}]`))
+	}))
+	defer cartera.Close()
+	g.apps = map[string]appSpec{"cartera": {Name: "cartera", Port: portOf(t, cartera)}}
+	g.users.create("ana", "Ana", []string{"cartera"}, "usuario")
+	c := defaultAlerts()
+	if !c.Cartera.On {
+		t.Fatal("los avisos de la cartera deberían venir encendidos")
+	}
+	c.User, c.PublicURL, c.QuietFrom, c.QuietTo = "ana", "https://srv.example", "", ""
+	c.Apps.On, c.News.On = false, false
+	g.alerts.saveConfig(c)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, madrid)
+	g.checkAlerts(ctx, now)
+	got := bot.take()
+	if len(got) != 1 || got[0].Text != "📈 BTC ha superado 70.000 €: ahora 70.250 € (+3,1 % hoy)\nhttps://srv.example/cartera/" {
+		t.Fatalf("cartera: %+v", got)
+	}
+	if recent := g.alerts.recentAlerts(1); len(recent) != 1 || recent[0].Kind != "cartera" {
+		t.Fatalf("registro: %+v", recent)
+	}
+	c.Cartera.On = false
+	g.alerts.saveConfig(c)
+	g.checkAlerts(ctx, now.Add(time.Minute))
+	if calls != 1 {
+		t.Fatalf("con los avisos de la cartera apagados se sigue preguntando: %d", calls)
+	}
+	// Una configuración guardada antes de existir la cartera la trae encendida.
+	os.WriteFile(g.alerts.configPath, []byte(`{"enabled":true,"agenda":{"on":true}}`), 0o600)
+	if !g.alerts.config().Cartera.On {
+		t.Fatal("una configuración antigua apaga la cartera")
+	}
+	// Sin la app entre las de la cuenta, no se pregunta.
+	c.Cartera.On = true
+	g.alerts.saveConfig(c)
+	g.users.create("luis", "Luis", []string{"agenda"}, "usuario")
+	c.User = "luis"
+	g.alerts.saveConfig(c)
+	g.checkAlerts(ctx, now.Add(2*time.Minute))
+	if calls != 1 {
+		t.Fatalf("pregunta por una cuenta sin la app: %d", calls)
+	}
+}

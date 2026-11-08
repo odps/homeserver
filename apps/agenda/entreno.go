@@ -187,6 +187,13 @@ func (w *web) gymSyncPost(rw http.ResponseWriter, r *http.Request) {
 // gymToday pide a Entreno las líneas de hoy para el resumen de la mañana.
 // Si no responde, el resumen sale sin ellas.
 func gymToday(base string) func(ctx context.Context, owner string) ([]string, error) {
+	return appToday("entreno", base)
+}
+
+// appToday pide a otra app del servidor (Entreno, Cartera) sus líneas para
+// el resumen de la mañana, por POST /interno/hoy (el usuario va en el
+// cuerpo, no en la URL).
+func appToday(name, base string) func(ctx context.Context, owner string) ([]string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	return func(ctx context.Context, owner string) ([]string, error) {
 		body, _ := json.Marshal(map[string]string{"usuario": owner})
@@ -194,11 +201,11 @@ func gymToday(base string) func(ctx context.Context, owner string) ([]string, er
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("entreno no responde: %w", err)
+			return nil, fmt.Errorf("%s no responde: %w", name, err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("entreno: %s", resp.Status)
+			return nil, fmt.Errorf("%s: %s", name, resp.Status)
 		}
 		var out struct {
 			Lines []string `json:"lineas"`

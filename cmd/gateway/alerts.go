@@ -41,6 +41,9 @@ type alertsConfig struct {
 	Agenda struct {
 		On bool `json:"on"` // recordatorios y resumen de la mañana de la app Agenda
 	} `json:"agenda"`
+	Cartera struct {
+		On bool `json:"on"` // alertas de precios de la app Cartera
+	} `json:"cartera"`
 	Chapters struct {
 		On        bool   `json:"on"`
 		Favorites bool   `json:"favorites"` // solo series favoritas
@@ -87,6 +90,7 @@ func defaultAlerts() alertsConfig {
 	c.Chapters.On, c.Chapters.DailyAt = true, "20:00"
 	c.News.On, c.News.At, c.News.PerSection = true, "07:30", 3
 	c.Agenda.On = true
+	c.Cartera.On = true
 	c.Deploys.Failed = true
 	c.Network.On, c.Network.MinMinutes = true, 3
 	c.Battery.On, c.Battery.Low, c.Battery.High, c.Battery.Unplugged = true, 25, 90, true
@@ -232,6 +236,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 		g.alertBackups(c, &s, now, add)
 		g.alertNews(ctx, c, &s, now, add)
 		g.alertAgenda(ctx, c, add)
+		g.alertCartera(ctx, c, add)
 		if now.Sub(a.chaptersAt) >= 10*time.Minute {
 			a.chaptersAt = now
 			g.alertChapters(ctx, c, &s, add)
@@ -440,12 +445,46 @@ func (g *gateway) alertNews(ctx context.Context, c alertsConfig, s *alertsState,
 // elegida: los recordatorios de eventos y tareas y el resumen de la mañana
 // (la hora y el contenido se ajustan en la propia app).
 func (g *gateway) alertAgenda(ctx context.Context, c alertsConfig, add func(kind, text string)) {
-	app, ok := g.apps["agenda"]
-	if !ok || !c.Agenda.On || c.User == "" {
+	if !c.Agenda.On {
+		return
+	}
+	g.alertApp(ctx, c, "agenda", func(n appNotice) string {
+		if n.Kind == "resumen" && c.PublicURL != "" {
+			return n.Text + "\n\nTu agenda: " + c.PublicURL + "/agenda/"
+		}
+		return n.Text
+	}, add)
+}
+
+// alertCartera recoge las alertas de precios que han saltado en la app
+// Cartera (se crean en la propia app o con Talia), con el enlace a ella.
+func (g *gateway) alertCartera(ctx context.Context, c alertsConfig, add func(kind, text string)) {
+	if !c.Cartera.On {
+		return
+	}
+	g.alertApp(ctx, c, "cartera", func(n appNotice) string {
+		if c.PublicURL != "" {
+			return n.Text + "\n" + c.PublicURL + "/cartera/"
+		}
+		return n.Text
+	}, add)
+}
+
+// appNotice es un aviso que una app tiene preparado en GET /api/avisos.
+type appNotice struct {
+	Kind string `json:"tipo"`
+	Text string `json:"texto"`
+}
+
+// alertApp recoge los avisos pendientes de una app para la cuenta elegida
+// (la app los da por entregados al devolverlos); text pone el texto final.
+func (g *gateway) alertApp(ctx context.Context, c alertsConfig, name string, text func(appNotice) string, add func(kind, text string)) {
+	app, ok := g.apps[name]
+	if !ok || c.User == "" {
 		return
 	}
 	u, ok := g.users.get(c.User)
-	if !ok || !u.allows("agenda") {
+	if !ok || !u.allows(name) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -457,22 +496,16 @@ func (g *gateway) alertAgenda(ctx context.Context, c alertsConfig, add func(kind
 		return
 	}
 	defer resp.Body.Close()
-	var list []struct {
-		Kind string `json:"tipo"`
-		Text string `json:"texto"`
-	}
+	var list []appNotice
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&list) != nil {
 		return
 	}
 	for _, n := range list {
-		text := n.Text
-		if r := []rune(text); len(r) > 3800 {
-			text = strings.TrimSpace(string(r[:3800])) + "\n…"
+		// Telegram admite unos 4000 caracteres por mensaje.
+		if r := []rune(n.Text); len(r) > 3800 {
+			n.Text = strings.TrimSpace(string(r[:3800])) + "\n…"
 		}
-		if n.Kind == "resumen" && c.PublicURL != "" {
-			text += "\n\nTu agenda: " + c.PublicURL + "/agenda/"
-		}
-		add("agenda", text)
+		add(name, text(n))
 	}
 }
 

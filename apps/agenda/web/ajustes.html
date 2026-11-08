@@ -14,6 +14,7 @@
     <p>Llegan por Telegram a través del bot del homeserver. Para recibirlos, los avisos de la agenda tienen que estar activados también en el panel del homeserver.</p></header>
   <label class="switch"><input type="checkbox" name="resumen" value="1"{{if .Prefs.SummaryOn}} checked{{end}}><span class="switch-name">Resumen de la mañana por Telegram</span><span class="meta">Eventos y tareas del día, y el correo</span></label>
   <label class="switch"><input type="checkbox" name="resumen_ia" value="1"{{if .Prefs.SummaryAI}} checked{{end}}><span class="switch-name">Con lo importante del correo resumido por la IA</span><span class="meta">Si no, solo remitentes y asuntos</span></label>
+  <label class="switch"><input type="checkbox" name="resumen_cartera" value="1"{{if not .Prefs.NoWallet}} checked{{end}}><span class="switch-name">Con tu cartera de inversión</span><span class="meta">El valor y cuánto ha cambiado, si usas la app Cartera</span></label>
   <label class="switch"><input type="checkbox" name="avisos" value="1"{{if .Prefs.RemindersOn}} checked{{end}}><span class="switch-name">Avisos de eventos y tareas por Telegram</span><span class="meta">Con la antelación de cada uno</span></label>
   <div class="pair">
     <label class="field">Hora del resumen

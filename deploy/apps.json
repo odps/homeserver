@@ -7,7 +7,8 @@
     { "name": "agenda", "port": 8105, "title": "Agenda" },
     { "name": "entreno", "port": 8106, "max_upload_mb": 5, "title": "Entreno" },
     { "name": "papeles", "port": 8107, "max_upload_mb": 20, "title": "Papeles" },
-    { "name": "compra", "port": 8108, "title": "Compra" }
+    { "name": "compra", "port": 8108, "title": "Compra" },
+    { "name": "cartera", "port": 8109, "title": "Cartera" }
   ],
   "services": ["netwatch", "gateway", "tailscale_web"]
 }

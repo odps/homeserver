@@ -1,0 +1,109 @@
+{{define "alertform"}}<form class="panel form" method="post" action="{{.Base}}/alertas/nueva" id="nueva-alerta">
+  {{if .Asset}}<input type="hidden" name="activo" value="{{.Asset.ID}}"><input type="hidden" name="desde" value="ficha">{{else}}
+  <label class="field">De qué<select name="activo">{{range .AssetOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>{{end}}
+  <div class="form-grid">
+    <label class="field">Cuándo<select name="tipo">{{range .AlertKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Umbral <span class="help">{{if .Asset}}precio en {{.AForm.Currency}} o %{{else}}€ o %{{end}}</span><input name="umbral" value="{{.AForm.Threshold}}" inputmode="decimal" autocomplete="off" required></label>
+    <label class="field">Días <span class="help">solo para la caída desde el máximo</span><input name="dias" value="{{.AForm.Days}}" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  {{if not .Asset}}<p class="help">Para toda la cartera valen «valor por encima», «valor por debajo» (en euros) y la variación del día.</p>{{end}}
+  <fieldset class="choice">
+    <legend class="vh">Cuántas veces</legend>
+    <label><input type="radio" name="repetir" value="0"{{if not .AForm.Repeat}} checked{{end}}> Una vez <span class="help">se apaga al saltar</span></label>
+    <label><input type="radio" name="repetir" value="1"{{if .AForm.Repeat}} checked{{end}}> Cada vez que cruce <span class="help">no se repite hasta que vuelva al otro lado</span></label>
+  </fieldset>
+  <div class="actions"><button class="btn primary">Crear alerta</button></div>
+  <p class="help">Llega por Telegram (si los avisos de Cartera están activados en el panel del homeserver).</p>
+</form>{{end}}
+
+{{define "activo.html"}}{{template "head" .}}
+{{$a := .Asset}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/activos">Activos</a></p>
+  <h1 class="date">{{$a.Symbol}}</h1>
+  <div class="hero-meta">
+    <span>{{$a.Name}}</span><span>{{$a.Kind}}</span>{{with $a.ISIN}}<span class="tnum">{{.}}</span>{{end}}
+  </div>
+  {{if $a.Price}}
+  <p class="price-line tnum"><strong>{{$a.Price}}</strong>{{with $a.DayPct}} <span class="chg {{$a.DayClass}}">{{.}} hoy</span>{{end}}</p>
+  <p class="help">{{$a.PriceFrom}}{{with $a.PriceAt}}, {{.}}{{end}}</p>
+  {{else}}
+  <p class="help">Aún sin precio{{if eq $a.SourceKey "manual"}}: ponlo a mano abajo{{else}}: llegará en la próxima actualización{{end}}.</p>
+  {{end}}
+</section>
+
+{{if $a.Held}}
+<section class="stats" aria-label="Tu posición">
+  <div class="stat"><span class="stat-label">Tienes</span><span class="stat-value tnum">{{$a.Qty}}</span><span class="stat-meta">{{range $i, $p := $a.Platforms}}{{if $i}} · {{end}}{{$p}}{{end}}</span></div>
+  <div class="stat"><span class="stat-label">Valor</span><span class="stat-value tnum">{{if $a.Value}}{{$a.Value}}{{else}}—{{end}}</span><span class="stat-meta tnum">coste {{$a.Cost}}</span></div>
+  <div class="stat"><span class="stat-label">Precio medio</span><span class="stat-value tnum">{{$a.Avg}}</span><span class="stat-meta tnum">{{with $a.AvgNative}}{{.}}{{else}}con comisiones{{end}}</span></div>
+  <div class="stat"><span class="stat-label">No realizada</span><span class="stat-value {{$a.GPClass}} tnum">{{if $a.GP}}{{$a.GP}}{{else}}—{{end}}</span><span class="stat-meta {{$a.GPClass}} tnum">{{$a.GPPct}}</span></div>
+</section>
+{{end}}
+<p class="mini-stats tnum">Realizada (FIFO): <strong>{{$a.Realized}}</strong> · Dividendos y recompensas: <strong>{{$a.Income}}</strong> · Comisiones sueltas: <strong>{{$a.Fees}}</strong></p>
+
+<div class="actions tight quick">
+  <a class="btn primary" href="{{.Base}}/operacion/nueva?activo={{$a.ID}}&amp;tipo=compra">Compra</a>
+  <a class="btn" href="{{.Base}}/operacion/nueva?activo={{$a.ID}}&amp;tipo=venta">Venta</a>
+  <a class="btn" href="{{.Base}}/operacion/nueva?activo={{$a.ID}}&amp;tipo={{if eq $a.KindKey "cripto"}}recompensa{{else}}dividendo{{end}}">{{if eq $a.KindKey "cripto"}}Recompensa{{else}}Dividendo{{end}}</a>
+  <a class="btn" href="{{.Base}}/operacion/nueva?activo={{$a.ID}}&amp;tipo=traspaso">Traspaso</a>
+</div>
+
+<section class="group">
+  <div class="group-head"><h2 class="label">Precio</h2>{{template "ranges" .}}</div>
+  {{with .Chart}}
+  <figure class="chart{{if .Down}} is-down{{end}}">
+    <figcaption class="legend">{{if .Marks}}<span class="key buy"></span>Compras <span class="key sell"></span>Ventas · {{end}}<span class="tnum">{{.Change}}</span></figcaption>
+    {{template "chart" .}}
+  </figure>
+  {{else}}
+  <p class="quiet">Aún no hay histórico{{if eq $a.SourceKey "manual"}}: los activos a mano no lo tienen{{else}}: se rellena al añadirlo y una vez al día{{end}}.</p>
+  {{end}}
+</section>
+
+<section class="group" id="operaciones">
+  <div class="group-head"><h2 class="label">Operaciones</h2><a class="btn small" href="{{.Base}}/operacion/nueva?activo={{$a.ID}}">+ Apuntar</a></div>
+  {{if .Ops}}{{template "oprows" .}}{{else}}<p class="quiet">Sin operaciones: {{if $a.Watch}}solo lo sigues{{else}}apunta la primera compra{{end}}.</p>{{end}}
+</section>
+
+<section class="group" id="alertas">
+  <h2 class="label">Alertas</h2>
+  {{if .Alerts}}{{template "alertrows" .}}{{end}}
+  <details class="fold"{{if .Error}} open{{end}}>
+    <summary>Nueva alerta de {{$a.Symbol}}</summary>
+    {{template "alertform" .}}
+  </details>
+</section>
+
+<details class="panel fold" id="editar">
+  <summary>Editar</summary>
+  <form method="post" action="{{.Base}}/activo/{{$a.ID}}">
+    <div class="form-grid">
+      <label class="field">Nombre<input name="nombre" value="{{$a.Name}}" maxlength="80" autocomplete="off"></label>
+      <label class="field">Tipo<select name="tipo">{{range .AssetKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <label class="field">ISIN <span class="help">opcional</span><input name="isin" value="{{$a.ISIN}}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <label class="field">Precio a mano <span class="help">en {{$a.Currency}}; {{if eq $a.SourceKey "manual"}}es su único precio{{else}}solo si la fuente falla{{end}}</span><input name="precio_manual" value="{{$a.Manual}}" inputmode="decimal" autocomplete="off"></label>
+    </div>
+    <label class="field">Nota<input name="nota" value="{{$a.Note}}" maxlength="300" autocomplete="off"></label>
+    <label class="check-line"><input type="checkbox" name="seguir" value="1"{{if $a.Watch}} checked{{end}}> En seguimiento</label>
+    <p class="help">Fuente: {{$a.Source}}{{with $a.SourceID}} ({{.}}){{end}} · moneda {{$a.Currency}}.</p>
+    <div class="actions"><button class="btn primary">Guardar</button></div>
+  </form>
+</details>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/activo/{{$a.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar {{$a.Symbol}}?</strong> Se borran también todas sus operaciones, su histórico y sus alertas. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo todo</button>
+    <a class="btn ghost" href="{{.Base}}/activo/{{$a.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Ya no quieres este activo en la cartera?</p>
+  <a class="btn danger small" href="{{.Base}}/activo/{{$a.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

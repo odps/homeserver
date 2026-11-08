@@ -1,0 +1,63 @@
+{{define "operacion.html"}}{{template "head" .}}
+{{$f := .OpForm}}
+<section class="hero compact">
+  <p class="eyebrow">{{if $f.AssetSymbol}}<a href="{{.Base}}/activo/{{$f.AssetID}}">{{$f.AssetSymbol}}</a>{{else}}<a href="{{.Base}}/operaciones">Operaciones</a>{{end}}</p>
+  <h1 class="date">{{.Title}}</h1>
+  {{if eq $f.Origin "asistente"}}<div class="hero-meta"><span>Apuntada por Talia</span></div>{{end}}
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/operacion/{{if $f.ID}}{{$f.ID}}{{else}}nueva{{end}}">
+  <div class="form-grid">
+    <label class="field">Tipo<select name="tipo">{{range .OpKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Activo<select name="activo">{{range .AssetOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Fecha<input type="date" name="fecha" value="{{$f.Day}}" required></label>
+    <label class="field">Hora <span class="help">opcional, ordena las del mismo día</span><input type="time" name="hora" value="{{$f.Time}}"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Cantidad <span class="help">unidades</span><input name="cantidad" value="{{$f.Qty}}" inputmode="decimal" autocomplete="off" placeholder="0,05"></label>
+    <label class="field">Precio por unidad<input name="precio" value="{{$f.Price}}" inputmode="decimal" autocomplete="off"></label>
+    <label class="field">Importe total <span class="help">si no sabes el precio; en dividendos, el bruto</span><input name="total" value="{{$f.Total}}" inputmode="decimal" autocomplete="off"></label>
+    <label class="field">Comisión <span class="help">en dividendos, la retención</span><input name="comision" value="{{$f.Fee}}" inputmode="decimal" autocomplete="off"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Moneda <span class="help">vacía: la del activo</span><input name="moneda" value="{{$f.Currency}}" maxlength="3" autocomplete="off" autocapitalize="characters" placeholder="EUR"></label>
+    <label class="field">Plataforma<input name="plataforma" value="{{$f.Platform}}" list="plataformas" maxlength="40" autocomplete="off"></label>
+    <label class="field">Destino <span class="help">solo en traspasos</span><input name="destino" value="{{$f.To}}" list="plataformas" maxlength="40" autocomplete="off"></label>
+  </div>
+  <datalist id="plataformas">{{range .Platforms}}<option value="{{.}}"></option>{{end}}</datalist>
+  <label class="field">Nota<input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+  <details class="fold how">
+    <summary>Qué poner en cada tipo</summary>
+    <ul class="help-list">
+      <li><strong>Compra y venta</strong>: cantidad y precio por unidad (o el importe total), y la comisión.</li>
+      <li><strong>Recompensa o staking</strong>: la cantidad recibida. Su valor de mercado de ese día lo pone la app si tiene el histórico; si no, ponlo tú.</li>
+      <li><strong>Dividendo</strong>: el importe bruto y, en comisión, la retención.</li>
+      <li><strong>Traspaso</strong>: la cantidad, la plataforma de origen y la de destino. No cambia el coste.</li>
+      <li><strong>Comisión</strong>: el importe; si se cobró en unidades del activo (la red al sacar una cripto), en cantidad. Sin activo, es una comisión general de la plataforma.</li>
+    </ul>
+    <p class="help">Los decimales, con coma (0,05); en la cantidad vale también el punto (0.05). En los precios e importes, los miles se pueden separar con punto (70.000). Todo se pasa a euros con el cambio del BCE del día de la operación.</p>
+  </details>
+  <div class="actions">
+    <button class="btn primary big">{{if $f.ID}}Guardar{{else}}Apuntar{{end}}</button>
+    <a class="btn ghost" href="{{.Base}}/{{if $f.AssetID}}activo/{{$f.AssetID}}{{else}}operaciones{{end}}">Cancelar</a>
+  </div>
+</form>
+
+{{if $f.ID}}
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/operacion/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar esta operación?</strong> Cambian las cuentas del activo. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarla</button>
+    <a class="btn ghost" href="{{.Base}}/operacion/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Está mal o sobra?</p>
+  <a class="btn danger small" href="{{.Base}}/operacion/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{end}}
+{{template "foot" .}}{{end}}

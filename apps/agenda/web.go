@@ -816,6 +816,7 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 	p.SummaryOn = r.FormValue("resumen") != ""
 	p.SummaryAI = r.FormValue("resumen_ia") != ""
 	p.RemindersOn = r.FormValue("avisos") != ""
+	p.NoWallet = r.FormValue("resumen_cartera") == ""
 	if at := r.FormValue("resumen_hora"); at != "" {
 		if _, err := time.Parse("15:04", at); err != nil {
 			w.settingsPage(rw, r, who, "Hora del resumen no válida.")

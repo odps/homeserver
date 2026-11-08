@@ -1,0 +1,90 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Cartera</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Cartera, resumen"><span class="mark" aria-hidden="true"></span>Cartera</a>
+    <nav class="tabs" aria-label="Secciones de Cartera">
+      <a href="{{.Base}}/"{{if eq .Tab "resumen"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M5.5 15.5l4.5-5 3.5 3 6-7"/></svg><span>Resumen</span></a>
+      <a href="{{.Base}}/activos"{{if eq .Tab "activos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></svg><span>Activos</span></a>
+      <a href="{{.Base}}/operaciones"{{if eq .Tab "operaciones"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h13.5l-3.5-3.5"/><path d="M19 16H5.5L9 19.5"/></svg><span>Operaciones</span></a>
+      <a href="{{.Base}}/alertas"{{if eq .Tab "alertas"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 16.5v-5a5.5 5.5 0 0 1 11 0v5l1.5 2h-14z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Alertas</span></a>
+      <a href="{{.Base}}/seguimiento"{{if eq .Tab "seguimiento"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg><span>Seguimiento</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tu cartera, cifrada en tu servidor. Solo datos: ni opera ni recomienda.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "ranges"}}<nav class="ranges" aria-label="Periodo">{{range .Ranges}}<a href="?r={{.Key}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
+
+{{define "chart"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}"{{if .Down}} class="down"{{end}}>
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      <polygon class="area" points="{{.Area}}"/>
+      {{with .Cost}}<polyline class="cost" points="{{.}}"/>{{end}}
+      <polyline class="line" points="{{.Line}}"/>
+      <circle class="last" cx="{{.LastX}}" cy="{{.LastY}}" r="4"/>
+      {{range .Marks}}<path class="mark {{if .Buy}}buy{{else}}sell{{end}}" d="{{.Path}}"><title>{{.Title}}</title></path>{{end}}
+    </svg>{{end}}
+
+{{define "shares"}}<ul class="shares">{{range .}}<li><span class="share-name">{{.Name}}</span><span class="share-pct tnum">{{.Pct}}</span><svg class="share-bar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="4" rx="2"/><rect class="fill" width="{{.W}}" height="4" rx="2"/></svg><span class="share-val tnum">{{.Value}}</span></li>{{end}}</ul>{{end}}
+
+{{define "oprows"}}<ul class="rows ops">
+  {{- /* recibe la página entera: usa .Ops y .Base */ -}}
+  {{range .Ops}}
+  <li class="row">
+    <a class="row-link" href="{{$.Base}}/operacion/{{.ID}}">
+      <span class="row-main"><span class="op-kind k-{{.KindKey}}">{{.Kind}}</span> <span class="row-title">{{.Symbol}}</span>{{with .Qty}} <span class="tnum">{{.}}</span>{{end}}{{with .Price}} <span class="muted">a</span> <span class="tnum">{{.}}</span>{{end}}</span>
+      <span class="row-side tnum">{{.Amount}}</span>
+      <span class="row-meta">{{.Day}}{{with .Platform}} · {{.}}{{end}}{{with .Extra}} · {{.}}{{end}}{{if .Talia}} · <span class="by">Talia</span>{{end}}{{with .Note}} · {{.}}{{end}}</span>
+    </a>
+  </li>
+  {{end}}
+</ul>{{end}}
+
+{{define "alertrows"}}<ul class="rows alerts">
+  {{- /* recibe la página entera: usa .Alerts, .Asset y .Base */ -}}
+  {{range .Alerts}}
+  <li class="row alert-row{{if not .Active}} off{{end}}">
+    <div class="row-body">
+      <span class="row-main">{{.Desc}}</span>
+      <span class="row-meta">{{if .Active}}{{if .Crossed}}Saltó {{.Fired}}: espera a que vuelva al otro lado{{else}}Activa{{end}}{{else}}Apagada{{with .Fired}} · saltó {{.}}{{end}}{{end}}</span>
+      {{with .Last}}<span class="row-meta last">{{.}}</span>{{end}}
+    </div>
+    <div class="row-actions">
+      <form method="post" action="{{$.Base}}/alerta/{{.ID}}/activar">
+        <input type="hidden" name="on" value="{{if .Active}}0{{else}}1{{end}}">
+        {{if $.Asset}}<input type="hidden" name="desde" value="ficha"><input type="hidden" name="activo" value="{{.AssetID}}">{{end}}
+        <button class="btn small">{{if .Active}}Apagar{{else}}Activar{{end}}</button>
+      </form>
+      <form method="post" action="{{$.Base}}/alerta/{{.ID}}/borrar">
+        {{if $.Asset}}<input type="hidden" name="desde" value="ficha"><input type="hidden" name="activo" value="{{.AssetID}}">{{end}}
+        <button class="btn small danger" aria-label="Borrar la alerta: {{.Desc}}">Borrar</button>
+      </form>
+    </div>
+  </li>
+  {{end}}
+</ul>{{end}}

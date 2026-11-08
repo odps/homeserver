@@ -1,0 +1,36 @@
+{{define "seguimiento.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Cartera</p>
+  <h1 class="date">Seguimiento</h1>
+  <p class="lead">Precios que quieres vigilar, los tengas o no.</p>
+</section>
+
+{{template "searchform" .}}
+{{template "results" .}}
+
+{{if .Watch}}
+<section class="group">
+  <ul class="rows">
+    {{range .Watch}}
+    <li class="row">
+      <a class="row-link" href="{{$.Base}}/activo/{{.ID}}">
+        <span class="row-main"><span class="row-title">{{.Symbol}}</span> <span class="muted">{{.Name}}</span></span>
+        <span class="row-side tnum">{{if .Price}}{{.Price}}{{else}}sin precio{{end}}</span>
+        <span class="row-meta">{{.Source}}{{if .Held}} · lo tienes{{end}}</span>
+        <span class="row-side2 tnum">{{if .DayPct}}<span class="chg {{.DayClass}}">{{.DayPct}} hoy</span>{{end}}{{if .Month}} <span class="chg {{.MonthClass}}">{{.Month}} 30 d</span>{{end}}</span>
+      </a>
+      <form class="row-actions" method="post" action="{{$.Base}}/seguimiento">
+        <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="seguir" value="0">
+        <button class="btn small ghost" aria-label="Dejar de seguir {{.Symbol}}">Quitar</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else if not .Searched}}
+<section class="empty">
+  <p class="big">No sigues nada aún.</p>
+  <p>Busca arriba un activo y pulsa «Seguir». Puedes ponerle alertas desde su ficha.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

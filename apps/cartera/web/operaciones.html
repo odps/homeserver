@@ -1,0 +1,28 @@
+{{define "operaciones.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Cartera</p>
+  <h1 class="date">Operaciones</h1>
+  <div class="hero-meta"><a class="btn primary small" href="{{.Base}}/operacion/nueva{{with .Filter}}?activo={{.}}{{end}}">+ Apuntar una operación</a></div>
+</section>
+
+{{if .AssetOpts}}
+<form class="filter" method="get" action="{{.Base}}/operaciones">
+  <label class="vh" for="activo">Solo de un activo</label>
+  <div class="add-row">
+    <select id="activo" name="activo"><option value="">Todos los activos</option>{{range .AssetOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+    <button class="btn">Ver</button>
+  </div>
+</form>
+{{end}}
+
+{{if .Ops}}
+<section class="group">
+  {{template "oprows" .}}
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Sin operaciones{{if .Filter}} de ese activo{{end}}.</p>
+  <p>Apunta cada compra, venta, dividendo, recompensa de staking, traspaso entre plataformas o comisión con su fecha: las cuentas (precio medio, ganancias por FIFO) salen de aquí.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

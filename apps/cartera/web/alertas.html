@@ -1,0 +1,23 @@
+{{define "alertas.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Cartera</p>
+  <h1 class="date">Alertas</h1>
+  <p class="lead">Te avisan por Telegram cuando un precio o tu cartera cruzan un umbral. Se comprueban cada vez que se actualizan los precios.</p>
+</section>
+
+{{if .Alerts}}
+<section class="group">
+  {{template "alertrows" .}}
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Sin alertas.</p>
+  <p>Por ejemplo: «BTC por encima de 70.000 €», «la cartera cae un 3 % en el día» o «un ETF cae un 10 % desde su máximo de 90 días».</p>
+</section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Nueva alerta</h2>
+  {{template "alertform" .}}
+</section>
+{{template "foot" .}}{{end}}

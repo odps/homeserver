@@ -1,0 +1,79 @@
+{{define "resumen.html"}}{{template "head" .}}
+{{$s := .Sum}}
+<section class="hero compact">
+  <p class="eyebrow">Cartera</p>
+  {{if $s.Held}}
+  <h1 class="big-value tnum">{{$s.Value}}</h1>
+  <div class="hero-meta">
+    {{if $s.HasDay}}<span class="chg {{$s.DayClass}} tnum">{{$s.DayChange}} ({{$s.DayPct}}) hoy</span>{{else}}<span>Sin variación hoy todavía</span>{{end}}
+    <span class="tnum">Invertido: {{$s.Cost}}</span>
+  </div>
+  {{else}}
+  <h1 class="date">Tu cartera</h1>
+  {{end}}
+</section>
+
+{{if $s.Held}}
+<section class="stats" aria-label="Ganancias y pérdidas">
+  <div class="stat"><span class="stat-label">No realizada</span><span class="stat-value {{$s.UClass}} tnum">{{$s.Unrealized}}</span><span class="stat-meta tnum {{$s.UClass}}">{{$s.UnrealPct}}</span></div>
+  <div class="stat"><span class="stat-label">Realizada (FIFO)</span><span class="stat-value {{$s.RClass}} tnum">{{$s.Realized}}</span><span class="stat-meta">por ventas</span></div>
+  <div class="stat"><span class="stat-label">Dividendos y recompensas</span><span class="stat-value tnum">{{$s.Income}}</span><span class="stat-meta">netos</span></div>
+  <div class="stat"><span class="stat-label">Total</span><span class="stat-value {{$s.TotalClass}} tnum">{{$s.Total}}</span><span class="stat-meta tnum">comisiones sueltas: {{$s.Fees}}</span></div>
+</section>
+
+{{range .Warnings}}<p class="note warn">{{.}}</p>{{end}}
+
+<section class="group">
+  <div class="group-head"><h2 class="label">Valor en el tiempo</h2>{{template "ranges" .}}</div>
+  {{with .Chart}}
+  <figure class="chart{{if .Down}} is-down{{end}}">
+    <figcaption class="legend"><span class="key value"></span>Valor <span class="key cost"></span>Invertido{{with .Change}} · <span class="tnum">{{.}}</span>{{end}}</figcaption>
+    {{template "chart" .}}
+  </figure>
+  {{else}}
+  <p class="quiet">Aún no hay bastantes días para dibujarlo.</p>
+  {{end}}
+</section>
+
+{{with .Positions}}
+<section class="group">
+  <h2 class="label">Posiciones</h2>
+  <ul class="rows">
+    {{range .}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/activo/{{.ID}}">
+      <span class="row-main"><span class="row-title">{{.Symbol}}</span> <span class="muted">{{.Name}}</span></span>
+      <span class="row-side tnum">{{if .NoPrice}}sin precio{{else}}{{.Value}}{{end}}</span>
+      <span class="row-meta tnum">{{.Qty}} · {{.Platforms}}</span>
+      <span class="row-side2 tnum">{{if .DayPct}}<span class="chg {{.DayClass}}">{{.DayPct}} hoy</span>{{else if .GP}}<span class="chg {{.GPClass}}">{{.GPPct}}</span>{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Reparto</h2>
+  <div class="split">
+    <div><h3 class="sub">Por tipo</h3>{{template "shares" $s.ByKind}}</div>
+    <div><h3 class="sub">Por plataforma</h3>{{template "shares" $s.ByPlatform}}</div>
+    <div><h3 class="sub">Por moneda</h3>{{template "shares" $s.ByCurrency}}</div>
+  </div>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no hay nada en la cartera.</p>
+  <p>Busca un activo (BTC, un ETF por su ISIN, una acción…) en <a href="{{.Base}}/activos">Activos</a>, añádelo y apunta tus compras. También puedes seguir precios sin tenerlos, en <a href="{{.Base}}/seguimiento">Seguimiento</a>.</p>
+  <p>Talia también puede apuntar operaciones y decirte cómo va.</p>
+</section>
+{{end}}
+
+{{with .Sources}}
+<section class="group sources">
+  <h2 class="label">Fuentes de precios</h2>
+  <ul class="rows compact">
+    {{range .}}<li class="row"><div class="row-body"><span class="row-main"><span class="dot {{if .OK}}ok{{else}}bad{{end}}" aria-hidden="true"></span>{{.Name}}</span>
+      <span class="row-meta">{{if .Pending}}Aún no se ha consultado{{else if .OK}}Al día: {{.Last}}{{else}}Falla: {{.Error}}{{with .Retry}}; {{.}}{{end}}. Última buena: {{.Last}}{{end}}</span></div></li>{{end}}
+  </ul>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
