@@ -149,6 +149,17 @@ func fakeLLM(t *testing.T) *httptest.Server {
 		switch {
 		case last.Role == "system" && strings.Contains(text, "no era válida"):
 			reply["content"] = "Corregido."
+		case last.Role == "system" && strings.Contains(text, "no has llamado a ninguna herramienta"):
+			// Lo apuntado sin herramienta se apunta; lo demás se repite.
+			prev, _ := req.Messages[len(req.Messages)-2].Content.(string)
+			if strings.Contains(prev, "sentadilla") {
+				call("notas_guardar", `{"texto":"sentadilla 3x5"}`)
+			} else {
+				reply["content"] = prev
+			}
+		case last.Role == "user" && strings.Contains(text, "sentadilla"):
+			// Copia el «apuntado» del historial sin llamar a nada (y hasta la marca).
+			reply["content"] = "Apuntado: sentadilla 3x5.\n[Herramientas: entreno_registrar]"
 		case last.Role == "tool":
 			reply["content"] = "Según tu biblioteca: " + text
 		case strings.Contains(text, "leyendo"):
@@ -333,6 +344,48 @@ func TestAgentConversation(t *testing.T) {
 	b, err := os.ReadFile(a.statusPath)
 	if err != nil || !strings.Contains(string(b), `"bot": "mibot"`) || !strings.Contains(string(b), "libros_leyendo") || strings.Contains(string(b), "gsk_prueba") {
 		t.Fatalf("estado: %v %s", err, b)
+	}
+}
+
+// Dice que ha apuntado algo sin llamar a ninguna herramienta: se le avisa una
+// vez y lo hace; el historial guarda qué herramientas se usaron.
+func TestClaimWithoutTools(t *testing.T) {
+	a, tgf, c := newTestAgent(t)
+	ctx := context.Background()
+	a.refresh(ctx, true)
+	tg := a.tg(c)
+	a.handle(ctx, tg, c, msg(42, "hoy he hecho sentadilla 3x5"))
+	if ns, _ := a.store.notes(ctx, "sentadilla", 5); len(ns) != 1 {
+		t.Fatalf("no se ha guardado: %+v", ns)
+	}
+	if got := tgf.last(); !strings.HasPrefix(got, "Según tu biblioteca") || strings.Contains(got, "[Herramientas") {
+		t.Fatalf("respuesta: %q", got)
+	}
+	h, _ := a.store.history(ctx, 42, 20)
+	if len(h) != 2 || !strings.HasSuffix(h[1].Content, "\n[Herramientas: notas_guardar]") {
+		t.Fatalf("historial: %+v", h)
+	}
+	// La marca que escriba el propio modelo no llega a la persona.
+	if out := stripToolsMark("Hola.\n[Herramientas: x]"); out != "Hola." {
+		t.Fatalf("marca: %q", out)
+	}
+}
+
+func TestClaimsAction(t *testing.T) {
+	for s, want := range map[string]bool{
+		"Apuntado: press banca 3x10.":         true,
+		"Los apunté en la app de Entreno.":    true,
+		"He añadido leche a la lista.":        true,
+		"Listo, guardado.":                    true,
+		"Evento creado para el jueves.":       true,
+		"¿Quieres que lo apunte?":             false,
+		"Te toca pierna: sentadilla y RDL.":   false,
+		"Hola, ¿qué tal?":                     false,
+		"Puedo apuntarlo si me dices el peso": false,
+	} {
+		if got := claimsAction(s); got != want {
+			t.Errorf("%q: %v", s, got)
+		}
 	}
 }
 

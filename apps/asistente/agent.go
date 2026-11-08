@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -338,7 +340,7 @@ func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int
 	// (seudonimos.go); a la persona, con el dato real.
 	p := newPseudonyms(a.store, chat, false)
 	hidden := p.hideText(ctx, text)
-	reply, err := a.answer(ctx, c, chat, hidden, p, parts)
+	reply, used, err := a.answer(ctx, c, chat, hidden, p, parts)
 	close(done)
 	var opts []string
 	if err != nil {
@@ -350,6 +352,7 @@ func (a *agent) respondWith(ctx context.Context, tg telegram, c config, chat int
 		if len(opts) > 0 {
 			saved += "\n(Opciones: " + strings.Join(opts, " | ") + ")"
 		}
+		saved += toolsMark(used)
 		user := hidden
 		if label != "" {
 			user = label + " " + hidden
@@ -432,6 +435,7 @@ Cómo trabajas:
 - Si te mandan una foto o un PDF (una cita, un ticket, una factura, una carta), di en pocas líneas qué es y ofrece apuntar lo útil: la cita en la agenda, el plazo como tarea, el dato como nota. No apuntes nada sin que la persona lo confirme.
 - Ajustes de cada app (resumen y avisos de la agenda, noticias, lectura…): usa sus herramientas *_ajustes_ver y *_ajustes_cambiar, y cambia solo lo que haya pedido. Las cuentas, claves y contraseñas no se tocan desde aquí: se configuran en la web.
 - Para la dirección o el teléfono de alguien, contactos_buscar; para ir a un sitio, el enlace «ruta» del evento o mapa_ruta.
+- Solo has apuntado, guardado, cambiado o borrado algo si en este mismo mensaje has llamado a su herramienta y ha respondido bien. Lo que diga la conversación anterior no cuenta: si te preguntan por datos de las apps, consúltalos con las herramientas. En el historial, tus respuestas llevan al final «[Herramientas: …]» con las que usaste; si no lo llevan, no usaste ninguna. Esa marca la pone el programa: no la escribas tú.
 - Escribes en un chat: texto plano, sin Markdown. Nada de tablas, títulos, negritas, cursivas ni enlaces entre corchetes; si das un enlace, pon la dirección tal cual. Para enumerar, una línea por elemento empezando por «• ». Respuestas breves y fáciles de leer en el móvil.`
 }
 
@@ -461,20 +465,21 @@ func nextDays(now time.Time) string {
 }
 
 // answer resuelve un mensaje con el modelo y las herramientas.
-func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p *pseudonyms, parts []map[string]any) (string, error) {
+// Devuelve también las herramientas que ha usado.
+func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p *pseudonyms, parts []map[string]any) (string, []string, error) {
 	if c.BaseURL == "" || c.APIKey == "" {
-		return "", errors.New("falta configurar el modelo en el panel")
+		return "", nil, errors.New("falta configurar el modelo en el panel")
 	}
-	used, err := a.store.today(ctx)
+	requests, err := a.store.today(ctx)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if used >= c.DailyLimit {
-		return "", fmt.Errorf("he llegado al límite de %d peticiones de hoy (se puede cambiar en el panel)", c.DailyLimit)
+	if requests >= c.DailyLimit {
+		return "", nil, fmt.Errorf("he llegado al límite de %d peticiones de hoy (se puede cambiar en el panel)", c.DailyLimit)
 	}
 	l := a.llm(c)
 	if l.model == "" {
-		return "", errors.New("no hay modelo elegido: revisa el panel")
+		return "", nil, errors.New("no hay modelo elegido: revisa el panel")
 	}
 	a.mu.Lock()
 	tools := a.tools
@@ -487,7 +492,7 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 	}
 	hist, err := a.store.history(ctx, chat, historyTurns)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	msgs := []chatMessage{{Role: "system", Content: systemPrompt(c, time.Now())}}
 	for _, h := range hist {
@@ -500,11 +505,12 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	fixed := false
+	fixed, nudged := false, false
+	var used []string
 	for round := 0; round < maxRounds; round++ {
 		if round > 0 {
-			if used, _ := a.store.today(ctx); used >= c.DailyLimit {
-				return "", fmt.Errorf("he llegado al límite de %d peticiones de hoy", c.DailyLimit)
+			if n, _ := a.store.today(ctx); n >= c.DailyLimit {
+				return "", nil, fmt.Errorf("he llegado al límite de %d peticiones de hoy", c.DailyLimit)
 			}
 		}
 		// En la última vuelta ya no hay más herramientas: contesta con lo que tenga.
@@ -524,14 +530,23 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 			continue
 		}
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if len(reply.ToolCalls) == 0 || choice == "none" {
-			out := strings.TrimSpace(l.text(reply))
+			out := stripToolsMark(l.text(reply))
+			// Dice que ha hecho algo sin haber llamado a ninguna herramienta
+			// (copia el «apuntado» de turnos anteriores): una vez por mensaje
+			// se le avisa y lo vuelve a intentar.
+			if len(used) == 0 && !nudged && choice != "none" && claimsAction(out) {
+				nudged = true
+				a.log.Warn("dice que ha hecho algo sin usar herramientas")
+				msgs = append(msgs, chatMessage{Role: "assistant", Content: out}, chatMessage{Role: "system", Content: nudgeNoTools})
+				continue
+			}
 			if out == "" {
 				out = "(sin respuesta)"
 			}
-			return out, nil
+			return out, used, nil
 		}
 		if reply.Content == "" {
 			reply.Content = nil
@@ -539,10 +554,44 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 		msgs = append(msgs, chatMessage{Role: "assistant", Content: reply.Content, ToolCalls: reply.ToolCalls})
 		for _, call := range reply.ToolCalls {
 			a.log.Info("herramienta", "nombre", call.Function.Name)
+			if !slices.Contains(used, call.Function.Name) {
+				used = append(used, call.Function.Name)
+			}
 			real := call // la herramienta recibe los datos reales; el modelo, las etiquetas
 			real.Function.Arguments = p.revealJSON(ctx, call.Function.Arguments)
 			msgs = append(msgs, chatMessage{Role: "tool", ToolCallID: call.ID, Content: p.hideJSON(ctx, a.runTool(ctx, byName, real))})
 		}
 	}
-	return "", errors.New("la pregunta necesitaba demasiados pasos; prueba a concretarla")
+	return "", nil, errors.New("la pregunta necesitaba demasiados pasos; prueba a concretarla")
+}
+
+// nudgeNoTools es el aviso cuando dice que ha hecho algo sin herramientas.
+const nudgeNoTools = "En este mensaje no has llamado a ninguna herramienta: no se ha apuntado, guardado, cambiado ni consultado nada. " +
+	"Si la persona te ha pedido apuntar, guardar o cambiar algo, llama ahora a la herramienta que corresponda. " +
+	"Si te pregunta por sus datos, consúltalos con las herramientas en vez de fiarte de la conversación. " +
+	"Si no hacía falta ninguna herramienta, responde sin decir que has hecho nada."
+
+// reClaim encuentra frases en las que dice haber hecho algo: «apuntado»,
+// «lo guardé», «añadidos», «borré»… (el \b de Go no entiende de acentos).
+var reClaim = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(?:(?:apunt|anot|guard|registr|tach|borr|cambi|program|quit|cre)(?:é|ad[oa]s?)|añad(?:í|id[oa]s?)|actualic[eé]|actualizad[oa]s?|marqu[eé]|marcad[oa]s?)(?:[^\p{L}]|$)`)
+
+// claimsAction dice si la respuesta afirma haber hecho algo.
+func claimsAction(s string) bool { return reClaim.MatchString(s) }
+
+// reToolsMark es la marca de herramientas del historial, al final del texto.
+var reToolsMark = regexp.MustCompile(`\s*\[Herramientas:[^\]\n]*\]\s*$`)
+
+// toolsMark es la marca que se guarda en el historial tras la respuesta. El
+// historial solo guarda texto: sin ella, el modelo ve «apuntado» en turnos
+// anteriores sin llamada a herramienta y lo copia sin apuntar nada.
+func toolsMark(used []string) string {
+	if len(used) == 0 {
+		return ""
+	}
+	return "\n[Herramientas: " + strings.Join(used, ", ") + "]"
+}
+
+// stripToolsMark quita la marca si el modelo la escribe él mismo.
+func stripToolsMark(s string) string {
+	return strings.TrimSpace(reToolsMark.ReplaceAllString(strings.TrimSpace(s), ""))
 }
