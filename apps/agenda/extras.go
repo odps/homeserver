@@ -29,7 +29,7 @@ var extraApps = []struct {
 	{"casa", "🏠 CASA", "Con el precio de la luz y la casa", "Las horas más baratas de la luz y el mantenimiento pendiente, si usas la app Casa", 8111},
 	{"coche", "🚗 COCHE", "Con el mantenimiento del coche", "Solo si hay algo pendiente, si usas la app Coche", 8112},
 	{"series", "📺 SERIES", "Con los estrenos de tus series", "Los episodios que se estrenan hoy, si usas la app Series y pelis", 8115},
-	{"leer", "📖 PARA LEER", "Con tus lecturas pendientes", "Cuántos artículos tienes guardados y una sugerencia, si usas Leer después", 8114},
+	{"leer", "📚 LEER DESPUÉS", "Con tus lecturas pendientes", "Cuántos artículos tienes guardados y una sugerencia, si usas Leer después", 8114},
 }
 
 // newExtras prepara las secciones; <APP>_URL cambia la dirección de cada app.
