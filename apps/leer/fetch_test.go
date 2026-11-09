@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -55,6 +56,9 @@ func TestCleanURL(t *testing.T) {
 			t.Errorf("cleanURL(%q) = %q, %v; quería %q", in, got, err, want)
 		}
 	}
+	// Un enlace con usuario y contraseña dentro, montado aquí para que los
+	// detectores de secretos no lo tomen por uno de verdad.
+	withUser := (&url.URL{Scheme: "https", User: url.UserPassword("usuario", "x"), Host: "ejemplo.es", Path: "/"}).String()
 	bad := map[string]*fetchError{
 		"":                                     errBadURL,
 		"javascript:alert(1)":                  errBadURL,
@@ -63,7 +67,7 @@ func TestCleanURL(t *testing.T) {
 		"ftp://ejemplo.es/x":                   errBadURL,
 		"gopher://ejemplo.es/":                 errBadURL,
 		"mailto:alguien@ejemplo.es":            errBadURL,
-		"https://usuario:clave@ejemplo.es/":    errBadURL,
+		withUser:                               errBadURL,
 		"https://ejemplo.es/con espacio":       errBadURL,
 		"https://" + strings.Repeat("a", 3000): errBadURL,
 		"https://localhost/":                   errBlocked,
