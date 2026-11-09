@@ -1,0 +1,67 @@
+{{define "lecturas.html"}}{{template "head" .}}
+{{$m := .Meter}}
+<section class="hero compact">
+  <p class="eyebrow">Contadores</p>
+  <h1 class="date">Lecturas</h1>
+  <nav class="ranges meters" aria-label="Contador">{{range .MeterTabs}}<a href="?c={{.Key}}"{{if .On}} aria-current="true"{{end}}><span aria-hidden="true">{{.Emoji}}</span> {{.Label}}</a>{{end}}</nav>
+</section>
+
+{{with $m}}
+{{if .HasLast}}
+<section class="stats" aria-label="Consumo de {{.Label}}">
+  <div class="stat"><span class="stat-label">Última lectura</span><span class="stat-value tnum">{{.Last}}</span><span class="stat-meta">{{.LastDay}}</span></div>
+  {{if .HasUse}}<div class="stat"><span class="stat-label">Desde la anterior</span><span class="stat-value tnum">{{.LastUse}}</span><span class="stat-meta tnum">{{.LastPerDay}} al día · {{.LastSpan}}</span></div>{{end}}
+  {{if .HasAvg}}<div class="stat"><span class="stat-label">Media diaria (último año)</span><span class="stat-value tnum">{{.AvgDay}}</span><span class="stat-meta tnum">{{.YearUsed}} en {{.AvgDays}}</span></div>{{end}}
+</section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Consumo al día entre lecturas</h2>
+  {{with .Chart}}
+  <figure class="chart">
+    <figcaption class="legend">Cada barra va de una lectura a la siguiente; su altura es la media de {{$m.Unit}} al día.</figcaption>
+    {{template "bars" .}}
+  </figure>
+  {{else}}
+  <p class="quiet">Con dos lecturas de {{.Label}} ya sale lo gastado al día. Apunta lo que marca el contador de vez en cuando (por ejemplo, el día 1 de cada mes).</p>
+  {{end}}
+</section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Apuntar una lectura</h2>
+  <form class="panel" method="post" action="{{.Base}}/lecturas/nueva">
+    <div class="form-grid">
+      <label class="field">Contador<select name="contador">{{range .MeterOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <label class="field">Fecha<input type="date" name="fecha" value="{{.RForm.Day}}" required></label>
+      <label class="field">Lectura{{with $m}} <span class="help">({{.Unit}})</span>{{end}}<input name="valor" value="{{.RForm.Value}}" inputmode="decimal" required placeholder="12345,6"></label>
+    </div>
+    <label class="field">Nota <span class="help">(opcional)</span><input name="nota" value="{{.RForm.Note}}" maxlength="200"></label>
+    <div class="actions"><button class="btn primary">Apuntar</button></div>
+    <p class="help">Si ya hay una lectura de ese contador ese día, se sustituye.</p>
+  </form>
+</section>
+
+{{with $m}}{{with .Rows}}
+<section class="group">
+  <h2 class="label">Lecturas de {{$m.Label}}</h2>
+  <ul class="rows readings">
+    {{range .}}
+    <li class="row">
+      <div class="row-body">
+        <span class="row-main"><span class="row-title tnum">{{.Value}} {{$m.Unit}}</span></span>
+        <span class="row-meta">{{.Day}}{{if .Reset}} · la lectura baja: ¿contador nuevo?{{else if .Used}} · <span class="tnum">{{.Used}} {{$m.Unit}} ({{.PerDay}} al día)</span>{{else if .First}} · la primera{{end}}{{with .Note}} · {{.}}{{end}}</span>
+      </div>
+      <div class="row-actions">
+        <form method="post" action="{{$.Base}}/lectura/{{.ID}}/borrar">
+          <input type="hidden" name="contador" value="{{$m.Key}}">
+          <button class="btn small danger" aria-label="Borrar la lectura del {{.Day}}">Borrar</button>
+        </form>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{with $m.More}}<p class="quiet">Y {{.}} más antiguas.</p>{{end}}
+</section>
+{{end}}{{end}}
+{{template "foot" .}}{{end}}

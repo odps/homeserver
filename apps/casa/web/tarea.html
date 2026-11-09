@@ -1,0 +1,54 @@
+{{define "tarea.html"}}{{template "head" .}}
+{{$t := .Task}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/mantenimiento">Mantenimiento</a></p>
+  <h1 class="date">{{$t.Name}}</h1>
+  <div class="hero-meta">
+    <span class="chip st-{{$t.State}}">{{$t.StateName}}</span>
+    <span>{{$t.When}}</span>
+    <span>{{$t.Every}}</span>
+  </div>
+  {{with $t.Note}}<p class="lead">{{.}}</p>{{end}}
+</section>
+
+<section class="group">
+  <h2 class="label">Hecha</h2>
+  <div class="panel">
+    <div class="done-forms">
+      <form method="post" action="{{.Base}}/tarea/{{$t.ID}}/hecho">
+        <button class="btn primary big">Hecha hoy</button>
+      </form>
+      <form method="post" action="{{.Base}}/tarea/{{$t.ID}}/hecho" class="add-row">
+        <label class="field"><span class="vh">Fecha en que se hizo</span><input type="date" name="fecha" required></label>
+        <button class="btn">Hecha ese día</button>
+      </form>
+    </div>
+    <p class="help">La próxima vez se calcula desde la última: {{$t.Every}}.</p>
+  </div>
+  {{with $t.Done}}
+  <h3 class="sub">Últimas veces</h3>
+  <ul class="rows compact">{{range .}}<li class="row"><div class="row-body"><span class="row-main">{{.}}</span></div></li>{{end}}</ul>
+  {{end}}
+</section>
+
+<section class="group">
+  <h2 class="label">Editar</h2>
+  <form class="panel" method="post" action="{{.Base}}/tarea/{{$t.ID}}">
+    {{template "taskform" .}}
+    <div class="actions"><button class="btn primary">Guardar</button></div>
+  </form>
+</section>
+
+{{if .Confirm}}
+<section class="dangerzone confirm" id="borrar">
+  <p>¿Borrar «{{$t.Name}}»? Se pierde también su historial.</p>
+  <form method="post" action="{{.Base}}/tarea/{{$t.ID}}/borrar"><input type="hidden" name="confirmar" value="1"><button class="btn danger">Sí, borrar</button></form>
+  <a class="btn ghost" href="{{.Base}}/tarea/{{$t.ID}}">No</a>
+</section>
+{{else}}
+<section class="dangerzone" id="borrar">
+  <p>Si ya no tienes que hacerla, puedes borrarla.</p>
+  <form method="post" action="{{.Base}}/tarea/{{$t.ID}}/borrar"><button class="btn danger">Borrar…</button></form>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
