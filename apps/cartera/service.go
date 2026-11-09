@@ -518,28 +518,42 @@ func (s *service) updateOp(ctx context.Context, owner string, id int64, in opInp
 // ---- Resumen de la mañana ----
 
 // todayLines son las líneas de la cartera para el resumen de la mañana de la
-// Agenda: el valor y cuánto ha cambiado desde ayer y en 7 días. Sin nada en
-// cartera, ninguna.
+// Agenda: el precio por unidad de cada activo en seguimiento y cuánto ha
+// cambiado hoy, no el valor de la cartera (lo pidió el usuario). Si no sigue
+// ninguno, los que tiene. Sin nada, ninguna.
 func (s *service) todayLines(ctx context.Context, owner string) ([]string, error) {
 	v, err := s.load(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
-	if v.pf.Held == 0 || v.pf.Value <= 0 {
-		return nil, nil
+	pick := func(watched bool) []*position {
+		var out []*position
+		for _, p := range v.pf.Positions {
+			if (watched && p.Asset.Watch) || (!watched && p.Qty > eps) {
+				out = append(out, p)
+			}
+		}
+		return out
 	}
-	lines := []string{"Valor: " + eurosRound(v.pf.Value) + " (" + signed(eurosRound(v.pf.Total), v.pf.Total) + " en total)"}
-	vs := v.series(dayOf(v.now).Add(-8 * dayUnit))
-	var parts []string
-	if d, p, ok := change(vs, 1); ok {
-		parts = append(parts, "desde ayer "+pct(p)+" ("+signed(eurosRound(d), d)+")")
+	list := pick(true)
+	if len(list) == 0 {
+		list = pick(false)
 	}
-	if d, p, ok := change(vs, 7); ok {
-		parts = append(parts, "en 7 días "+pct(p)+" ("+signed(eurosRound(d), d)+")")
-	}
-	if len(parts) > 0 {
-		s := strings.Join(parts, " · ")
-		lines = append(lines, strings.ToUpper(s[:1])+s[1:]+".")
+	sort.SliceStable(list, func(i, j int) bool {
+		return strings.ToLower(list[i].Asset.Symbol) < strings.ToLower(list[j].Asset.Symbol)
+	})
+	var lines []string
+	for _, p := range list {
+		line := p.Asset.Symbol + ": "
+		if p.Price <= 0 {
+			lines = append(lines, line+"sin precio")
+			continue
+		}
+		line += price(p.Price, p.Quote.Currency)
+		if ch := p.Quote.change(); ch != 0 {
+			line += " (" + pct(ch) + " hoy)"
+		}
+		lines = append(lines, line)
 	}
 	return lines, nil
 }

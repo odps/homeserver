@@ -221,10 +221,24 @@ func TestTodayLines(t *testing.T) {
 	if _, err := svc.addOp(ctx, "ana", opInput{AssetID: btc.ID, Kind: opBuy, Day: dayOf(testNow()).Add(-30 * dayUnit), Qty: 0.1, Price: 40000}); err != nil {
 		t.Fatal(err)
 	}
+	// Sin nada en seguimiento, los que tiene: precio por unidad, no el valor.
 	lines, err := svc.todayLines(ctx, "ana")
-	// Hoy, 0,1 × 60.000; ayer, 0,1 × (30.000 + 50 × 399); hace 7 días, 0,1 × (30.000 + 50 × 393).
-	if err != nil || len(lines) != 2 || lines[0] != "Valor: 6.000 € (+2.000 € en total)" ||
-		lines[1] != "Desde ayer +20,1 % (+1.005 €) · en 7 días +20,8 % (+1.035 €)." {
+	t.Logf("tenidos: %q", lines)
+	if err != nil || len(lines) != 1 || !strings.HasPrefix(lines[0], "BTC: 60.000 €") || strings.Contains(lines[0], "Valor") {
 		t.Fatalf("líneas: %q %v", lines, err)
+	}
+	// Con algo en seguimiento, solo eso (lo tenga o no).
+	eth, _, err := svc.addFound(ctx, "ana", "kraken:ETHEUR", "", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, _ = svc.todayLines(ctx, "ana")
+	t.Logf("seguidos: %q", lines)
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], eth.Symbol+": ") {
+		t.Fatalf("seguidos: %q", lines)
+	}
+	svc.store.setWatch(ctx, "ana", btc.ID, true)
+	if lines, _ = svc.todayLines(ctx, "ana"); len(lines) != 2 || !strings.HasPrefix(lines[0], "BTC: ") {
+		t.Fatalf("orden: %q", lines)
 	}
 }
