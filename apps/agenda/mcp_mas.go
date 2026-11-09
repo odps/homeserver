@@ -61,7 +61,7 @@ type settingsIn struct {
 	ResumenManana   *bool     `json:"resumen_manana,omitempty" jsonschema:"resumen de la mañana por Telegram"`
 	ResumenHora     *string   `json:"resumen_hora,omitempty" jsonschema:"HH:MM"`
 	ResumenConIA    *bool     `json:"resumen_con_ia,omitempty" jsonschema:"incluir lo importante del correo resumido por la IA"`
-	ResumenCartera  *bool     `json:"resumen_con_cartera,omitempty" jsonschema:"incluir el valor de su cartera de inversión (app Cartera)"`
+	ResumenCartera  *bool     `json:"resumen_con_cartera,omitempty" jsonschema:"incluir el precio de los activos que sigue en la app Cartera"`
 	Avisos          *bool     `json:"avisos,omitempty" jsonschema:"avisos de eventos y tareas por Telegram"`
 	AvisoPorDefecto *int      `json:"aviso_por_defecto_min,omitempty" jsonschema:"minutos de antelación al crear un evento; 0 sin aviso"`
 	Casa            *string   `json:"casa,omitempty" jsonschema:"dirección de casa, origen de las rutas; vacío para quitarla"`
