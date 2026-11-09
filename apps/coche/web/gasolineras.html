@@ -1,0 +1,58 @@
+{{define "gasolineras.html"}}{{template "head" .}}
+{{$g := .Gas}}
+<section class="hero compact">
+  <p class="eyebrow">Gasolineras</p>
+  <h1 class="date">{{$g.Label}} en {{$g.Municipio}}</h1>
+  <div class="hero-meta">
+    {{if $g.Pending}}<span>Pidiendo los precios…</span>{{else}}<span>Precios del Ministerio{{with $g.Updated}} de {{.}}{{end}}</span>{{with $g.Avg}}<span class="tnum">Media: {{.}}</span>{{end}}{{end}}
+  </div>
+</section>
+
+{{if $g.SourceErr}}<p class="note warn">El Ministerio falla: {{$g.SourceErr}}{{with $g.Retry}}; {{.}}{{end}}.{{if $g.Fetched}} Los precios son de la última vez que respondió ({{$g.Fetched}}).{{end}}</p>
+{{else if $g.Stale}}<p class="note warn">Estos precios son de {{$g.Fetched}}: se están pidiendo otra vez.</p>{{end}}
+
+<section class="group">
+  {{with $g.Rows}}
+  <ol class="rows stations">
+    {{range .}}
+    <li class="row{{if .Best}} best{{end}}"><div class="row-body">
+      <span class="row-main"><span class="row-title">{{.Brand}}</span> <span class="muted">{{.Address}}{{with .Town}}, {{.}}{{end}}</span></span>
+      <span class="row-side tnum">{{.Price}}</span>
+      <span class="row-meta">{{.Hours}}</span>
+      <span class="row-side2 tnum">{{with .Diff}}<span class="chg up">{{.}}</span>{{end}}</span>
+    </div></li>
+    {{end}}
+  </ol>
+  <p class="help">Las {{len $g.Rows}} más baratas de las {{$g.Count}} que lo venden en el municipio. Sin las de venta restringida (a socios).</p>
+  {{else}}
+  {{if $g.Pending}}<p class="quiet">Aún no hay precios de este municipio: se están pidiendo. Vuelve en un momento.</p>{{else}}<p class="quiet">Ninguna gasolinera del municipio vende {{$g.Label}}. Prueba con otro carburante o con un municipio cercano.</p>{{end}}
+  {{end}}
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/gasolineras">
+  <h2 class="label">Qué buscar</h2>
+  <label class="field">Carburante<select name="carburante">{{range .Products}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+  <label class="check-line"><input type="checkbox" name="resumen" value="1"{{if $g.Summary}} checked{{end}}> La más barata en el resumen de la mañana</label>
+  <div class="actions"><button class="btn primary">Guardar</button></div>
+</form>
+
+<section class="panel" id="municipio">
+  <h2 class="label">Municipio</h2>
+  <p class="help">Ahora: <strong>{{$g.Municipio}}</strong>{{with $g.Province}} ({{.}}){{end}}.</p>
+  <form class="search add-row" method="post" action="{{.Base}}/gasolineras/buscar#municipio">
+    <label class="vh" for="q">Buscar municipio</label>
+    <input id="q" name="q" value="{{.MQuery}}" maxlength="60" autocomplete="off" placeholder="Buscar municipio">
+    <button class="btn">Buscar</button>
+  </form>
+  {{if .MSearched}}
+  {{with .MResults}}
+  <ul class="rows compact">
+    {{range .}}<li class="row"><div class="row-body"><span class="row-main">{{.Name}} <span class="muted">{{.Province}}</span></span></div>
+      <div class="row-actions"><form method="post" action="{{$.Base}}/gasolineras/municipio"><input type="hidden" name="municipio" value="{{.ID}}"><button class="btn small primary">Elegir</button></form></div></li>{{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">No ha salido ningún municipio con «{{.MQuery}}».</p>
+  {{end}}
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

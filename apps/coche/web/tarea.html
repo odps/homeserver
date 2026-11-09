@@ -1,0 +1,60 @@
+{{define "tarea.html"}}{{template "head" .}}
+{{$t := .Task}}{{$d := .DForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/v/{{.VID}}/mantenimiento">Mantenimiento de {{.Veh.Name}}</a></p>
+  <h1 class="date">{{$t.Name}}</h1>
+  <div class="hero-meta">
+    <span class="badge st-{{$t.Status}}">{{$t.StatusLabel}}</span>
+    {{with $t.Every}}<span>{{.}}</span>{{end}}
+  </div>
+  <p class="lead">{{if eq $t.Status "sin-datos"}}{{$t.Due}}.{{else}}Próxima vez: {{$t.Due}}.{{end}}{{with $t.Last}} Última vez: {{.}}.{{end}}</p>
+  {{with $t.Note}}<p class="help">{{.}}</p>{{end}}
+</section>
+
+<form class="panel form" id="hecho" method="post" action="{{.Base}}/tarea/{{$t.ID}}/hecho">
+  <h2 class="label">Marcar como hecha</h2>
+  <div class="form-grid">
+    <label class="field">Fecha<input type="date" name="fecha" value="{{$d.Day}}" required></label>
+    <label class="field">Km <span class="help">vacío: los de hoy (≈{{$d.KmHint}})</span><input name="km" value="{{$d.Km}}" inputmode="numeric" autocomplete="off"></label>
+    <label class="field">Coste<input name="coste" value="{{$d.Cost}}" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Próxima: fecha <span class="help">si la sabes</span><input type="date" name="proxima_fecha" value="{{$d.NextDay}}"></label>
+    <label class="field">Próxima: km<input name="proximo_km" value="{{$d.NextKm}}" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <label class="field">Nota <span class="help">el taller, lo que se cambió…</span><input name="nota" value="{{$d.Note}}" maxlength="240" autocomplete="off"></label>
+  <p class="help">El coste se apunta en Gastos. Sin próxima vez, la siguiente se cuenta {{with $t.Every}}{{.}}{{else}}como hasta ahora{{end}} desde esta.</p>
+  <div class="actions"><button class="btn primary big">Hecho</button></div>
+</form>
+
+{{with .Expenses}}
+<section class="group">
+  <h2 class="label">Veces que se ha hecho</h2>
+  {{template "expenserows" $}}
+</section>
+{{end}}
+
+<details class="panel fold"{{if .Error}} open{{end}}>
+  <summary>Cambiar la tarea</summary>
+  <form class="form" method="post" action="{{.Base}}/tarea/{{$t.ID}}">
+    {{template "taskform" .}}
+    <div class="actions"><button class="btn primary">Guardar</button></div>
+  </form>
+</details>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/tarea/{{$t.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar la tarea {{$t.Name}}?</strong> Ya no avisará. Sus gastos se quedan en Gastos. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarla</button>
+    <a class="btn ghost" href="{{.Base}}/tarea/{{$t.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Ya no hace falta?</p>
+  <a class="btn danger small" href="{{.Base}}/tarea/{{$t.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

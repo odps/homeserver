@@ -1,0 +1,153 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Coche</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Coche, resumen"><span class="mark" aria-hidden="true"></span>Coche</a>
+    <nav class="tabs" aria-label="Secciones de Coche">
+      <a href="{{.Base}}/{{if .VID}}v/{{.VID}}{{end}}"{{if eq .Tab "resumen"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 15.5l1.6-5.2A2 2 0 0 1 8 9h8a2 2 0 0 1 1.9 1.3l1.6 5.2"/><rect x="3.5" y="15.5" width="17" height="4" rx="1.5"/><circle cx="7.5" cy="17.5" r=".6"/><circle cx="16.5" cy="17.5" r=".6"/></svg><span>Resumen</span></a>
+      <a href="{{.Base}}/{{if .VID}}v/{{.VID}}/{{end}}repostajes"{{if eq .Tab "repostajes"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5V20"/><path d="M4 20h11"/><path d="M7 8h5"/><path d="M14 10h2a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 0 3 0V8l-2.5-2.5"/></svg><span>Repostajes</span></a>
+      <a href="{{.Base}}/{{if .VID}}v/{{.VID}}/{{end}}mantenimiento"{{if eq .Tab "mantenimiento"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5a4 4 0 0 0-5 5L4.5 15.5a2 2 0 0 0 3 3l5-5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z"/></svg><span>Mantenimiento</span></a>
+      <a href="{{.Base}}/{{if .VID}}v/{{.VID}}/{{end}}gastos"{{if eq .Tab "gastos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="2"/><path d="M3.5 10h17"/><path d="M7 14.5h3"/></svg><span>Gastos</span></a>
+      <a href="{{.Base}}/gasolineras"{{if eq .Tab "gasolineras"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Gasolineras</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tu coche, cifrado en tu servidor. Precios de carburantes: Ministerio para la Transición Ecológica (datos públicos).</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "vehhead"}}{{$v := .Veh}}
+<section class="hero compact">
+  <p class="eyebrow">{{if gt (len .Vehicles) 1}}<span class="switch">{{range .Vehicles}}{{if .Current}}<span aria-current="true">{{.Name}}</span>{{else}}<a href="{{$.Base}}/v/{{.ID}}">{{.Name}}</a>{{end}}{{end}}</span>{{else}}Tu vehículo{{end}}</p>
+  <h1 class="date">{{if eq .Tab "resumen"}}{{$v.Name}}{{else}}{{.Title}}{{end}}</h1>
+  <div class="hero-meta">
+    {{if ne .Tab "resumen"}}<span>{{$v.Name}}</span>{{end}}
+    {{with $v.Model}}<span>{{.}}</span>{{end}}
+    {{if eq .Tab "resumen"}}{{with $v.Plate}}<span class="plate">{{.}}</span>{{end}}{{end}}
+    <span class="tnum">{{if $v.Estimated}}≈{{end}}{{$v.EstKm}}{{if $v.Estimated}} hoy{{end}}</span>
+    {{if eq .Tab "resumen"}}<a href="{{.Base}}/v/{{$v.ID}}/editar">Editar</a> <a href="{{.Base}}/vehiculos">Vehículos</a>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "linechart"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{with .Avg}}<path class="avg" d="{{.}}"/>{{end}}
+      <polyline class="line" points="{{.Line}}"/>
+      {{range .Dots}}<circle class="dot-pt" cx="{{.X}}" cy="{{.Y}}" r="3.2"><title>{{.Title}}</title></circle>{{end}}
+    </svg>{{end}}
+
+{{define "barchart"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<g{{if .Now}} class="now"{{end}}><title>{{.Title}}</title><rect class="fuel" x="{{.X}}" y="{{.FuelY}}" width="{{.W}}" height="{{.FuelH}}"/><rect class="other" x="{{.X}}" y="{{.OtherY}}" width="{{.W}}" height="{{.OtherH}}"/><text class="tick" x="{{.LabelX}}" y="{{.LabelY}}" text-anchor="middle">{{.Label}}</text></g>{{end}}
+    </svg>{{end}}
+
+{{define "taskrows"}}<ul class="rows tasks">
+  {{- /* recibe la página entera: usa .Tasks y .Base */ -}}
+  {{range .Tasks}}
+  <li class="row"><a class="row-link" href="{{$.Base}}/tarea/{{.ID}}">
+    <span class="row-main"><span class="row-title">{{.Name}}</span>{{with .Every}} <span class="muted">{{.}}</span>{{end}}</span>
+    <span class="row-side"><span class="badge st-{{.Status}}">{{.StatusLabel}}</span></span>
+    <span class="row-meta">{{.Due}}{{with .Last}} · última vez: {{.}}{{end}}</span>
+  </a></li>
+  {{end}}
+</ul>{{end}}
+
+{{define "expenserows"}}<ul class="rows">
+  {{- /* recibe la página entera: usa .Expenses y .Base */ -}}
+  {{range .Expenses}}
+  <li class="row"><a class="row-link" href="{{$.Base}}/gasto/{{.ID}}">
+    <span class="row-main"><span class="kind k-{{.KindKey}}">{{.Kind}}</span>{{with .Note}} {{.}}{{end}}</span>
+    <span class="row-side tnum">{{.Amount}}</span>
+    <span class="row-meta">{{.Day}}{{with .Km}} · {{.}}{{end}}{{if .Talia}} · <span class="by">Talia</span>{{end}}</span>
+  </a></li>
+  {{end}}
+</ul>{{end}}
+
+{{define "vehicleform"}}{{$f := .VForm}}
+  <div class="form-grid">
+    <label class="field">Nombre <span class="help">el de siempre</span><input name="nombre" value="{{$f.Name}}" maxlength="40" autocomplete="off" placeholder="El Ibiza" required></label>
+    <label class="field">Marca y modelo<input name="modelo" value="{{$f.Model}}" maxlength="60" autocomplete="off" placeholder="Seat Ibiza 1.0 TSI"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Combustible<select name="combustible">{{range .Fuels}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Km al añadirlo<input name="km" value="{{$f.StartKm}}" inputmode="numeric" autocomplete="off" placeholder="85.000"></label>
+    <label class="field">Matrícula <span class="help">opcional; va cifrada</span><input name="matricula" value="{{$f.Plate}}" maxlength="15" autocomplete="off" autocapitalize="characters"></label>
+  </div>
+  <label class="field">Nota<input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+{{end}}
+
+{{define "refuelform"}}{{$f := .RForm}}
+  <div class="form-grid">
+    <label class="field">Fecha<input type="date" name="fecha" value="{{$f.Day}}" required></label>
+    <label class="field">Km del cuentakilómetros<input name="km" value="{{$f.Km}}" inputmode="numeric" autocomplete="off" placeholder="{{$f.KmHint}}" required></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">{{if eq $f.Unit "kWh"}}kWh{{else}}Litros{{end}}<input name="litros" value="{{$f.Liters}}" inputmode="decimal" autocomplete="off" placeholder="40,5" required></label>
+    <label class="field">Precio por {{if eq $f.Unit "kWh"}}kWh{{else}}litro{{end}}<input name="precio" value="{{$f.Price}}" inputmode="decimal" autocomplete="off" placeholder="1,499"></label>
+    <label class="field">Total pagado <span class="help">o el precio</span><input name="total" value="{{$f.Total}}" inputmode="decimal" autocomplete="off" placeholder="60,71"></label>
+  </div>
+  <label class="check-line"><input type="checkbox" name="lleno" value="1"{{if $f.Full}} checked{{end}}> Depósito lleno <span class="help">el consumo se calcula entre dos llenados</span></label>
+  <div class="form-grid">
+    <label class="field">Gasolinera <span class="help">opcional</span><input name="gasolinera" value="{{$f.Station}}" list="gasolineras" maxlength="80" autocomplete="off"></label>
+    <label class="field">Nota<input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+  </div>
+  <datalist id="gasolineras">{{range .Stations}}<option value="{{.}}"></option>{{end}}</datalist>
+{{end}}
+
+{{define "expenseform"}}{{$f := .EForm}}
+  <div class="form-grid">
+    <label class="field">Tipo<select name="tipo">{{range .ExpenseKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Fecha<input type="date" name="fecha" value="{{$f.Day}}" required></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Importe<input name="importe" value="{{$f.Amount}}" inputmode="decimal" autocomplete="off" placeholder="3,50" required></label>
+    <label class="field">Km <span class="help">opcional</span><input name="km" value="{{$f.Km}}" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <label class="field">Concepto o nota<input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off" placeholder="Parking del centro"></label>
+{{end}}
+
+{{define "taskform"}}{{$f := .TForm}}
+  <div class="form-grid">
+    <label class="field">Tipo<select name="tipo">{{range .TaskKinds}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label class="field">Nombre <span class="help">vacío: el del tipo</span><input name="nombre" value="{{$f.Name}}" maxlength="60" autocomplete="off"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Cada (km)<input name="cada_km" value="{{$f.EveryKm}}" inputmode="numeric" autocomplete="off" placeholder="15.000"></label>
+    <label class="field">Cada (meses)<input name="cada_meses" value="{{$f.EveryMonths}}" inputmode="numeric" autocomplete="off" placeholder="12"></label>
+  </div>
+  <p class="help">Vacíos los dos y sin próxima vez: lo habitual de ese tipo.</p>
+  <div class="form-grid">
+    <label class="field">Última vez: fecha<input type="date" name="ultima_fecha" value="{{$f.LastDay}}"></label>
+    <label class="field">Última vez: km<input name="ultimo_km" value="{{$f.LastKm}}" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Próxima: fecha <span class="help">si la sabes (la ITV)</span><input type="date" name="proxima_fecha" value="{{$f.NextDay}}"></label>
+    <label class="field">Próxima: km<input name="proximo_km" value="{{$f.NextKm}}" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <label class="field">Nota<input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+{{end}}

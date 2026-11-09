@@ -1,0 +1,32 @@
+{{define "gasto.html"}}{{template "head" .}}
+{{$f := .EForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/v/{{.VID}}/gastos">Gastos de {{.Veh.Name}}</a></p>
+  <h1 class="date">{{.Title}}</h1>
+  {{if $f.FromTask}}<div class="hero-meta"><span>Viene de una tarea de mantenimiento hecha</span></div>{{end}}
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/gasto/{{$f.ID}}">
+  {{template "expenseform" .}}
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/v/{{.VID}}/gastos">Cancelar</a>
+  </div>
+</form>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/gasto/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar este gasto?</strong> No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/gasto/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Está mal o sobra?</p>
+  <a class="btn danger small" href="{{.Base}}/gasto/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

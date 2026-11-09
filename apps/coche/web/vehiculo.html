@@ -1,0 +1,30 @@
+{{define "vehiculo.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/v/{{.VID}}">{{.Veh.Name}}</a></p>
+  <h1 class="date">Editar vehículo</h1>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/v/{{.VID}}/editar">
+  {{template "vehicleform" .}}
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/v/{{.VID}}">Cancelar</a>
+  </div>
+</form>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/v/{{.VID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar {{.Veh.Name}}?</strong> Se borran con él sus {{.Veh.Refuels}} repostajes, {{.Veh.Tasks}} tareas y {{.Veh.Expenses}} gastos. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/v/{{.VID}}/editar">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Ya no lo tienes?</p>
+  <a class="btn danger small" href="{{.Base}}/v/{{.VID}}/editar?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

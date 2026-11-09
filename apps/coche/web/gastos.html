@@ -1,0 +1,28 @@
+{{define "gastos.html"}}{{template "head" .}}
+{{template "vehhead" .}}
+{{$s := .Sum}}
+
+<form class="panel form" id="nuevo" method="post" action="{{.Base}}/v/{{.VID}}/gastos">
+  <h2 class="label">Apuntar gasto</h2>
+  {{template "expenseform" .}}
+  <div class="actions"><button class="btn primary big">Apuntar</button></div>
+  <p class="help">El taller de una tarea de mantenimiento, mejor desde la tarea («Hecho»): así cuenta desde ahí. El combustible va en Repostajes.</p>
+</form>
+
+{{with .ByKind}}
+<section class="group">
+  <h2 class="label">Últimos 12 meses</h2>
+  <ul class="rows compact">
+    {{range .}}<li class="row"><div class="row-body totals"><span class="row-main">{{.Label}}</span><span class="row-side tnum">{{.Amount}}</span></div></li>{{end}}
+    <li class="row"><div class="row-body totals"><span class="row-main row-title">Total</span><span class="row-side tnum">{{$s.Year}}</span></div></li>
+  </ul>
+</section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Gastos</h2>
+  {{if .Expenses}}{{template "expenserows" .}}{{else}}
+  <p class="quiet">Aún no hay gastos: el seguro, el parking, los peajes, las multas, el impuesto de circulación…</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}
