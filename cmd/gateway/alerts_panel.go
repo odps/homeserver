@@ -16,14 +16,29 @@ type alertsView struct {
 	Config alertsConfig
 	Bot    bool // hay token del bot e ID de su dueño
 	Recent []sentAlert
+	Apps   []noticeAppView
+}
+
+type noticeAppView struct {
+	noticeApp
+	On bool
+}
+
+func noticeAppViews(c alertsConfig) []noticeAppView {
+	var out []noticeAppView
+	for _, a := range noticeApps {
+		out = append(out, noticeAppView{a, c.appOn(a.Name)})
+	}
+	return out
 }
 
 func (g *gateway) alertsView() alertsView {
 	if g.alerts == nil {
-		return alertsView{Config: defaultAlerts()}
+		return alertsView{Config: defaultAlerts(), Apps: noticeAppViews(defaultAlerts())}
 	}
 	m := readEnvFile(g.alerts.keysPath)
 	v := alertsView{Config: g.alerts.config(), Bot: m["TELEGRAM_TOKEN"] != "" && m["TELEGRAM_USER_ID"] != "", Recent: g.alerts.recentAlerts(8)}
+	v.Apps = noticeAppViews(v.Config)
 	if v.Config.User == "" {
 		v.Config.User = m["APPS_USER"] // por defecto, la cuenta del asistente
 	}
@@ -92,6 +107,12 @@ func applyAlertsForm(c *alertsConfig, r *http.Request) error {
 	c.News.PerSection = int(get("news_per_section", "Titulares por sección", 1, 10))
 	c.Agenda.On = on("agenda")
 	c.Cartera.On = on("cartera")
+	c.AppsOff = nil
+	for _, a := range noticeApps {
+		if !on("app_" + a.Name) {
+			c.AppsOff = append(c.AppsOff, a.Name)
+		}
+	}
 	c.Deploys.Failed, c.Deploys.OK = on("deploys_failed"), on("deploys_ok")
 	c.Network.On, c.Network.MinMinutes = on("network"), int(get("network_minutes", "Minutos sin red", 0, 600))
 	c.Battery.On, c.Battery.Unplugged = on("battery"), on("battery_unplugged")

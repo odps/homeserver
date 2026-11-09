@@ -44,6 +44,9 @@ type alertsConfig struct {
 	Cartera struct {
 		On bool `json:"on"` // alertas de precios de la app Cartera
 	} `json:"cartera"`
+	// AppsOff son las apps de noticeApps con los avisos apagados: así una app
+	// nueva llega encendida aunque la configuración sea anterior a ella.
+	AppsOff  []string `json:"apps_off,omitempty"`
 	Chapters struct {
 		On        bool   `json:"on"`
 		Favorites bool   `json:"favorites"` // solo series favoritas
@@ -237,6 +240,11 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 		g.alertNews(ctx, c, &s, now, add)
 		g.alertAgenda(ctx, c, add)
 		g.alertCartera(ctx, c, add)
+		for _, a := range noticeApps {
+			if c.appOn(a.Name) {
+				g.alertApp(ctx, c, a.Name, linkTo(c, a.Name), add)
+			}
+		}
 		if now.Sub(a.chaptersAt) >= 10*time.Minute {
 			a.chaptersAt = now
 			g.alertChapters(ctx, c, &s, add)
@@ -468,6 +476,41 @@ func (g *gateway) alertCartera(ctx context.Context, c alertsConfig, add func(kin
 		}
 		return n.Text
 	}, add)
+}
+
+// noticeApp es una app cuyos avisos (GET /api/avisos) se reenvían tal cual,
+// con el enlace a ella, y se encienden o apagan en Avisos.
+type noticeApp struct {
+	Name, Title, Desc string
+}
+
+var noticeApps = []noticeApp{
+	{"gastos", "Gastos", "Cobros de suscripciones que se acercan y presupuestos superados"},
+	{"casa", "Casa", "Mantenimiento de la casa y, si lo activas en la app, el precio de la luz"},
+	{"coche", "Coche", "Mantenimiento del coche por fecha o por kilómetros"},
+	{"habitos", "Hábitos", "Recordatorios de los hábitos que aún no has hecho"},
+	{"leer", "Leer después", "Recordatorios de lo que tienes pendiente de leer, si los activas en la app"},
+	{"series", "Series y pelis", "Episodios nuevos y estrenos de temporada de las series que sigues"},
+}
+
+// appOn dice si los avisos de una app de noticeApps están encendidos.
+func (c alertsConfig) appOn(name string) bool {
+	for _, n := range c.AppsOff {
+		if n == name {
+			return false
+		}
+	}
+	return true
+}
+
+// linkTo añade al aviso el enlace a la app.
+func linkTo(c alertsConfig, name string) func(appNotice) string {
+	return func(n appNotice) string {
+		if c.PublicURL != "" {
+			return n.Text + "\n" + c.PublicURL + "/" + name + "/"
+		}
+		return n.Text
+	}
 }
 
 // appNotice es un aviso que una app tiene preparado en GET /api/avisos.

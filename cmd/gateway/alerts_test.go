@@ -505,3 +505,71 @@ func TestCarteraAlert(t *testing.T) {
 		t.Fatalf("pregunta por una cuenta sin la app: %d", calls)
 	}
 }
+
+// Los avisos de las otras apps (noticeApps) se reenvían con su enlace y se
+// apagan por app; una configuración anterior a ellas las trae encendidas.
+func TestNoticeAppsAlert(t *testing.T) {
+	h := newHarness(t)
+	g := h.g
+	bot := &fakeBot{}
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m tgMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		bot.mu.Lock()
+		bot.sent = append(bot.sent, m)
+		bot.mu.Unlock()
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+	g.alerts.telegramAPI = tg.URL
+	writeEnvFile(g.assistantPath("claves.env"), map[string]string{"TELEGRAM_TOKEN": "123:abc", "TELEGRAM_USER_ID": "42"})
+	g.alerts.phone = func(context.Context) phoneStatus { return phoneStatus{} }
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/avisos" || r.Header.Get("X-Auth-User") != "ana" {
+			http.NotFound(w, r)
+			return
+		}
+		calls++
+		w.Write([]byte(`[{"tipo":"suscripcion","texto":"💶 Mañana se cobra una suscripción"}]`))
+	}))
+	defer srv.Close()
+	g.apps = map[string]appSpec{"gastos": {Name: "gastos", Port: portOf(t, srv)}}
+	g.users.create("ana", "Ana", []string{"gastos"}, "usuario")
+	os.WriteFile(g.alerts.configPath, []byte(`{"enabled":true,"user":"ana","public_url":"https://srv.example"}`), 0o600)
+	if !g.alerts.config().appOn("gastos") {
+		t.Fatal("una configuración antigua apaga los avisos de Gastos")
+	}
+	c := defaultAlerts()
+	c.User, c.PublicURL, c.QuietFrom, c.QuietTo = "ana", "https://srv.example", "", ""
+	c.Apps.On, c.News.On = false, false
+	g.alerts.saveConfig(c)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, madrid)
+	g.checkAlerts(ctx, now)
+	got := bot.take()
+	if len(got) != 1 || got[0].Text != "💶 Mañana se cobra una suscripción\nhttps://srv.example/gastos/" {
+		t.Fatalf("gastos: %+v", got)
+	}
+	if recent := g.alerts.recentAlerts(1); len(recent) != 1 || recent[0].Kind != "gastos" {
+		t.Fatalf("registro: %+v", recent)
+	}
+	// Apagado desde el formulario del panel: casilla sin marcar.
+	r := httptest.NewRequest("POST", "/", strings.NewReader("enabled=1&user=ana&chapters_at=20:00&news_at=07:30&news_per_section=3&network_minutes=3&battery_low=25&battery_high=90&temp_battery=45&temp_cpu=80&apps_minutes=5&disk_gb=2&backups_pc_days=3&app_casa=1"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c = g.alerts.config()
+	if err := applyAlertsForm(&c, r); err != nil {
+		t.Fatal(err)
+	}
+	if c.appOn("gastos") || !c.appOn("casa") {
+		t.Fatalf("formulario: %v", c.AppsOff)
+	}
+	g.alerts.saveConfig(c)
+	g.checkAlerts(ctx, now.Add(time.Minute))
+	if calls != 1 {
+		t.Fatalf("con los avisos de Gastos apagados se sigue preguntando: %d", calls)
+	}
+	if v := g.alertsView(); len(v.Apps) != len(noticeApps) || v.Apps[0].On {
+		t.Fatalf("vista: %+v", v.Apps)
+	}
+}

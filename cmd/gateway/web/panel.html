@@ -476,6 +476,10 @@
       <label class="switch"><input type="checkbox" name="cartera" value="1"{{if $c.Cartera.On}} checked{{end}}><span>Alertas de precios y del valor de la cartera</span></label>
       <p class="hint">Las alertas se crean en la app Cartera (o con Talia). De la cuenta elegida en «Cómics», que debe tener la app.</p>
     </fieldset>
+    <fieldset class="group"><legend>Otras apps</legend>
+      {{range $v.Apps}}<label class="switch"><input type="checkbox" name="app_{{.Name}}" value="1"{{if .On}} checked{{end}}><span>{{.Title}}: {{.Desc}}</span></label>
+      {{end}}<p class="hint">Qué avisa cada una se ajusta en la propia app (o con Talia). De la cuenta elegida en «Cómics», que debe tener la app.</p>
+    </fieldset>
     <fieldset class="group"><legend>Servidor</legend>
       <div class="opt"><label class="switch"><input type="checkbox" name="apps" value="1"{{if $c.Apps.On}} checked{{end}}><span>Una app deja de funcionar</span></label>
         <label class="mini"><span>durante (min)</span><input name="apps_minutes" type="number" min="1" max="600" value="{{$c.Apps.Minutes}}"></label></div>
