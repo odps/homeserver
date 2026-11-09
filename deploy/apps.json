@@ -8,7 +8,13 @@
     { "name": "entreno", "port": 8106, "max_upload_mb": 5, "title": "Entreno" },
     { "name": "papeles", "port": 8107, "max_upload_mb": 20, "title": "Papeles" },
     { "name": "compra", "port": 8108, "title": "Compra" },
-    { "name": "cartera", "port": 8109, "title": "Cartera" }
+    { "name": "cartera", "port": 8109, "title": "Cartera" },
+    { "name": "gastos", "port": 8110, "title": "Gastos" },
+    { "name": "casa", "port": 8111, "title": "Casa" },
+    { "name": "coche", "port": 8112, "title": "Coche" },
+    { "name": "habitos", "port": 8113, "title": "Hábitos" },
+    { "name": "leer", "port": 8114, "title": "Leer después" },
+    { "name": "series", "port": 8115, "title": "Series y pelis" }
   ],
   "services": ["netwatch", "gateway", "tailscale_web"]
 }
