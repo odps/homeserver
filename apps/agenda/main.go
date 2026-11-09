@@ -53,7 +53,7 @@ func setup(env *app.Env, box *sealpkg.Box) error {
 	}
 	st := store{env.DB, box}
 	svc := &service{store: st, mail: newMailer(st, seal, env.Log), log: env.Log, summarizer: assistantSummarizer(assistant),
-		gym: gymToday(gym), wallet: appToday("cartera", wallet), now: time.Now, geo: geo.New()}
+		gym: gymToday(gym), wallet: appToday("cartera", wallet), extras: newExtras(), now: time.Now, geo: geo.New()}
 	go svc.run(context.Background())
 	(&web{svc: svc, dav: newDAV(st)}).routes(env.Mux)
 	addTools(env.MCP, svc)

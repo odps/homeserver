@@ -59,6 +59,8 @@ type prefs struct {
 	// Sin la sección de Cartera en el resumen (al revés, para que salga por
 	// defecto en las cuentas que ya existían).
 	NoWallet bool `json:"no_wallet,omitempty"`
+	// Apps cuya sección no sale en el resumen (extras.go).
+	NoSections []string `json:"no_sections,omitempty"`
 }
 
 // weatherCity es la ciudad del tiempo: la elegida o la última parte de la

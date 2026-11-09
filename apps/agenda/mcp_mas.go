@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,31 +44,33 @@ type slotsOut struct {
 
 // settingsView son los ajustes que el asistente puede ver (sin secretos).
 type settingsView struct {
-	ResumenManana   bool     `json:"resumen_manana"`
-	ResumenHora     string   `json:"resumen_hora"`
-	ResumenConIA    bool     `json:"resumen_con_ia"`
-	ResumenCartera  bool     `json:"resumen_con_cartera"`
-	Avisos          bool     `json:"avisos"`
-	AvisoPorDefecto int      `json:"aviso_por_defecto_min"`
-	Casa            string   `json:"casa"`
-	CiudadTiempo    string   `json:"ciudad_tiempo"`
-	Importantes     []string `json:"remitentes_importantes"`
-	Ignorados       []string `json:"remitentes_ignorados"`
-	Cuentas         []string `json:"cuentas_correo"`
-	Calendarios     []string `json:"calendarios"`
+	ResumenManana   bool            `json:"resumen_manana"`
+	ResumenHora     string          `json:"resumen_hora"`
+	ResumenConIA    bool            `json:"resumen_con_ia"`
+	ResumenCartera  bool            `json:"resumen_con_cartera"`
+	ResumenApps     map[string]bool `json:"resumen_secciones_apps"`
+	Avisos          bool            `json:"avisos"`
+	AvisoPorDefecto int             `json:"aviso_por_defecto_min"`
+	Casa            string          `json:"casa"`
+	CiudadTiempo    string          `json:"ciudad_tiempo"`
+	Importantes     []string        `json:"remitentes_importantes"`
+	Ignorados       []string        `json:"remitentes_ignorados"`
+	Cuentas         []string        `json:"cuentas_correo"`
+	Calendarios     []string        `json:"calendarios"`
 }
 
 type settingsIn struct {
-	ResumenManana   *bool     `json:"resumen_manana,omitempty" jsonschema:"resumen de la mañana por Telegram"`
-	ResumenHora     *string   `json:"resumen_hora,omitempty" jsonschema:"HH:MM"`
-	ResumenConIA    *bool     `json:"resumen_con_ia,omitempty" jsonschema:"incluir lo importante del correo resumido por la IA"`
-	ResumenCartera  *bool     `json:"resumen_con_cartera,omitempty" jsonschema:"incluir el precio de los activos que sigue en la app Cartera"`
-	Avisos          *bool     `json:"avisos,omitempty" jsonschema:"avisos de eventos y tareas por Telegram"`
-	AvisoPorDefecto *int      `json:"aviso_por_defecto_min,omitempty" jsonschema:"minutos de antelación al crear un evento; 0 sin aviso"`
-	Casa            *string   `json:"casa,omitempty" jsonschema:"dirección de casa, origen de las rutas; vacío para quitarla"`
-	CiudadTiempo    *string   `json:"ciudad_tiempo,omitempty" jsonschema:"ciudad del tiempo en el resumen de la mañana; vacío: la de la dirección de casa"`
-	Importantes     *[]string `json:"remitentes_importantes,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios siempre importantes (sustituye a la actual)"`
-	Ignorados       *[]string `json:"remitentes_ignorados,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios a ignorar (sustituye a la actual)"`
+	ResumenManana   *bool           `json:"resumen_manana,omitempty" jsonschema:"resumen de la mañana por Telegram"`
+	ResumenHora     *string         `json:"resumen_hora,omitempty" jsonschema:"HH:MM"`
+	ResumenConIA    *bool           `json:"resumen_con_ia,omitempty" jsonschema:"incluir lo importante del correo resumido por la IA"`
+	ResumenCartera  *bool           `json:"resumen_con_cartera,omitempty" jsonschema:"incluir el precio de los activos que sigue en la app Cartera"`
+	ResumenApps     map[string]bool `json:"resumen_secciones_apps,omitempty" jsonschema:"secciones de otras apps en el resumen (habitos, gastos, casa, coche, series, leer): true para ponerla, false para quitarla; solo las que cambian"`
+	Avisos          *bool           `json:"avisos,omitempty" jsonschema:"avisos de eventos y tareas por Telegram"`
+	AvisoPorDefecto *int            `json:"aviso_por_defecto_min,omitempty" jsonschema:"minutos de antelación al crear un evento; 0 sin aviso"`
+	Casa            *string         `json:"casa,omitempty" jsonschema:"dirección de casa, origen de las rutas; vacío para quitarla"`
+	CiudadTiempo    *string         `json:"ciudad_tiempo,omitempty" jsonschema:"ciudad del tiempo en el resumen de la mañana; vacío: la de la dirección de casa"`
+	Importantes     *[]string       `json:"remitentes_importantes,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios siempre importantes (sustituye a la actual)"`
+	Ignorados       *[]string       `json:"remitentes_ignorados,omitempty" jsonschema:"lista COMPLETA de direcciones o dominios a ignorar (sustituye a la actual)"`
 }
 
 type senderRuleIn struct {
@@ -199,7 +202,10 @@ func (s *service) settingsView(ctx context.Context, owner string) (settingsView,
 	}
 	v := settingsView{ResumenManana: p.SummaryOn, ResumenHora: p.SummaryAt, ResumenConIA: p.SummaryAI, ResumenCartera: !p.NoWallet, Avisos: p.RemindersOn,
 		AvisoPorDefecto: p.DefaultMin, Casa: p.Home, CiudadTiempo: p.weatherCity(), Importantes: orNoStrings(p.MailImportant), Ignorados: orNoStrings(p.MailIgnore),
-		Cuentas: []string{}, Calendarios: []string{}}
+		Cuentas: []string{}, Calendarios: []string{}, ResumenApps: map[string]bool{}}
+	for _, e := range s.extras {
+		v.ResumenApps[e.Name] = p.extraOn(e.Name)
+	}
 	accts, _ := s.store.accounts(ctx, owner)
 	for _, a := range accts {
 		state := "al día"
@@ -248,6 +254,12 @@ func (s *service) changeSettings(ctx context.Context, owner string, in settingsI
 	}
 	if in.ResumenCartera != nil {
 		p.NoWallet = !*in.ResumenCartera
+	}
+	for name, on := range in.ResumenApps {
+		if !slices.ContainsFunc(s.extras, func(e extra) bool { return e.Name == name }) {
+			return errors.New("sección del resumen desconocida: " + name)
+		}
+		p.setExtra(name, on)
 	}
 	if in.CiudadTiempo != nil {
 		p.WeatherCity = strings.TrimSpace(*in.CiudadTiempo)

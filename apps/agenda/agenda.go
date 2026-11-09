@@ -27,6 +27,7 @@ type service struct {
 	geo        *geo.Client                                               // nil: sin el tiempo en el resumen
 	gym        func(ctx context.Context, owner string) ([]string, error) // nil: sin Entreno en el resumen
 	wallet     func(ctx context.Context, owner string) ([]string, error) // nil: sin Cartera en el resumen
+	extras     []extra                                                   // secciones de otras apps en el resumen
 	now        func() time.Time
 	summaries  sync.Map // usuario → día cuyo resumen se está preparando
 }
@@ -526,6 +527,22 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 				s.log.Warn("resumen: cartera", "err", err)
 			}
 			section("💰 CARTERA", lines)
+		}
+	}
+	if len(s.extras) > 0 {
+		if p, err := s.store.prefs(ctx, owner); err == nil {
+			for _, e := range s.extras {
+				if !p.extraOn(e.Name) {
+					continue
+				}
+				ectx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				lines, err := e.today(ectx, owner)
+				cancel()
+				if err != nil {
+					s.log.Warn("resumen: "+e.Name, "err", err)
+				}
+				section(e.Title, lines)
+			}
 		}
 	}
 

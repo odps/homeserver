@@ -83,6 +83,7 @@ type pageData struct {
 
 	// Ajustes
 	Prefs    prefs
+	Extras   []extraView // secciones de otras apps en el resumen
 	Accounts []accountView
 	Flow     *deviceFlow
 	DAVURL   string
@@ -790,7 +791,7 @@ func davURL(r *http.Request) string {
 func (w *web) settingsPage(rw http.ResponseWriter, r *http.Request, who app.Identity, errMsg string) {
 	p, err := w.svc.store.prefs(r.Context(), who.User)
 	accts, err2 := w.accounts(r.Context(), who.User)
-	data := pageData{Name: who.Name, User: who.User, Tab: "ajustes", Prefs: p, Accounts: accts, DAVURL: davURL(r), Flash: flash(r), Error: errMsg}
+	data := pageData{Name: who.Name, User: who.User, Tab: "ajustes", Prefs: p, Extras: w.svc.extraViews(p), Accounts: accts, DAVURL: davURL(r), Flash: flash(r), Error: errMsg}
 	if err := errors.Join(err, err2); err != nil && errMsg == "" {
 		data.Error = err.Error()
 	}
@@ -817,6 +818,9 @@ func (w *web) savePrefs(rw http.ResponseWriter, r *http.Request, who app.Identit
 	p.SummaryAI = r.FormValue("resumen_ia") != ""
 	p.RemindersOn = r.FormValue("avisos") != ""
 	p.NoWallet = r.FormValue("resumen_cartera") == ""
+	for _, e := range w.svc.extras {
+		p.setExtra(e.Name, r.FormValue("resumen_app_"+e.Name) != "")
+	}
 	if at := r.FormValue("resumen_hora"); at != "" {
 		if _, err := time.Parse("15:04", at); err != nil {
 			w.settingsPage(rw, r, who, "Hora del resumen no válida.")

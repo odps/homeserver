@@ -15,7 +15,8 @@
   <label class="switch"><input type="checkbox" name="resumen" value="1"{{if .Prefs.SummaryOn}} checked{{end}}><span class="switch-name">Resumen de la mañana por Telegram</span><span class="meta">Eventos y tareas del día, y el correo</span></label>
   <label class="switch"><input type="checkbox" name="resumen_ia" value="1"{{if .Prefs.SummaryAI}} checked{{end}}><span class="switch-name">Con lo importante del correo resumido por la IA</span><span class="meta">Si no, solo remitentes y asuntos</span></label>
   <label class="switch"><input type="checkbox" name="resumen_cartera" value="1"{{if not .Prefs.NoWallet}} checked{{end}}><span class="switch-name">Con los precios de tu cartera</span><span class="meta">El precio de lo que sigues y cuánto ha cambiado hoy, si usas la app Cartera</span></label>
-  <label class="switch"><input type="checkbox" name="avisos" value="1"{{if .Prefs.RemindersOn}} checked{{end}}><span class="switch-name">Avisos de eventos y tareas por Telegram</span><span class="meta">Con la antelación de cada uno</span></label>
+  {{range .Extras}}<label class="switch"><input type="checkbox" name="resumen_app_{{.Name}}" value="1"{{if .On}} checked{{end}}><span class="switch-name">{{.Label}}</span><span class="meta">{{.Meta}}</span></label>
+  {{end}}  <label class="switch"><input type="checkbox" name="avisos" value="1"{{if .Prefs.RemindersOn}} checked{{end}}><span class="switch-name">Avisos de eventos y tareas por Telegram</span><span class="meta">Con la antelación de cada uno</span></label>
   <div class="pair">
     <label class="field">Hora del resumen
       <input type="time" name="resumen_hora" value="{{.Prefs.SummaryAt}}"></label>

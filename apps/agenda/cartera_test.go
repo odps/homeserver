@@ -69,3 +69,47 @@ func TestAppTodayClient(t *testing.T) {
 		t.Fatalf("error: %v", err)
 	}
 }
+
+// Las secciones de las otras apps salen en su orden, se quitan una a una
+// (en la web y con Talia) y un nombre desconocido es un error.
+func TestExtrasInSummary(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	svc.store.ensureUser(ctx, "ana")
+	monday := time.Date(2027, 3, 1, 7, 0, 0, 0, madrid)
+	fake := func(line string) func(context.Context, string) ([]string, error) {
+		return func(context.Context, string) ([]string, error) { return []string{line}, nil }
+	}
+	svc.extras = []extra{
+		{Name: "habitos", Title: "✅ HÁBITOS", today: fake("Leer: racha de 3 días")},
+		{Name: "coche", Title: "🚗 COCHE", today: func(context.Context, string) ([]string, error) { return nil, nil }},
+		{Name: "series", Title: "📺 SERIES", today: fake("Hoy: un episodio nuevo")},
+	}
+	text, err := svc.summary(ctx, "ana", monday, false)
+	h, s := strings.Index(text, "✅ HÁBITOS\nLeer: racha de 3 días"), strings.Index(text, "📺 SERIES\nHoy: un episodio nuevo")
+	if err != nil || h < 0 || s < h || strings.Contains(text, "COCHE") {
+		t.Fatalf("resumen:\n%s\n%v", text, err)
+	}
+	off := false
+	if err := svc.changeSettings(ctx, "ana", settingsIn{ResumenApps: map[string]bool{"series": off}}); err != nil {
+		t.Fatal(err)
+	}
+	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "SERIES") || !strings.Contains(text, "HÁBITOS") {
+		t.Fatalf("quitada:\n%s", text)
+	}
+	if v, _ := svc.settingsView(ctx, "ana"); v.ResumenApps["series"] || !v.ResumenApps["habitos"] {
+		t.Fatalf("vista: %v", v.ResumenApps)
+	}
+	if err := svc.changeSettings(ctx, "ana", settingsIn{ResumenApps: map[string]bool{"nada": true}}); err == nil {
+		t.Fatal("acepta una sección desconocida")
+	}
+	if err := svc.changeSettings(ctx, "ana", settingsIn{ResumenApps: map[string]bool{"series": true}}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := svc.store.prefs(ctx, "ana"); len(p.NoSections) != 0 {
+		t.Fatalf("no se ha vuelto a poner: %v", p.NoSections)
+	}
+	if len(newExtras()) != len(extraApps) {
+		t.Fatal("newExtras")
+	}
+}
