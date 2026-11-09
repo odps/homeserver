@@ -190,8 +190,8 @@ func TestEventsTasksAndReminders(t *testing.T) {
 	}
 	sum, err := svc.summary(ctx, "ana", at("2026-11-06 07:45"), false)
 	if err != nil || !strings.HasPrefix(sum, "☀️ Buenos días. Viernes, 6 de noviembre") ||
-		!strings.Contains(sum, "\n\n📅 HOY\n• 09:00–09:30 · Dentista · Calle Mayor 3, Madrid") ||
-		!strings.Contains(sum, "\n\n🎂 CUMPLEAÑOS\n• Luis Gómez (36 años)") {
+		!strings.Contains(sum, "\n\n📅 Hoy\n• 09:00–09:30 · Dentista · Calle Mayor 3, Madrid") ||
+		!strings.Contains(sum, "\n\n🎂 Cumpleaños\n• Luis Gómez (36 años)") {
 		t.Fatalf("resumen:\n%s\n%v", sum, err)
 	}
 }

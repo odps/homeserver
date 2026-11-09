@@ -55,7 +55,7 @@ func TestRoutinesSlotsAndSettings(t *testing.T) {
 		t.Fatal("salta un sábado en que no toca")
 	}
 	text, _ := svc.summary(ctx, "ana", time.Date(2027, 3, 2, 7, 0, 0, 0, madrid), false)
-	if !strings.Contains(text, "📅 HOY\n• 09:00–17:00 · Trabajo 🔁\n• 18:00–18:30 · Médico\n• 19:00–21:00 · Club 🔁") {
+	if !strings.Contains(text, "📅 Hoy\n• 09:00–17:00 · Trabajo 🔁\n• 18:00–18:30 · Médico\n• 19:00–21:00 · Club 🔁") {
 		t.Fatalf("resumen:\n%s", text)
 	}
 

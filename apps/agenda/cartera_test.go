@@ -23,12 +23,12 @@ func TestWalletInSummary(t *testing.T) {
 		return []string{"Valor: 12.345 € (+1.234 € en total)", "Desde ayer +0,8 % (+98 €)."}, nil
 	}
 	text, err := svc.summary(ctx, "ana", monday, false)
-	if err != nil || !strings.Contains(text, "💰 CARTERA\nValor: 12.345 € (+1.234 € en total)\nDesde ayer +0,8 % (+98 €).") {
+	if err != nil || !strings.Contains(text, "💰 Cartera\n• Valor: 12.345 € (+1.234 € en total)\n• Desde ayer +0,8 % (+98 €).") {
 		t.Fatalf("resumen:\n%s\n%v", text, err)
 	}
 	// Sin nada que decir (no usa la Cartera), no sale la sección.
 	svc.wallet = func(ctx context.Context, owner string) ([]string, error) { return nil, nil }
-	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "CARTERA") {
+	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "Cartera") {
 		t.Fatalf("sección vacía:\n%s", text)
 	}
 	// Quitada en los ajustes: ni se pregunta.
@@ -37,7 +37,7 @@ func TestWalletInSummary(t *testing.T) {
 	svc.store.savePrefs(ctx, "ana", p)
 	asked = 0
 	svc.wallet = func(ctx context.Context, owner string) ([]string, error) { asked++; return []string{"x"}, nil }
-	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "CARTERA") || asked != 0 {
+	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "Cartera") || asked != 0 {
 		t.Fatalf("quitada:\n%s (%d)", text, asked)
 	}
 	// Por Talia se puede volver a poner.
@@ -81,20 +81,20 @@ func TestExtrasInSummary(t *testing.T) {
 		return func(context.Context, string) ([]string, error) { return []string{line}, nil }
 	}
 	svc.extras = []extra{
-		{Name: "habitos", Title: "✅ HÁBITOS", today: fake("Leer: racha de 3 días")},
-		{Name: "coche", Title: "🚗 COCHE", today: func(context.Context, string) ([]string, error) { return nil, nil }},
-		{Name: "series", Title: "📺 SERIES", today: fake("Hoy: un episodio nuevo")},
+		{Name: "habitos", Title: "✅ Hábitos", today: fake("Leer: racha de 3 días")},
+		{Name: "coche", Title: "🚗 Coche", today: func(context.Context, string) ([]string, error) { return nil, nil }},
+		{Name: "series", Title: "📺 Series", today: fake("Hoy: un episodio nuevo")},
 	}
 	text, err := svc.summary(ctx, "ana", monday, false)
-	h, s := strings.Index(text, "✅ HÁBITOS\nLeer: racha de 3 días"), strings.Index(text, "📺 SERIES\nHoy: un episodio nuevo")
-	if err != nil || h < 0 || s < h || strings.Contains(text, "COCHE") {
+	h, s := strings.Index(text, "✅ Hábitos\n• Leer: racha de 3 días"), strings.Index(text, "📺 Series\n• Hoy: un episodio nuevo")
+	if err != nil || h < 0 || s < h || strings.Contains(text, "Coche") {
 		t.Fatalf("resumen:\n%s\n%v", text, err)
 	}
 	off := false
 	if err := svc.changeSettings(ctx, "ana", settingsIn{ResumenApps: map[string]bool{"series": off}}); err != nil {
 		t.Fatal(err)
 	}
-	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "SERIES") || !strings.Contains(text, "HÁBITOS") {
+	if text, _ := svc.summary(ctx, "ana", monday, false); strings.Contains(text, "📺 Series") || !strings.Contains(text, "Hábitos") {
 		t.Fatalf("quitada:\n%s", text)
 	}
 	if v, _ := svc.settingsView(ctx, "ana"); v.ResumenApps["series"] || !v.ResumenApps["habitos"] {

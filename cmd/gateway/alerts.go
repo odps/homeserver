@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 )
 
 // Avisos por Telegram, sin IA: comprobaciones programadas que mandan un
@@ -263,7 +264,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 		if now.Sub(al.Time) > 2*time.Hour {
 			continue
 		}
-		if err := a.send(ctx, al.Text, quiet(c, now)); err != nil {
+		if err := a.send(ctx, al.Text, quiet(c, now), headings(al)...); err != nil {
 			retry = append(retry, al)
 			continue
 		}
@@ -277,7 +278,7 @@ func (g *gateway) checkAlerts(ctx context.Context, now time.Time) {
 	silent := quiet(c, now)
 	for _, al := range out {
 		al.Silent = silent
-		if err := a.send(ctx, al.Text, silent); err != nil {
+		if err := a.send(ctx, al.Text, silent, headings(al)...); err != nil {
 			al.Error = err.Error()
 			g.log.Warn("aviso", "tipo", al.Kind, "err", err)
 			s.Outbox = append(s.Outbox, al)
@@ -686,14 +687,46 @@ var madrid = func() *time.Location {
 var errNoBot = errors.New("el bot no está configurado (sección Asistente)")
 
 // send manda el aviso con el bot del asistente a su dueño.
-func (a *alerter) send(ctx context.Context, text string, silent bool) error {
+// tgEntity es un trozo con formato en un mensaje de Telegram: así no hace
+// falta parse_mode ni escapar nada. Las posiciones van en unidades UTF-16.
+type tgEntity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
+}
+
+// headings pone en negrita los títulos del resumen de la mañana de la Agenda:
+// la primera línea y cada una que va tras una línea en blanco. Los demás
+// avisos (de un solo bloque) van sin formato.
+func headings(al sentAlert) []tgEntity {
+	if al.Kind != "agenda" || !strings.Contains(al.Text, "\n\n") {
+		return nil
+	}
+	var out []tgEntity
+	pos, prevBlank := 0, true
+	for _, line := range strings.Split(al.Text, "\n") {
+		n := len(utf16.Encode([]rune(line)))
+		if prevBlank && strings.TrimSpace(line) != "" && !strings.Contains(line, "://") { // el enlace a la app, sin negrita
+			out = append(out, tgEntity{Type: "bold", Offset: pos, Length: n})
+		}
+		prevBlank = strings.TrimSpace(line) == ""
+		pos += n + 1
+	}
+	return out
+}
+
+func (a *alerter) send(ctx context.Context, text string, silent bool, entities ...tgEntity) error {
 	m := readEnvFile(a.keysPath)
 	token, chat := m["TELEGRAM_TOKEN"], m["TELEGRAM_USER_ID"]
 	if token == "" || chat == "" {
 		return errNoBot
 	}
-	body, _ := json.Marshal(map[string]any{"chat_id": chat, "text": text, "disable_notification": silent,
-		"link_preview_options": map[string]bool{"is_disabled": true}})
+	msg := map[string]any{"chat_id": chat, "text": text, "disable_notification": silent,
+		"link_preview_options": map[string]bool{"is_disabled": true}}
+	if len(entities) > 0 {
+		msg["entities"] = entities
+	}
+	body, _ := json.Marshal(msg)
 	req, _ := http.NewRequestWithContext(ctx, "POST", a.telegramAPI+"/bot"+token+"/sendMessage", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := a.http.Do(req)

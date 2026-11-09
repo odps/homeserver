@@ -123,7 +123,7 @@ func TestGymRoutines(t *testing.T) {
 		return []string{"Toca Torso: 5 ejercicios."}, nil
 	}
 	text, _ := svc.summary(ctx, "ana", monday, false)
-	if !strings.Contains(text, "🏋️ ENTRENO\nToca Torso: 5 ejercicios.") {
+	if !strings.Contains(text, "🏋️ Entreno\n• Toca Torso: 5 ejercicios.") {
 		t.Fatalf("resumen:\n%s", text)
 	}
 }

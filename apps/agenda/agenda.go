@@ -460,10 +460,18 @@ func truncate(s string, n int) string {
 
 // summary es el resumen del día: agenda, tareas, cumpleaños y correo.
 func (s *service) summary(ctx context.Context, owner string, now time.Time, withAI bool) (string, error) {
+	return s.buildSummary(ctx, owner, now, withAI, false)
+}
+
+// buildSummary arma el resumen del día. Con left (lo que pide Talia a
+// cualquier hora) solo salen los eventos que quedan: los que siguen en curso
+// sí, los terminados no.
+func (s *service) buildSummary(ctx context.Context, owner string, now time.Time, withAI, left bool) (string, error) {
 	local := now.In(madrid)
 	today := dayStart(local)
 	var b strings.Builder
-	// section escribe un bloque con su título; sin líneas, no sale.
+	// section escribe un bloque con su título; sin líneas, no sale. En
+	// Telegram, la pasarela pone los títulos en negrita.
 	section := func(title string, lines []string) {
 		if len(lines) == 0 {
 			return
@@ -471,10 +479,14 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		b.WriteString("\n\n" + title + "\n" + strings.Join(lines, "\n"))
 	}
 	day := longDate(local)
-	b.WriteString("☀️ Buenos días. " + strings.ToUpper(day[:1]) + day[1:])
+	if left {
+		b.WriteString("📋 Lo que te queda hoy, " + day + " (son las " + local.Format("15:04") + ")")
+	} else {
+		b.WriteString("☀️ Buenos días. " + strings.ToUpper(day[:1]) + day[1:])
+	}
 
 	if place, d, ok := s.weather(ctx, owner); ok {
-		section(skyIcon(d.Sky)+" TIEMPO", []string{place + ": " + d.Line()})
+		section(skyIcon(d.Sky)+" Tiempo", []string{"• " + place + ": " + d.Line()})
 	}
 
 	// Hoy: eventos y rutinas en una sola línea de tiempo (ya vienen por hora).
@@ -483,9 +495,20 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		return "", err
 	}
 	var todayLines []string
+	past := 0
 	for _, e := range events {
 		if e.Kind != "evento" {
 			continue
+		}
+		if left && !e.AllDay && e.Start != nil {
+			end := *e.Start
+			if e.End != nil {
+				end = *e.End
+			}
+			if !end.After(now) {
+				past++
+				continue
+			}
 		}
 		line := "• "
 		switch {
@@ -503,10 +526,16 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		}
 		todayLines = append(todayLines, line)
 	}
-	if len(todayLines) == 0 {
+	switch {
+	case len(todayLines) == 0 && past > 0:
+		todayLines = []string{"Ya no te queda nada en la agenda."}
+	case len(todayLines) == 0:
 		todayLines = []string{"Nada en la agenda."}
 	}
-	section("📅 HOY", todayLines)
+	if past > 0 {
+		todayLines = append(todayLines, "("+plural(past, "evento ya ha pasado", "eventos ya han pasado")+")")
+	}
+	section("📅 Hoy", todayLines)
 
 	if s.gym != nil {
 		gctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -515,7 +544,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		if err != nil {
 			s.log.Warn("resumen: entreno", "err", err)
 		}
-		section("🏋️ ENTRENO", lines)
+		section("🏋️ Entreno", bullets(lines))
 	}
 
 	if s.wallet != nil {
@@ -526,7 +555,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			if err != nil {
 				s.log.Warn("resumen: cartera", "err", err)
 			}
-			section("💰 CARTERA", lines)
+			section("💰 Cartera", bullets(lines))
 		}
 	}
 	if len(s.extras) > 0 {
@@ -541,7 +570,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 				if err != nil {
 					s.log.Warn("resumen: "+e.Name, "err", err)
 				}
-				section(e.Title, lines)
+				section(e.Title, bullets(lines))
 			}
 		}
 	}
@@ -563,13 +592,13 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			due = append(due, line)
 		}
 	}
-	section("✅ TAREAS", due)
+	section("☑️ Tareas", due)
 
 	var ships []string
 	for _, l := range s.shipmentLines(ctx, owner, now) {
 		ships = append(ships, "• "+strings.TrimPrefix(l, "📦 "))
 	}
-	section("📦 ENVÍOS", ships)
+	section("📦 Envíos", ships)
 
 	var bdays []string
 	if rows, err := s.store.birthdays(ctx, owner, local.Format("01-02")); err == nil {
@@ -588,7 +617,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			}
 		}
 	}
-	section("🎂 CUMPLEAÑOS", bdays)
+	section("🎂 Cumpleaños", bdays)
 
 	// Correo: solo lo personal y lo importante se lista y pasa por la IA; de
 	// lo demás (notificaciones y comerciales), el número.
@@ -611,7 +640,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		if n, c := counts[catNotice], counts[catBulk]; n+c > 0 {
 			lines = append(lines, fmt.Sprintf("Además, %s y %s, que no pasan por la IA.", plural(n, "notificación", "notificaciones"), plural(c, "comercial", "comerciales")))
 		}
-		section(fmt.Sprintf("✉️ CORREO SIN LEER (24 h): %d", len(mails)+counts[catNotice]+counts[catBulk]), lines)
+		section(fmt.Sprintf("✉️ Correo sin leer en 24 h: %d", len(mails)+counts[catNotice]+counts[catBulk]), lines)
 		if withAI && s.summarizer != nil && len(mails) > 0 {
 			sctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 			text, err := s.summarizer(sctx, mailPrompt(mails))
@@ -619,7 +648,7 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 			if err != nil {
 				s.log.Warn("resumen del correo", "usuario", owner, "err", err)
 			} else if text = strings.TrimSpace(text); text != "" {
-				section("💡 LO IMPORTANTE DEL CORREO", []string{text})
+				section("💡 Lo importante del correo", []string{text})
 			}
 		}
 	}
@@ -644,8 +673,24 @@ func (s *service) summary(ctx context.Context, owner string, now time.Time, with
 		}
 		next = append(next, line)
 	}
-	section("🔜 MAÑANA", next)
+	section("🔜 Mañana", next)
 	return strings.TrimSpace(b.String()), nil
+}
+
+// bullets pone viñeta a las líneas que llegan de otras apps, como en el
+// resto del resumen, salvo a las que ya empiezan por una o por un aviso.
+func bullets(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		if !strings.HasPrefix(l, "• ") && !strings.HasPrefix(l, "⚠️") {
+			l = "• " + l
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // skyIcon es el icono del cielo que da Open-Meteo (geo.Sky).
@@ -805,7 +850,7 @@ func (s *service) dueSummary(ctx context.Context, owner string) {
 			return
 		}
 		s.store.db.Exec(ctx, `UPDATE users SET summary_day = $2 WHERE username = $1`, owner, day)
-		s.store.addNotice(ctx, owner, "resumen", "Buenos días. "+text, now)
+		s.store.addNotice(ctx, owner, "resumen", text, now)
 	}()
 }
 

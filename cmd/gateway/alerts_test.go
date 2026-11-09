@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf16"
 )
 
 type tgMessage struct {
@@ -571,5 +573,27 @@ func TestNoticeAppsAlert(t *testing.T) {
 	}
 	if v := g.alertsView(); len(v.Apps) != len(noticeApps) || v.Apps[0].On {
 		t.Fatalf("vista: %+v", v.Apps)
+	}
+}
+
+// El resumen de la mañana lleva sus títulos en negrita (posiciones UTF-16:
+// los emojis cuentan 2); un aviso de un solo bloque, sin formato.
+func TestHeadings(t *testing.T) {
+	text := "☀️ Lunes, 9 de noviembre\n\n📅 Hoy\n• 10:00 · Médico\n\n🎂 Cumpleaños\n• Ana\n\nTu agenda: https://srv.example/agenda/"
+	got := headings(sentAlert{Kind: "agenda", Text: text})
+	u := func(s string) int { return len(utf16.Encode([]rune(s))) }
+	want := []tgEntity{
+		{"bold", 0, u("☀️ Lunes, 9 de noviembre")},
+		{"bold", u("☀️ Lunes, 9 de noviembre\n\n"), u("📅 Hoy")},
+		{"bold", u("☀️ Lunes, 9 de noviembre\n\n📅 Hoy\n• 10:00 · Médico\n\n"), u("🎂 Cumpleaños")},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("negritas:\n%v\n%v", got, want)
+	}
+	if h := headings(sentAlert{Kind: "agenda", Text: "🔔 A las 10:00: Médico"}); h != nil {
+		t.Fatalf("aviso suelto: %v", h)
+	}
+	if h := headings(sentAlert{Kind: "cartera", Text: text}); h != nil {
+		t.Fatalf("otra app: %v", h)
 	}
 }

@@ -24,12 +24,12 @@ var extraApps = []struct {
 	name, title, label, meta string
 	port                     int
 }{
-	{"habitos", "✅ HÁBITOS", "Con tus hábitos de hoy", "Los que tocan hoy y sus rachas, si usas la app Hábitos", 8113},
-	{"gastos", "💶 GASTOS", "Con tus cobros y presupuestos", "Cobros de hoy y de los próximos días, y presupuestos superados, si usas la app Gastos", 8110},
-	{"casa", "🏠 CASA", "Con el precio de la luz y la casa", "Las horas más baratas de la luz y el mantenimiento pendiente, si usas la app Casa", 8111},
-	{"coche", "🚗 COCHE", "Con el mantenimiento del coche", "Solo si hay algo pendiente, si usas la app Coche", 8112},
-	{"series", "📺 SERIES", "Con los estrenos de tus series", "Los episodios que se estrenan hoy, si usas la app Series y pelis", 8115},
-	{"leer", "📚 LEER DESPUÉS", "Con tus lecturas pendientes", "Cuántos artículos tienes guardados y una sugerencia, si usas Leer después", 8114},
+	{"habitos", "✅ Hábitos", "Con tus hábitos de hoy", "Los que tocan hoy y sus rachas, si usas la app Hábitos", 8113},
+	{"gastos", "💶 Gastos", "Con tus cobros y presupuestos", "Cobros de hoy y de los próximos días, y presupuestos superados, si usas la app Gastos", 8110},
+	{"casa", "🏠 Casa", "Con el precio de la luz y la casa", "Las horas más baratas de la luz y el mantenimiento pendiente, si usas la app Casa", 8111},
+	{"coche", "🚗 Coche", "Con el mantenimiento del coche", "Solo si hay algo pendiente, si usas la app Coche", 8112},
+	{"series", "📺 Series", "Con los estrenos de tus series", "Los episodios que se estrenan hoy, si usas la app Series y pelis", 8115},
+	{"leer", "📚 Leer después", "Con tus lecturas pendientes", "Cuántos artículos tienes guardados y una sugerencia, si usas Leer después", 8114},
 }
 
 // newExtras prepara las secciones; <APP>_URL cambia la dirección de cada app.

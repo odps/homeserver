@@ -457,13 +457,13 @@ func addTools(server *mcp.Server, svc *service) {
 			}
 			return nil, linksOut{Mapa: mapsLink(in.Destino), Ruta: routeLink(origin, in.Destino)}, nil
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "agenda_resumen", Description: "Resumen del día de hoy: agenda, tareas, cumpleaños y correo sin leer"},
+	mcp.AddTool(server, &mcp.Tool{Name: "agenda_resumen", Description: "Lo que le queda del día de hoy (los eventos ya terminados no salen, los que están en curso sí), con tareas, cumpleaños, correo sin leer y lo de las otras apps. Úsala para «¿qué tengo hoy?»"},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, summaryOut, error) {
 			who, err := identity(req)
 			if err != nil {
 				return nil, summaryOut{}, err
 			}
-			text, err := svc.summary(ctx, who.User, svc.now(), false)
+			text, err := svc.buildSummary(ctx, who.User, svc.now(), false, true)
 			return nil, summaryOut{Resumen: text}, err
 		})
 }
