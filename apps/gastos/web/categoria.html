@@ -1,0 +1,47 @@
+{{define "categoria.html"}}{{template "head" .}}
+{{$f := .CatForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/categorias">Categorías</a></p>
+  <h1 class="date">{{.Title}}</h1>
+  <div class="hero-meta"><span>{{$f.Movs}} movimiento{{if ne $f.Movs 1}}s{{end}}</span>{{if $f.Default}}<span>de serie</span>{{end}}</div>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/categoria/{{$f.ID}}">
+  <div class="form-grid">
+    <label class="field">Nombre<input name="nombre" value="{{$f.Name}}" maxlength="40" autocomplete="off" required></label>
+    <label class="field">Presupuesto al mes <span class="help">vacío: sin límite</span><input name="presupuesto" value="{{$f.Budget}}" inputmode="decimal" autocomplete="off"></label>
+  </div>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/categorias">Cancelar</a>
+  </div>
+</form>
+
+<section class="group" id="reglas">
+  <h2 class="label">Reglas de esta categoría</h2>
+  {{if $f.Rules}}{{template "rulechips" (ruleChips .Base $f.ID $f.Rules)}}{{else}}<p class="quiet">Ninguna: lo que vaya aquí tendrás que elegirlo a mano.</p>{{end}}
+  <form class="panel form" method="post" action="{{.Base}}/reglas/nueva">
+    <input type="hidden" name="categoria" value="{{$f.ID}}">
+    <input type="hidden" name="desde" value="categoria">
+    <label class="field">Si el concepto contiene<input name="texto" maxlength="60" autocomplete="off" required></label>
+    <label class="check-line"><input type="checkbox" name="aplicar" value="1"> Aplicarla también a lo ya apuntado en Otros o sin categoría</label>
+    <div class="actions"><button class="btn">Añadir regla</button></div>
+  </form>
+</section>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/categoria/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar {{.Title}}?</strong> Se borran sus reglas; sus movimientos y suscripciones se quedan sin categoría. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarla</button>
+    <a class="btn ghost" href="{{.Base}}/categoria/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿No la usas?</p>
+  <a class="btn danger small" href="{{.Base}}/categoria/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

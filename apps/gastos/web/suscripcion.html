@@ -1,0 +1,37 @@
+{{define "suscripcion.html"}}{{template "head" .}}
+{{$f := .SubForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/suscripciones">Suscripciones</a></p>
+  <h1 class="date">{{if $f.Name}}{{$f.Name}}{{else}}Editar suscripción{{end}}</h1>
+  {{with $f.Monthly}}<div class="hero-meta tnum"><span>Unos {{.}} al mes</span>{{with $f.After}}<span>Tras el próximo, el {{.}}</span>{{end}}</div>{{end}}
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/suscripcion/{{$f.ID}}">
+  {{template "subfields" .}}
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/suscripciones">Cancelar</a>
+  </div>
+</form>
+
+<form class="panel inline" method="post" action="{{.Base}}/suscripcion/{{$f.ID}}/cobro">
+  <p>¿Ya te lo han cobrado? Se apunta como gasto con su categoría y el próximo cobro pasa al siguiente.</p>
+  <button class="btn">Registrar cobro</button>
+</form>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/suscripcion/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar esta suscripción?</strong> Los cobros ya apuntados se quedan. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarla</button>
+    <a class="btn ghost" href="{{.Base}}/suscripcion/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Te has dado de baja?</p>
+  <a class="btn danger small" href="{{.Base}}/suscripcion/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

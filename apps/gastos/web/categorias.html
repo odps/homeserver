@@ -1,0 +1,57 @@
+{{define "rulechips"}}<ul class="chips">{{range .Rules}}<li><form method="post" action="{{$.Base}}/regla/{{.ID}}/borrar">{{if $.CatID}}<input type="hidden" name="categoria" value="{{$.CatID}}">{{end}}<button class="chip rule" aria-label="Borrar la regla «{{.Text}}»">{{.Text}}<span class="x" aria-hidden="true">×</span></button></form></li>{{end}}</ul>{{end}}
+
+{{define "categorias.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Gastos</p>
+  <h1 class="date">Categorías</h1>
+  <p class="lead">Cada categoría puede tener un presupuesto al mes: si te pasas, te avisa una vez por Telegram. Lo que apuntes sin categoría lo clasifican las reglas.</p>
+</section>
+
+<section class="group" id="presupuestos">
+  <h2 class="label">Presupuesto al mes</h2>
+  <form class="panel budgets" method="post" action="{{.Base}}/categorias/presupuestos">
+    <ul class="budget-list">
+      {{range .Cats}}
+      <li>
+        <a class="bname" href="{{$.Base}}/categoria/{{.ID}}">{{.Name}}</a>
+        <span class="bmeta muted tnum">{{with .SpentNow}}{{.}} este mes{{end}}{{if .Rules}}{{if .SpentNow}} · {{end}}{{.Rules}} regla{{if ne .Rules 1}}s{{end}}{{end}}</span>
+        <label class="bfield"><span class="vh">Presupuesto de {{.Name}}</span><input name="p{{.ID}}" value="{{.BudgetInput}}" inputmode="decimal" autocomplete="off" placeholder="sin límite"><span class="unit" aria-hidden="true">€</span></label>
+      </li>
+      {{end}}
+    </ul>
+    <div class="actions"><button class="btn primary">Guardar presupuestos</button></div>
+  </form>
+</section>
+
+<details class="panel fold" id="nueva"{{if .CatForm.Name}} open{{end}}>
+  <summary>+ Nueva categoría</summary>
+  <form method="post" action="{{.Base}}/categorias/nueva">
+    <div class="form-grid">
+      <label class="field">Nombre<input name="nombre" value="{{.CatForm.Name}}" maxlength="40" autocomplete="off" required></label>
+      <label class="field">Presupuesto al mes <span class="help">opcional</span><input name="presupuesto" value="{{.CatForm.Budget}}" inputmode="decimal" autocomplete="off"></label>
+    </div>
+    <div class="actions"><button class="btn primary">Crear</button></div>
+  </form>
+</details>
+
+<section class="group" id="reglas">
+  <h2 class="label">Reglas</h2>
+  <p class="quiet">Si el concepto contiene el texto (sin mayúsculas ni tildes, también como comienzo de palabra: «farmacia» encaja en «Farmacias del centro»), va a esa categoría. Si encajan varias, gana la más larga. Toca una para borrarla.</p>
+  <form class="panel form" method="post" action="{{.Base}}/reglas/nueva">
+    <div class="form-grid">
+      <label class="field">Si el concepto contiene<input name="texto" value="{{.RuleForm.Text}}" maxlength="60" autocomplete="off" placeholder="mercadona" required></label>
+      <label class="field">Va a{{template "catselect" .CatOpts}}</label>
+    </div>
+    <label class="check-line"><input type="checkbox" name="aplicar" value="1"{{if .RuleForm.Apply}} checked{{end}}> Aplicarla también a lo ya apuntado en Otros o sin categoría</label>
+    <div class="actions"><button class="btn primary">Añadir regla</button></div>
+  </form>
+  {{range .RuleCats}}
+  <div class="rule-group">
+    <h3 class="sub"><a href="{{$.Base}}/categoria/{{.CatID}}">{{.Name}}</a></h3>
+    {{template "rulechips" (ruleChips $.Base 0 .Rules)}}
+  </div>
+  {{else}}
+  <p class="quiet">Sin reglas.</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}
