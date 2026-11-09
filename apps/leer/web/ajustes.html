@@ -1,0 +1,34 @@
+{{define "ajustes.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Leer después</p>
+  <h1 class="date">Ajustes</h1>
+</section>
+
+<form class="panel" method="post" action="{{.Base}}/ajustes">
+  <fieldset class="choice">
+    <legend class="sub">Tamaño de la letra al leer</legend>
+    {{range .Sizes}}<label class="size-pick s-{{.Key}}"><input type="radio" name="tamano" value="{{.Key}}"{{if .Selected}} checked{{end}}> <span class="sample">Aa</span> {{.Label}}</label>{{end}}
+  </fieldset>
+  <fieldset class="choice">
+    <legend class="sub">Avisos</legend>
+    <label class="check-line"><input type="checkbox" name="resumen" value="1"{{if .Prefs.Summary}} checked{{end}}> En el resumen de la mañana, cuántos tienes pendientes y uno corto para hoy</label>
+    <label class="check-line"><input type="checkbox" name="semanal" value="1"{{if .Prefs.Weekly}} checked{{end}}> Los domingos por la mañana, un aviso por Telegram si tienes algo sin leer</label>
+  </fieldset>
+  <div class="actions"><button class="btn primary">Guardar</button></div>
+</form>
+
+<section class="group">
+  <h2 class="label">Con Talia</h2>
+  <ul class="help-list">
+    <li>Mándale un enlace por Telegram: «guárdame esto para leer luego», con etiquetas si quieres.</li>
+    <li>Pídele qué tienes pendiente, que busque algo que guardaste o que te resuma un artículo.</li>
+    <li>También puede marcarlos como leídos, archivarlos o ponerlos en favoritos.</li>
+  </ul>
+  <h2 class="label">Privacidad</h2>
+  <ul class="help-list">
+    <li>Los enlaces, los títulos y los textos se guardan cifrados en tu servidor.</li>
+    <li>La página se descarga una vez, solo por HTTPS, y se guarda solo su texto: sin anuncios, sin scripts y sin imágenes de fuera.</li>
+    <li>Lo que guardes se queda hasta que lo borres.</li>
+  </ul>
+</section>
+{{template "foot" .}}{{end}}

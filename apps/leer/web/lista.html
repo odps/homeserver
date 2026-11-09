@@ -1,0 +1,51 @@
+{{define "lista.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Leer después</p>
+  <h1 class="date">{{.Heading}}</h1>
+  {{if .Searched}}<p class="lead">{{if .Query}}«{{.Query}}»{{end}}{{if and .Query .Tag}} · {{end}}{{if .Tag}}etiqueta «{{.Tag}}»{{end}}: {{.Lead}} en todo lo guardado. <a href="{{.Base}}/{{if eq .Tab "favoritos"}}favoritos{{else if eq .Tab "archivo"}}archivo{{end}}">Quitar la búsqueda</a></p>
+  {{else}}<p class="lead">{{.Lead}}</p>{{end}}
+</section>
+
+{{if and (eq .List "pendientes") (not .Searched)}}
+<form class="save panel" method="post" action="{{.Base}}/guardar">
+  <label class="field" for="url">Guardar un enlace
+    <input id="url" name="url" type="text" inputmode="url" value="{{.FormURL}}" placeholder="https://…" required maxlength="2048" autocomplete="off" autocapitalize="off" spellcheck="false">
+  </label>
+  <div class="add-row">
+    <label class="vh" for="etiquetas">Etiquetas</label>
+    <input id="etiquetas" name="etiquetas" value="{{.FormTags}}" placeholder="Etiquetas (opcional): cocina, viajes" maxlength="400" autocomplete="off">
+    <button class="btn primary">Guardar</button>
+  </div>
+  <p class="help">Se descarga ahora y se guarda solo el texto, cifrado. También puedes mandarle el enlace a Talia.</p>
+</form>
+{{end}}
+
+{{if or .Rows .Searched .Tags}}{{template "search" .}}{{end}}
+
+{{if .Rows}}
+<section class="group">
+  {{template "rows" .}}
+  {{if gt .Total (len .Rows)}}<p class="quiet">Se ven los {{len .Rows}} más recientes de {{.Total}}. Busca para encontrar los demás.</p>{{end}}
+</section>
+{{else if .Searched}}
+<section class="empty">
+  <p class="big">No ha salido nada.</p>
+  <p>Se busca por palabras enteras o por su comienzo (desde 3 letras), en el título, el sitio, el autor, las etiquetas y el texto.</p>
+</section>
+{{else if eq .List "pendientes"}}
+<section class="empty">
+  <p class="big">{{if .Counts.Archive}}Nada pendiente.{{else}}Aún no has guardado nada.{{end}}</p>
+  <p>Pega arriba el enlace de un artículo, o mándaselo a Talia por Telegram: «guárdame esto para luego».</p>
+</section>
+{{else if eq .List "favoritos"}}
+<section class="empty">
+  <p class="big">Sin favoritos.</p>
+  <p>Pulsa ★ en un artículo para tenerlo a mano aquí, aunque lo archives.</p>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">El archivo está vacío.</p>
+  <p>Lo que termines de leer, archívalo: sale de pendientes y queda aquí por si lo buscas.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
