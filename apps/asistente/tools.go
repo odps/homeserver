@@ -13,6 +13,7 @@ import (
 
 type tool struct {
 	def toolDef
+	app string // app de la que viene; vacía: propia del asistente
 	run func(ctx context.Context, args json.RawMessage) (string, error)
 }
 

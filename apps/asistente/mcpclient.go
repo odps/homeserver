@@ -97,7 +97,9 @@ func (m *appTools) tools(ctx context.Context, apps []string, token string) ([]to
 			if !validToolName.MatchString(t.Name) {
 				continue
 			}
-			out = append(out, newTool(t.Name, t.Description, schemaFor(t.InputSchema), m.caller(app, t.Name, token)))
+			nt := newTool(t.Name, t.Description, schemaFor(t.InputSchema), m.caller(app, t.Name, token))
+			nt.app = app
+			out = append(out, nt)
 		}
 	}
 	return out, problems

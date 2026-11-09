@@ -491,15 +491,23 @@ func (a *agent) answer(ctx context.Context, c config, chat int64, text string, p
 	a.mu.Lock()
 	tools := a.tools
 	a.mu.Unlock()
+	hist, err := a.store.history(ctx, chat, historyTurns)
+	if err != nil {
+		return "", nil, err
+	}
+	var recent []string
+	for i := len(hist) - 1; i >= 0 && len(recent) < 4; i-- {
+		recent = append(recent, hist[i].Content)
+	}
+	if n := len(tools); n > maxTools {
+		tools = pickTools(tools, text, recent)
+		a.log.Info("herramientas recortadas", "total", n, "enviadas", len(tools))
+	}
 	byName := map[string]tool{}
 	defs := make([]toolDef, 0, len(tools))
 	for _, t := range tools {
 		byName[t.def.Function.Name] = t
 		defs = append(defs, t.def)
-	}
-	hist, err := a.store.history(ctx, chat, historyTurns)
-	if err != nil {
-		return "", nil, err
 	}
 	msgs := []chatMessage{{Role: "system", Content: systemPrompt(c, time.Now())}}
 	for _, h := range hist {
