@@ -1,0 +1,61 @@
+{{define "resumen.html"}}{{template "head" .}}
+{{if .Veh}}
+{{template "vehhead" .}}
+{{$s := .Sum}}
+<div class="actions quick">
+  <a class="btn primary" href="{{.Base}}/v/{{.VID}}/repostajes#nuevo">Apuntar repostaje</a>
+  <a class="btn" href="{{.Base}}/v/{{.VID}}/gastos#nuevo">Apuntar gasto</a>
+</div>
+
+<section class="stats" aria-label="Consumo y gasto">
+  <div class="stat"><span class="stat-label">Consumo medio</span>{{if $s.HasCons}}<span class="stat-value tnum">{{$s.Avg}} <small>{{$s.Unit}}/100 km</small></span><span class="stat-meta tnum">último: {{$s.Last}}</span>{{else}}<span class="stat-value muted">—</span><span class="stat-meta">hacen falta dos llenados</span>{{end}}</div>
+  <div class="stat"><span class="stat-label">Combustible por km</span><span class="stat-value tnum">{{if $s.FuelPerKm}}{{$s.FuelPerKm}}{{else}}—{{end}}</span><span class="stat-meta tnum">{{if $s.AllPerKm}}con todo: {{$s.AllPerKm}}{{else}}con todo: aún no se sabe{{end}}</span></div>
+  <div class="stat"><span class="stat-label">Este mes</span><span class="stat-value tnum">{{$s.ThisMonth}}</span><span class="stat-meta tnum">12 meses: {{$s.Year}}</span></div>
+  <div class="stat"><span class="stat-label">Km al mes</span><span class="stat-value tnum">{{if $s.KmMonth}}{{$s.KmMonth}}{{else}}—{{end}}</span><span class="stat-meta tnum">{{$s.Refuels}} repostajes · {{$s.Liters}}</span></div>
+</section>
+
+<section class="group">
+  <div class="group-head"><h2 class="label">Mantenimiento</h2><a class="more" href="{{.Base}}/v/{{.VID}}/mantenimiento">Todo</a></div>
+  {{if .Tasks}}{{template "taskrows" .}}{{else}}
+  <p class="quiet">Sin tareas. Añade el cambio de aceite, la ITV o los neumáticos en <a href="{{.Base}}/v/{{.VID}}/mantenimiento">Mantenimiento</a> y te avisa cuando toquen.</p>
+  {{end}}
+</section>
+
+<section class="group">
+  <h2 class="label">Consumo</h2>
+  {{with .ConsChart}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key line"></span>Cada tramo entre llenados <span class="key avg"></span>Media</figcaption>
+    {{template "linechart" .}}
+  </figure>
+  {{else}}
+  <p class="quiet">Con tres llenados apuntados sale aquí cómo varía el consumo.</p>
+  {{end}}
+</section>
+
+<section class="group">
+  <h2 class="label">Gasto de cada mes</h2>
+  {{with .CostChart}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key fuel"></span>Combustible <span class="key other"></span>Lo demás (taller, seguro, parking…)</figcaption>
+    {{template "barchart" .}}
+  </figure>
+  <p class="mini-stats tnum">Desde el principio: combustible {{$s.FuelCost}} · lo demás {{$s.Other}}</p>
+  {{else}}
+  <p class="quiet">Aún no hay gastos en los últimos 12 meses.</p>
+  {{end}}
+</section>
+{{else}}
+<section class="hero compact">
+  <p class="eyebrow">Coche</p>
+  <h1 class="date">Tu coche, al día</h1>
+  <p class="lead">Apunta los repostajes y sale el consumo y lo que te cuesta cada km; apunta el mantenimiento y te avisa por Telegram cuando toque. Y mira dónde está más barato el combustible hoy.</p>
+</section>
+<form class="panel form" method="post" action="{{.Base}}/vehiculos">
+  <h2 class="label">Añade tu vehículo</h2>
+  {{template "vehicleform" .}}
+  <div class="actions"><button class="btn primary big">Añadir</button></div>
+</form>
+<p class="quiet">Talia también puede apuntar repostajes y gastos y decirte cuándo toca cada cosa.</p>
+{{end}}
+{{template "foot" .}}{{end}}

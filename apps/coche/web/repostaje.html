@@ -1,0 +1,31 @@
+{{define "repostaje.html"}}{{template "head" .}}
+{{$f := .RForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/v/{{.VID}}/repostajes">Repostajes de {{.Veh.Name}}</a></p>
+  <h1 class="date">{{.Title}}</h1>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/repostaje/{{$f.ID}}">
+  {{template "refuelform" .}}
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/v/{{.VID}}/repostajes">Cancelar</a>
+  </div>
+</form>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/repostaje/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar este repostaje?</strong> Cambia el consumo calculado. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/repostaje/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Está mal o sobra?</p>
+  <a class="btn danger small" href="{{.Base}}/repostaje/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

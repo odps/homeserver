@@ -1,0 +1,18 @@
+{{define "mantenimiento.html"}}{{template "head" .}}
+{{template "vehhead" .}}
+
+<section class="group">
+  {{if .Tasks}}{{template "taskrows" .}}{{else}}
+  <p class="quiet">Sin tareas todavía. Añade lo que quieras que te recuerde: el aceite, la ITV, los neumáticos… Con la última vez (o la próxima) calcula cuándo toca, por km o por tiempo, y te avisa por Telegram.</p>
+  {{end}}
+</section>
+
+<details class="panel fold" id="nuevo"{{if or .Error (not .Tasks)}} open{{end}}>
+  <summary>Añadir una tarea</summary>
+  <form class="form" method="post" action="{{.Base}}/v/{{.VID}}/mantenimiento">
+    {{template "taskform" .}}
+    <div class="actions"><button class="btn primary big">Añadir</button></div>
+  </form>
+</details>
+<p class="help">Los km de hoy se estiman con tu ritmo de siempre ({{.Veh.EstKm}}); los avisos por km saltan cuando apuntas unos km que pasan de los que tocaban.</p>
+{{template "foot" .}}{{end}}

@@ -1,0 +1,23 @@
+{{define "vehiculos.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">{{if .VID}}<a href="{{.Base}}/">Resumen</a>{{else}}Coche{{end}}</p>
+  <h1 class="date">Vehículos</h1>
+</section>
+
+{{with .Vehicles}}
+<ul class="rows">
+  {{range .}}
+  <li class="row"><a class="row-link" href="{{$.Base}}/v/{{.ID}}">
+    <span class="row-main"><span class="row-title">{{.Name}}</span>{{with .Model}} <span class="muted">{{.}}</span>{{end}}</span>
+    <span class="row-side"><span class="muted">Ver</span></span>
+  </a></li>
+  {{end}}
+</ul>
+{{end}}
+
+<form class="panel form" id="nuevo" method="post" action="{{.Base}}/vehiculos">
+  <h2 class="label">Añadir otro</h2>
+  {{template "vehicleform" .}}
+  <div class="actions"><button class="btn primary big">Añadir</button></div>
+</form>
+{{template "foot" .}}{{end}}

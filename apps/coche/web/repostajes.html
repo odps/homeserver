@@ -1,0 +1,30 @@
+{{define "repostajes.html"}}{{template "head" .}}
+{{template "vehhead" .}}
+{{$s := .Sum}}
+
+<form class="panel form" id="nuevo" method="post" action="{{.Base}}/v/{{.VID}}/repostajes">
+  <h2 class="label">Apuntar repostaje</h2>
+  {{template "refuelform" .}}
+  <div class="actions"><button class="btn primary big">Apuntar</button></div>
+</form>
+
+{{if $s.HasCons}}<p class="mini-stats tnum">Consumo medio: <strong>{{$s.Avg}} {{$s.Unit}}/100 km</strong> · combustible por km: {{$s.FuelPerKm}}</p>{{end}}
+
+<section class="group">
+  <h2 class="label">Repostajes</h2>
+  {{with .Refuels}}
+  <ul class="rows">
+    {{range .}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/repostaje/{{.ID}}">
+      <span class="row-main"><span class="row-title tnum">{{.Liters}}</span> <span class="muted">a</span> <span class="tnum">{{.Price}}</span>{{if not .Full}} <span class="badge">a medias</span>{{end}}</span>
+      <span class="row-side tnum">{{.Total}}</span>
+      <span class="row-meta tnum">{{.Day}} · {{.Km}}{{with .Station}} · {{.}}{{end}}{{if .Talia}} · <span class="by">Talia</span>{{end}}{{with .Note}} · {{.}}{{end}}</span>
+      <span class="row-side2 tnum">{{with .L100}}{{.}}{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">Aún no hay repostajes. Apunta los km y los litros cada vez que llenes: con dos llenados sale el consumo.</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}
