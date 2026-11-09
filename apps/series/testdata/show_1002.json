@@ -1,0 +1,32 @@
+{
+  "id": 1002,
+  "url": "https://www.tvmaze.com/shows/1002/otra-serie-inventada",
+  "name": "Otra Serie Inventada",
+  "type": "Scripted",
+  "language": "Spanish",
+  "genres": ["Comedy"],
+  "status": "Running",
+  "runtime": null,
+  "averageRuntime": 32,
+  "premiered": "2024-03-01",
+  "ended": null,
+  "officialSite": null,
+  "schedule": {"time": "", "days": ["Monday"]},
+  "rating": {"average": null},
+  "weight": 50,
+  "network": null,
+  "webChannel": {"id": 7, "name": "Plataforma de Ejemplo", "country": null, "officialSite": null},
+  "dvdCountry": null,
+  "externals": {"tvrage": null, "thetvdb": null, "imdb": null},
+  "image": null,
+  "summary": null,
+  "updated": 1780000000,
+  "_links": {"self": {"href": "https://api.tvmaze.com/shows/1002"}},
+  "_embedded": {
+    "episodes": [
+      {"id": 60001, "url": "https://www.tvmaze.com/episodes/60001", "name": "Uno", "season": 1, "number": 1, "type": "regular", "airdate": "2024-03-01", "airtime": "", "airstamp": "2024-03-01T12:00:00+00:00", "runtime": 30, "rating": {"average": null}, "image": null, "summary": null, "_links": {}},
+      {"id": 60002, "url": "https://www.tvmaze.com/episodes/60002", "name": "Dos", "season": 1, "number": 2, "type": "regular", "airdate": "2024-03-01", "airtime": "", "airstamp": "2024-03-01T12:00:00+00:00", "runtime": 30, "rating": {"average": null}, "image": null, "summary": null, "_links": {}},
+      {"id": 60101, "url": "https://www.tvmaze.com/episodes/60101", "name": "Tres", "season": 2, "number": 1, "type": "regular", "airdate": "2026-11-09", "airtime": "", "airstamp": "2026-11-09T12:00:00+00:00", "runtime": 30, "rating": {"average": null}, "image": null, "summary": null, "_links": {}}
+    ]
+  }
+}

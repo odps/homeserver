@@ -1,0 +1,23 @@
+{{define "item.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/{{.Path}}">{{if eq .Kind "juego"}}Juegos{{else}}Pelis{{end}}</a></p>
+  <h1 class="date">{{.Title}}</h1>
+  {{if .Form.Talia}}<p class="hero-meta">Apuntado con Talia</p>{{end}}
+</section>
+
+<form class="panel" method="post" action="{{.Base}}/{{.Path}}/{{.Form.ID}}">
+  {{template "itemfields" .}}
+  <div class="actions"><button class="btn primary">Guardar</button><a class="btn ghost" href="{{.Base}}/{{.Path}}">Volver</a></div>
+</form>
+
+<section class="dangerzone{{if .Confirm}} confirm{{end}}" id="borrar">
+  {{if .Confirm}}
+  <p>¿Borrar «{{.Form.Title}}»? No se puede deshacer.</p>
+  <form method="post" action="{{.Base}}/{{.Path}}/{{.Form.ID}}/borrar"><input type="hidden" name="confirmar" value="1"><button class="btn danger">Sí, borrar</button></form>
+  <a class="btn ghost" href="{{.Base}}/{{.Path}}/{{.Form.ID}}">Cancelar</a>
+  {{else}}
+  <p>Quitarlo de la lista.</p>
+  <form method="post" action="{{.Base}}/{{.Path}}/{{.Form.ID}}/borrar"><button class="btn danger">Borrar…</button></form>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

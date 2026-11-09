@@ -1,0 +1,70 @@
+{{define "series.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Series y pelis</p>
+  <h1 class="date">Series</h1>
+</section>
+
+<form class="search" method="post" action="{{.Base}}/buscar">
+  <label class="vh" for="q">Buscar una serie</label>
+  <div class="add-row">
+    <input id="q" name="q" value="{{.Query}}" maxlength="80" placeholder="Nombre de la serie" autocomplete="off" spellcheck="false" enterkeyhint="search" required>
+    <button class="btn primary">Buscar</button>
+  </div>
+  <p class="help">Se busca en TVmaze: solo se le manda lo que escribes.</p>
+</form>
+{{with .Source}}<p class="note warn">{{.}}</p>{{end}}
+
+{{if .Searched}}
+<section class="group" id="resultados">
+  <h2 class="label">Resultados para «{{.Query}}»</h2>
+  {{if .Results}}
+  <ul class="rows results">
+    {{range .Results}}
+    <li class="row">
+      <div class="row-body">
+        <span class="row-main"><span class="row-title">{{.Name}}</span>{{with .Year}} <span class="muted">({{.}})</span>{{end}}</span>
+        <span class="row-meta">{{with .Status}}{{.}}{{end}}{{with .Network}} · {{.}}{{end}}{{with .Genres}} · {{.}}{{end}}{{with .Language}} · {{.}}{{end}}</span>
+      </div>
+      <div class="row-actions">
+        {{if .HaveID}}<a class="btn small" href="{{$.Base}}/serie/{{.HaveID}}">Ya la sigues</a>{{else}}
+        <form method="post" action="{{$.Base}}/seguir">
+          <input type="hidden" name="tvmaze" value="{{.TVmazeID}}">
+          <button class="btn small primary" aria-label="Seguir {{.Name}}">Seguir</button>
+        </form>{{end}}
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">No ha salido nada. Prueba con el título original.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{range .Groups}}
+<section class="group">
+  <h2 class="label">{{.Label}}</h2>
+  <ul class="rows">
+    {{range .Rows}}
+    <li class="row">
+      <a class="row-link with-poster" href="{{$.Base}}/serie/{{.ID}}">
+        {{if .HasPoster}}<img class="poster" src="{{$.Base}}/cartel/{{.ID}}" alt="" width="46" height="66" loading="lazy">{{else}}<span class="poster none" aria-hidden="true"></span>{{end}}
+        <span class="row-text">
+          <span class="row-main"><span class="row-title">{{.Name}}</span>{{with .Stars}} <span class="stars" aria-label="valoración">{{.}}</span>{{end}}</span>
+          <span class="row-meta">{{.Progress}}{{with .Status}} · {{.}}{{end}}</span>
+          {{with .Next}}<span class="row-meta next">{{.}}</span>{{end}}
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+{{if not .Searched}}
+<section class="empty">
+  <p class="big">No sigues ninguna serie.</p>
+  <p>Búscala arriba y pulsa «Seguir». Luego marca lo que ya has visto y te diremos qué te toca y cuándo sale lo nuevo.</p>
+</section>
+{{end}}
+{{end}}
+{{template "foot" .}}{{end}}
