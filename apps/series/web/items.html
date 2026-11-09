@@ -1,0 +1,49 @@
+{{define "itemfields"}}
+    <label class="field">Título<input name="titulo" value="{{.Form.Title}}" maxlength="120" autocomplete="off" required></label>
+    <div class="form-grid">
+      <label class="field">Año<input name="anio" value="{{.Form.Year}}" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+      <label class="field">Plataforma <span class="help">(opcional)</span><input name="plataforma" value="{{.Form.Platform}}" maxlength="40" autocomplete="off" placeholder="{{if eq .Kind "juego"}}PS5, Switch, PC…{{else}}Cine, Netflix, Filmin…{{end}}"></label>
+      {{template "statefield" .}}
+      {{template "ratingfield" .}}
+      <label class="field">Fecha <span class="help">(cuándo {{if eq .Kind "juego"}}lo terminaste{{else}}la viste{{end}})</span><input type="date" name="fecha" value="{{.Form.Day}}"></label>
+    </div>
+    <label class="field">Nota<textarea name="nota" rows="2" maxlength="300">{{.Form.Note}}</textarea></label>
+{{end}}
+
+{{define "items.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Series y pelis</p>
+  <h1 class="date">{{.Title}}</h1>
+  <p class="lead">{{if eq .Kind "juego"}}Los juegos que quieres jugar, a los que juegas y los que has terminado.{{else}}Las pelis que quieres ver y las que has visto.{{end}} Se apuntan a mano.</p>
+</section>
+
+<details class="panel fold" id="nuevo"{{if or (not .Items) .Error}} open{{end}}>
+  <summary>{{if eq .Kind "juego"}}Apuntar un juego{{else}}Apuntar una peli{{end}}</summary>
+  <form method="post" action="{{.Base}}/{{.Path}}">
+    {{template "itemfields" .}}
+    <div class="actions"><button class="btn primary">Apuntar</button></div>
+  </form>
+</details>
+
+{{range .Items}}
+<section class="group">
+  <h2 class="label">{{.Label}}</h2>
+  <ul class="rows">
+    {{range .Rows}}
+    <li class="row">
+      <a class="row-link" href="{{$.Base}}/{{.Path}}/{{.ID}}">
+        <span class="row-main"><span class="row-title">{{.Title}}</span>{{with .Year}} <span class="muted">({{.}})</span>{{end}}</span>
+        <span class="row-side">{{with .Stars}}<span class="stars" aria-label="valoración">{{.}}</span>{{end}}</span>
+        {{with .Meta}}<span class="row-meta">{{.}}</span>{{end}}
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">{{if eq .Kind "juego"}}Ningún juego apuntado.{{else}}Ninguna peli apuntada.{{end}}</p>
+  <p>Apúntala arriba, o pídeselo a Talia: «apunta que quiero ver …».</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

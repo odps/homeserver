@@ -1,0 +1,92 @@
+{{define "serie.html"}}{{template "head" .}}
+{{with .Show}}
+<section class="hero show-hero">
+  {{if .HasPoster}}<img class="poster big" src="{{$.Base}}/cartel/{{.ID}}" alt="Cartel de {{.Name}}" width="120" height="170">{{end}}
+  <div class="show-head">
+    <p class="eyebrow"><a href="{{$.Base}}/series">Series</a></p>
+    <h1 class="date">{{.Name}}</h1>
+    <p class="hero-meta">{{with .Years}}<span>{{.}}</span>{{end}}{{with .Status}}<span>{{.}}</span>{{end}}{{with .Network}}<span>{{.}}</span>{{end}}{{with .Runtime}}<span>{{.}}</span>{{end}}</p>
+    {{with .Genres}}<p class="hero-meta small">{{.}}</p>{{end}}
+    <p class="hero-meta"><span class="pill">{{.StateLabel}}</span>{{with .Stars}}<span class="stars" aria-label="valoración">{{.}}</span>{{end}}</p>
+  </div>
+</section>
+
+<section class="group progress-box">
+  {{if .Total}}
+  <p class="progress-line"><strong class="tnum">{{.Watched}}</strong> de <span class="tnum">{{.Aired}}</span> capítulos emitidos vistos{{if gt .Total .Aired}} <span class="muted">({{.Total}} anunciados)</span>{{end}}</p>
+  <svg class="bar-line" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="4" rx="2"/><rect class="fill" width="{{.Pct}}" height="4" rx="2"/></svg>
+  {{if .Next}}
+  <form class="next-box" method="post" action="{{$.Base}}/serie/{{.ID}}/visto">
+    <p><span class="muted">Te toca:</span> <strong>{{.Next}}</strong></p>
+    <button class="btn primary" name="accion" value="uno:{{.NextEpID}}">Marcar como visto</button>
+  </form>
+  {{else if .Aired}}<p class="quiet">Vas al día.</p>{{end}}
+  {{with .Upcoming}}<p class="quiet">{{.}}.</p>{{end}}
+  {{else}}
+  <p class="quiet">TVmaze aún no tiene capítulos de esta serie.</p>
+  {{end}}
+</section>
+
+{{with .Summary}}<section class="group"><p class="summary">{{.}}</p></section>{{end}}
+{{end}}
+
+{{if .Seasons}}
+<section class="group" id="capitulos">
+  <h2 class="label">Capítulos</h2>
+  {{range .Seasons}}
+  <details class="season" id="t{{.Number}}"{{if .Open}} open{{end}}>
+    <summary>
+      <span class="season-name">Temporada {{.Number}}</span>
+      <span class="season-meta tnum">{{.Watched}}/{{.Aired}}{{if gt .Total .Aired}} <span class="muted">de {{.Total}}</span>{{end}}{{with .Dates}} · {{.}}{{end}}</span>
+    </summary>
+    <form method="post" action="{{$.Base}}/serie/{{$.Show.ID}}/visto">
+      <ul class="rows compact eps">
+        {{range .Episodes}}
+        <li class="row ep{{if .Watched}} seen{{end}}{{if .Next}} is-next{{end}}{{if not .Aired}} future{{end}}">
+          <div class="row-body">
+            <span class="row-main"><span class="code">{{.Code}}</span> {{with .Name}}{{.}}{{end}}</span>
+            <span class="row-meta">{{.When}}{{if .Next}} · <strong>te toca</strong>{{end}}</span>
+          </div>
+          <div class="row-actions">
+            {{if .Watched}}<button class="btn small seen-btn" name="accion" value="quitar:{{.ID}}" aria-label="{{.Code}} visto: desmarcar">✓ Visto</button>
+            {{else if .Aired}}<button class="btn small" name="accion" value="uno:{{.ID}}" aria-label="Marcar {{.Code}} como visto">Visto</button><button class="btn small ghost" name="accion" value="hasta:{{.ID}}" aria-label="Marcar como vistos hasta el {{.Code}}">Hasta aquí</button>{{end}}
+          </div>
+        </li>
+        {{end}}
+      </ul>
+      <div class="actions tight season-actions">
+        {{if .AllWatched}}<button class="btn small ghost" name="accion" value="sin-temporada:{{.Number}}">Desmarcar la temporada</button>
+        {{else if .Aired}}<button class="btn small" name="accion" value="temporada:{{.Number}}">Marcar la temporada como vista</button>{{end}}
+      </div>
+    </form>
+  </details>
+  {{end}}
+</section>
+{{end}}
+
+{{with .Show}}
+<section class="group">
+  <h2 class="label">Tu ficha</h2>
+  <form class="panel" method="post" action="{{$.Base}}/serie/{{.ID}}">
+    <div class="form-grid">
+      {{template "statefield" $}}
+      {{template "ratingfield" $}}
+    </div>
+    <label class="field">Nota<textarea name="nota" rows="2" maxlength="300">{{.Note}}</textarea></label>
+    <div class="actions"><button class="btn primary">Guardar</button></div>
+  </form>
+  {{with .URL}}<p class="source">Datos de <a href="{{.}}" rel="noopener noreferrer">TVmaze</a> (CC BY-SA).</p>{{end}}
+</section>
+
+<section class="dangerzone{{if $.Confirm}} confirm{{end}}" id="borrar">
+  {{if $.Confirm}}
+  <p>¿Dejar de seguir {{.Name}}? Se borra lo que has marcado como visto.</p>
+  <form method="post" action="{{$.Base}}/serie/{{.ID}}/borrar"><input type="hidden" name="confirmar" value="1"><button class="btn danger">Sí, dejar de seguirla</button></form>
+  <a class="btn ghost" href="{{$.Base}}/serie/{{.ID}}">Cancelar</a>
+  {{else}}
+  <p>Dejar de seguirla borra lo que has visto y tu nota.</p>
+  <form method="post" action="{{$.Base}}/serie/{{.ID}}/borrar"><button class="btn danger">Dejar de seguir…</button></form>
+  {{end}}
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
