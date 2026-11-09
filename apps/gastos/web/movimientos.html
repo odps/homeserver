@@ -1,0 +1,59 @@
+{{define "movimientos.html"}}{{template "head" .}}
+{{$s := .Stats}}
+<section class="hero compact">
+  <p class="eyebrow">Movimientos</p>
+  {{template "monthnav" .}}
+</section>
+
+<section class="stats" aria-label="Cuentas del mes">
+  <div class="stat"><span class="stat-label">Gastos</span><span class="stat-value tnum">{{$s.Expenses}}</span><span class="stat-meta {{$s.PrevClass}}">{{with $s.PrevNote}}{{.}}{{else}}{{$s.Count}} movimiento{{if ne $s.Count 1}}s{{end}}{{end}}</span></div>
+  <div class="stat"><span class="stat-label">Ingresos</span><span class="stat-value tnum">{{$s.Income}}</span></div>
+  <div class="stat"><span class="stat-label">Balance</span><span class="stat-value {{$s.BalanceClass}} tnum">{{$s.Balance}}</span><span class="stat-meta">ingresos menos gastos</span></div>
+</section>
+
+<details class="panel fold add" id="apuntar"{{if or .MovForm.Open .Error}} open{{end}}>
+  <summary>+ Apuntar un gasto o un ingreso</summary>
+  <form method="post" action="{{.Base}}/movimiento/nuevo">
+    {{with .Month}}<input type="hidden" name="mes" value="{{.Key}}">{{end}}
+    {{template "movfields" .}}
+    <div class="actions"><button class="btn primary big">Apuntar</button></div>
+  </form>
+</details>
+
+{{if .Stats.Count}}
+<form class="filter" method="get" action="{{.Base}}/">
+  {{with .Month}}<input type="hidden" name="mes" value="{{.Key}}">{{end}}
+  <label class="vh" for="cat">Solo de una categoría</label>
+  <div class="add-row">
+    <select id="cat" name="cat"><option value="">Todas las categorías</option>{{range .CatOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}<option value="0"{{if eq .CatFilter "0"}} selected{{end}}>Sin categoría</option></select>
+    <button class="btn">Ver</button>
+  </div>
+</form>
+{{end}}
+{{with .Filtered}}<p class="note">{{.}} · <a href="{{$.Base}}/?mes={{$.Month.Key}}">ver todas</a></p>{{end}}
+
+{{if .Days}}
+{{range .Days}}
+<section class="group day">
+  <div class="group-head"><h2 class="label">{{.Label}}</h2>{{with .Total}}<span class="day-total tnum">{{.}}</span>{{end}}</div>
+  <ul class="rows">
+    {{range .Rows}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/movimiento/{{.ID}}">
+      <span class="row-main"><span class="row-title">{{.Concept}}</span></span>
+      <span class="row-side tnum {{.Class}}">{{.Amount}}</span>
+      <span class="row-meta"><span class="chip">{{.Cat}}</span>{{with .Account}} · {{.}}{{end}}{{if .FromSub}} · suscripción{{end}}{{if .Talia}} · <span class="by">Talia</span>{{end}}{{with .Note}} · {{.}}{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{else if .CatFilter}}
+<section class="empty"><p class="big">Nada en esa categoría este mes.</p></section>
+{{else}}
+<section class="empty">
+  <p class="big">Sin movimientos en {{.Month.Label}}.</p>
+  <p>Apunta cada gasto con su importe y su concepto: la categoría la pone una regla («mercadona» → Comida) y las puedes cambiar en <a href="{{.Base}}/categorias">Categorías</a>. Los cobros que se repiten van en <a href="{{.Base}}/suscripciones">Suscripciones</a>.</p>
+  <p>Talia también puede apuntar («he gastado 23 € en gasolina») y decirte cómo vas.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

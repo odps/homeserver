@@ -1,0 +1,43 @@
+{{define "suscripciones.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Gastos</p>
+  <h1 class="date">Suscripciones</h1>
+  {{if .Subs}}<div class="hero-meta tnum"><span>Al mes, unos <strong>{{.SubsMonth}}</strong></span><span>Al año, unos <strong>{{.SubsYear}}</strong></span></div>{{end}}
+  <p class="lead">Lo que se cobra solo cada cierto tiempo. Te avisa por Telegram antes de cada cobro y, cuando llega, «Registrar cobro» lo apunta como gasto y pasa al siguiente.</p>
+</section>
+
+{{if .Subs}}
+<section class="group">
+  <ul class="rows subs">
+    {{range .Subs}}
+    <li class="row{{if .Late}} late{{else if .Soon}} soon{{end}}">
+      <a class="row-link" href="{{$.Base}}/suscripcion/{{.ID}}">
+        <span class="row-main"><span class="row-title">{{.Name}}</span> <span class="muted">{{.Period}}</span></span>
+        <span class="row-side tnum">{{.Amount}}</span>
+        <span class="row-meta">{{if .Late}}<span class="chip warn">Sin registrar</span> era el {{.Next}} ({{.When}}){{else}}Próximo: {{.Next}} · <strong>{{.When}}</strong>{{end}} · {{.Cat}}{{with .Account}} · {{.}}{{end}} · {{.Notice}}</span>
+        <span class="row-side2 tnum muted">{{.Monthly}}/mes</span>
+      </a>
+      <div class="row-actions">
+        <form method="post" action="{{$.Base}}/suscripcion/{{.ID}}/cobro">
+          <button class="btn small{{if or .Late .Due}} primary{{end}}" aria-label="Registrar el cobro de {{.Name}}">Registrar cobro</button>
+        </form>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Sin suscripciones.</p>
+  <p>Apunta lo que se cobra solo: plataformas, el gimnasio, el móvil, seguros, la cuota de algo… Verás lo que suman al mes y al año.</p>
+</section>
+{{end}}
+
+<details class="panel fold" id="nueva"{{if or .Error (not .Subs)}} open{{end}}>
+  <summary>+ Nueva suscripción</summary>
+  <form method="post" action="{{.Base}}/suscripcion/nueva">
+    {{template "subfields" .}}
+    <div class="actions"><button class="btn primary">Guardar</button></div>
+  </form>
+</details>
+{{template "foot" .}}{{end}}

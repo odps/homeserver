@@ -1,0 +1,94 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Gastos</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Gastos, movimientos"><span class="mark" aria-hidden="true"></span>Gastos</a>
+    <nav class="tabs" aria-label="Secciones de Gastos">
+      <a href="{{.Base}}/"{{if eq .Tab "movimientos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/></svg><span>Movimientos</span></a>
+      <a href="{{.Base}}/presupuesto"{{if eq .Tab "presupuesto"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M6.5 16V11M11 16V6.5M15.5 16v-4M20 16V9"/></svg><span>Presupuesto</span></a>
+      <a href="{{.Base}}/suscripciones"{{if eq .Tab "suscripciones"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 11a7.5 7.5 0 0 1 13-4.5l2 2"/><path d="M19.5 4v4.5H15"/><path d="M19.5 13a7.5 7.5 0 0 1-13 4.5l-2-2"/><path d="M4.5 20v-4.5H9"/></svg><span>Suscripciones</span></a>
+      <a href="{{.Base}}/categorias"{{if eq .Tab "categorias"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3-8.7 8.7z"/><circle cx="8.3" cy="8.3" r="1.6"/></svg><span>Categorías</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tus gastos, cifrados en tu servidor. Solo datos: ni mueve dinero ni aconseja.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "monthnav"}}{{with .Month}}<nav class="months" aria-label="Mes">
+    <a class="mnav" href="?mes={{.Prev}}" aria-label="Mes anterior">‹</a>
+    <h1 class="date">{{.Label}}</h1>
+    {{if .Next}}<a class="mnav" href="?mes={{.Next}}" aria-label="Mes siguiente">›</a>{{else}}<span class="mnav off" aria-hidden="true">›</span>{{end}}
+  </nav>{{end}}{{end}}
+
+{{define "meter"}}<svg class="meter{{if .Over}} over{{end}}{{if .Plain}} plain{{end}}" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="8" rx="4"/><rect class="fill" width="{{.W}}" height="8" rx="4"/>{{with .Mark}}<line class="limit" x1="{{.}}" x2="{{.}}" y1="0" y2="8"/>{{end}}</svg>{{end}}
+
+{{define "bars"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<rect class="b {{.Class}}" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="2"><title>{{.Title}}</title></rect>{{end}}
+    </svg>{{end}}
+
+{{define "catselect"}}<select name="categoria">{{range .}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{end}}
+
+{{define "accounts"}}<datalist id="cuentas">{{range .}}<option value="{{.}}"></option>{{end}}</datalist>{{end}}
+
+{{define "movfields"}}{{$f := .MovForm}}
+    <fieldset class="choice kind">
+      <legend class="vh">Tipo</legend>
+      <label><input type="radio" name="tipo" value="gasto"{{if ne $f.Kind "ingreso"}} checked{{end}}> Gasto</label>
+      <label><input type="radio" name="tipo" value="ingreso"{{if eq $f.Kind "ingreso"}} checked{{end}}> Ingreso</label>
+    </fieldset>
+    <div class="form-grid">
+      <label class="field">Importe <span class="help">en euros</span><input name="importe" value="{{$f.Amount}}" inputmode="decimal" autocomplete="off" placeholder="12,50" required></label>
+      <label class="field">Fecha<input type="date" name="fecha" value="{{$f.Day}}" required></label>
+    </div>
+    <label class="field">Concepto<input name="concepto" value="{{$f.Concept}}" maxlength="120" autocomplete="off" placeholder="Supermercado, gasolina, cena…" required></label>
+    <label class="field">Categoría <span class="help">automática: la elige una regla por el concepto</span>{{template "catselect" .FormCats}}</label>
+    <details class="fold how"{{if or $f.Account $f.Note}} open{{end}}>
+      <summary>Cuenta y nota</summary>
+      <div class="form-grid">
+        <label class="field">Cuenta o medio <span class="help">opcional</span><input name="cuenta" value="{{$f.Account}}" list="cuentas" maxlength="40" autocomplete="off" placeholder="Tarjeta"></label>
+        <label class="field">Nota <span class="help">opcional</span><input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+      </div>
+    </details>
+    {{template "accounts" .Accounts}}{{end}}
+
+{{define "subfields"}}{{$f := .SubForm}}
+    <div class="form-grid">
+      <label class="field">Nombre<input name="nombre" value="{{$f.Name}}" maxlength="60" autocomplete="off" placeholder="Netflix, gimnasio, seguro del coche…" required></label>
+      <label class="field">Importe <span class="help">de cada cobro</span><input name="importe" value="{{$f.Amount}}" inputmode="decimal" autocomplete="off" placeholder="12,99" required></label>
+    </div>
+    <div class="form-grid">
+      <label class="field">Cada cuánto<select name="periodicidad">{{range .PeriodOpts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <label class="field">Próximo cobro<input type="date" name="proximo" value="{{$f.Next}}" required></label>
+      <label class="field">Avisar <span class="help">días antes; 0 el mismo día; vacío, sin aviso</span><input name="aviso" value="{{$f.Notice}}" inputmode="numeric" autocomplete="off" maxlength="2"></label>
+    </div>
+    <div class="form-grid">
+      <label class="field">Categoría{{template "catselect" .CatOpts}}</label>
+      <label class="field">Cuenta o medio <span class="help">opcional</span><input name="cuenta" value="{{$f.Account}}" list="cuentas" maxlength="40" autocomplete="off"></label>
+    </div>
+    <label class="field">Nota <span class="help">opcional</span><input name="nota" value="{{$f.Note}}" maxlength="300" autocomplete="off"></label>
+    {{template "accounts" .Accounts}}{{end}}

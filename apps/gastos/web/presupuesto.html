@@ -1,0 +1,64 @@
+{{define "presupuesto.html"}}{{template "head" .}}
+{{$b := .Budget}}{{$s := .Stats}}
+<section class="hero compact">
+  <p class="eyebrow">Presupuesto</p>
+  {{template "monthnav" .}}
+</section>
+
+{{if $b.HasBudget}}
+<section class="panel summary" aria-label="Presupuesto del mes">
+  <p class="budget-head"><span class="tnum"><strong class="big-num">{{$b.BSpent}}</strong> de {{$b.Budget}}</span><span class="{{$b.LeftClass}} tnum">{{$b.Left}}</span></p>
+  {{template "meter" $b.Meter}}
+  <p class="help tnum">{{$b.Pct}} de lo presupuestado{{if .Month.Current}} · quedan {{.Month.DaysLeft}} días del mes{{end}}. En total, {{$b.Spent}} en gastos{{if $b.Unbudgeted}} ({{$b.Unbudgeted}} en categorías sin presupuesto){{end}}.</p>
+</section>
+{{else}}
+<section class="stats" aria-label="Cuentas del mes">
+  <div class="stat"><span class="stat-label">Gastos</span><span class="stat-value tnum">{{$s.Expenses}}</span></div>
+  <div class="stat"><span class="stat-label">Ingresos</span><span class="stat-value tnum">{{$s.Income}}</span></div>
+</section>
+<p class="note">Aún no tienes presupuestos: ponle a cada categoría lo que quieres gastar al mes en <a href="{{.Base}}/categorias#presupuestos">Categorías</a> y aquí verás cuánto llevas.</p>
+{{end}}
+
+{{if $b.Rows}}
+<section class="group">
+  <div class="group-head"><h2 class="label">Por categoría</h2><a class="link-small" href="{{.Base}}/categorias#presupuestos">Cambiar presupuestos</a></div>
+  <ul class="rows budget">
+    {{range $b.Rows}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/?mes={{$.Month.Key}}&amp;cat={{.ID}}">
+      <span class="row-main"><span class="row-title">{{.Name}}</span>{{if .Over}} <span class="chip warn">pasado</span>{{end}}</span>
+      <span class="row-side tnum">{{.Spent}}{{if .HasBudget}} <span class="muted">de {{.Budget}}</span>{{end}}</span>
+      <span class="meter-row">{{template "meter" .Meter}}</span>
+      <span class="row-meta tnum">{{if .HasBudget}}{{.Pct}} · <span class="{{if .Over}}out{{else}}in{{end}}">{{.Left}}</span>{{else}}sin presupuesto{{end}} · {{.Count}} mov.</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty"><p class="big">Nada gastado en {{.Month.Label}}.</p></section>
+{{end}}
+
+<section class="group">
+  <h2 class="label">Mes a mes</h2>
+  {{with .Chart}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key exp"></span>Gastos <span class="key inc"></span>Ingresos{{with $s.PrevNote}} · <span class="tnum">{{.}}</span>{{end}}</figcaption>
+    {{template "bars" .}}
+  </figure>
+  {{else}}
+  <p class="quiet">Aún no hay movimientos en los últimos meses.</p>
+  {{end}}
+  {{if $b.Compare}}
+  <h3 class="sub">Frente a {{$b.PrevLabel}}</h3>
+  <ul class="rows compact compare">
+    {{range $b.Compare}}
+    <li class="row"><div class="row-body cols">
+      <span class="row-main">{{.Name}}</span>
+      <span class="row-side tnum">{{.Now}}</span>
+      <span class="row-meta tnum">antes {{.Prev}}</span>
+      <span class="row-side2 tnum {{.DiffClass}}">{{.Diff}}</span>
+    </div></li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

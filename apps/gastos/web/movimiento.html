@@ -1,0 +1,32 @@
+{{define "movimiento.html"}}{{template "head" .}}
+{{$f := .MovForm}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/{{with .Month}}?mes={{.Key}}{{end}}">{{with .Month}}{{.Label}}{{else}}Movimientos{{end}}</a></p>
+  <h1 class="date">Editar movimiento</h1>
+  {{if eq $f.Origin "asistente"}}<div class="hero-meta"><span>Apuntado por Talia</span></div>{{else if eq $f.Origin "suscripcion"}}<div class="hero-meta"><span>Cobro registrado de una suscripción</span></div>{{end}}
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/movimiento/{{$f.ID}}">
+  {{template "movfields" .}}
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+    <a class="btn ghost" href="{{.Base}}/{{with .Month}}?mes={{.Key}}{{end}}">Cancelar</a>
+  </div>
+</form>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/movimiento/{{$f.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar este movimiento?</strong> No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/movimiento/{{$f.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Está mal o sobra?</p>
+  <a class="btn danger small" href="{{.Base}}/movimiento/{{$f.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}
