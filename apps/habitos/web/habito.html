@@ -1,0 +1,84 @@
+{{define "habito.html"}}{{template "head" .}}
+{{$h := .Habit}}{{$e := .Edit}}
+<section class="hero compact">
+  <p class="eyebrow"><a href="{{.Base}}/habitos">Hábitos</a></p>
+  <h1 class="date">{{with $h.Emoji}}<span class="emoji" aria-hidden="true">{{.}}</span> {{end}}{{$h.Name}}</h1>
+  <div class="hero-meta">
+    <span>{{$h.Freq}}</span>{{with $h.Goal}}<span>{{.}} al día</span>{{end}}
+    <span>{{with $h.Remind}}Aviso a las {{.}}{{else}}Sin aviso{{end}}</span>
+    {{if $h.Archived}}<span><strong>Archivado</strong></span>{{end}}
+  </div>
+</section>
+
+<section class="stats" aria-label="Rachas y cumplimiento">
+  <div class="stat"><span class="stat-label">Racha</span><span class="stat-value tnum">{{with $h.Streak}}{{.}}{{else}}—{{end}}</span><span class="stat-meta">{{if $h.Weekly}}semanas cumplidas seguidas{{else}}seguidos, de los que tocan{{end}}</span></div>
+  <div class="stat"><span class="stat-label">Mejor racha</span><span class="stat-value tnum">{{with $h.Best}}{{.}}{{else}}—{{end}}</span><span class="stat-meta">desde el {{$h.Created}}</span></div>
+  <div class="stat"><span class="stat-label">Esta semana</span><span class="stat-value tnum">{{$h.Week}}</span></div>
+  <div class="stat"><span class="stat-label">Este mes</span><span class="stat-value tnum">{{$h.Month}}</span><span class="stat-meta">últimos 30 días: {{$h.Last30}}</span></div>
+</section>
+
+<section class="group" id="dia">
+  <h2 class="label">El día</h2>
+  <div class="panel">
+    <div class="day-edit">
+      <p><strong>{{$e.Label}}</strong>: {{if $h.Amount}}<span class="tnum">{{$e.Value}} de {{$h.Goal}}</span>{{if $e.Done}} ✓{{end}}{{else}}{{if $e.Done}}hecho ✓{{else}}sin hacer{{end}}{{end}}</p>
+      {{if $h.Amount}}
+      <form class="set-form" method="post" action="{{.Base}}/marcar">
+        <input type="hidden" name="habito" value="{{$h.ID}}"><input type="hidden" name="dia" value="{{$e.ISO}}"><input type="hidden" name="accion" value="fijar"><input type="hidden" name="desde" value="ficha">
+        <label class="vh" for="cantidad">Cantidad</label>
+        <input id="cantidad" name="cantidad" value="{{$e.Value}}" inputmode="decimal" autocomplete="off">
+        <button class="btn small primary">Poner</button>
+      </form>
+      {{else}}
+      <form method="post" action="{{.Base}}/marcar">
+        <input type="hidden" name="habito" value="{{$h.ID}}"><input type="hidden" name="dia" value="{{$e.ISO}}"><input type="hidden" name="desde" value="ficha">
+        <input type="hidden" name="accion" value="{{if $e.Done}}deshacer{{else}}hecho{{end}}">
+        <button class="check{{if $e.Done}} on{{end}}" aria-pressed="{{if $e.Done}}true{{else}}false{{end}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>{{if $e.Done}}Hecho{{else}}Marcar{{end}}</span></button>
+      </form>
+      {{end}}
+    </div>
+    <form class="daypick" method="get" action="{{.Base}}/habito/{{$h.ID}}">
+      <label class="field">Otro día<input type="date" name="dia" value="{{$e.ISO}}"></label>
+      <button class="btn small">Ver</button>
+    </form>
+    <p class="help">O pulsa un día del calendario.</p>
+  </div>
+</section>
+
+<section class="group">
+  <h2 class="label">Calendario</h2>
+  <figure class="heat">
+    {{template "heatmap" .Heat}}
+    <figcaption class="heat-key"><span><span class="sw done"></span>Hecho</span>{{if $h.Amount}}<span><span class="sw part"></span>A medias</span>{{end}}{{if not $h.Weekly}}<span><span class="sw miss"></span>Tocaba y no</span>{{end}}<span><span class="sw"></span>{{if $h.Weekly}}Sin hacer{{else}}No tocaba{{end}}</span></figcaption>
+  </figure>
+</section>
+
+<details class="panel fold group"{{if .Error}} open{{end}}>
+  <summary>Cambiar el hábito</summary>
+  {{template "habitform" .}}
+</details>
+
+<div class="dangerzone">
+  <p>{{if $h.Archived}}Archivado: no sale en Hoy ni avisa, pero se guarda todo.{{else}}¿Lo dejas por un tiempo? Archívalo: no sale en Hoy ni avisa, y se guarda todo.{{end}}</p>
+  <form method="post" action="{{.Base}}/habito/{{$h.ID}}/archivar">
+    <input type="hidden" name="on" value="{{if $h.Archived}}0{{else}}1{{end}}">
+    <button class="btn small">{{if $h.Archived}}Recuperar{{else}}Archivar{{end}}</button>
+  </form>
+</div>
+
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/habito/{{$h.ID}}/borrar">
+  <input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar «{{$h.Name}}»?</strong> Se borra con todo lo apuntado. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/habito/{{$h.ID}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Sobra del todo?</p>
+  <a class="btn danger small" href="{{.Base}}/habito/{{$h.ID}}?borrar=1#borrar">Borrar…</a>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

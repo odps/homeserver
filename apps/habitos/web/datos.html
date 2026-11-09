@@ -1,0 +1,51 @@
+{{define "datos.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Hábitos</p>
+  <h1 class="date">Datos</h1>
+  <p class="lead">Lo cumplido de cada hábito y cómo se relaciona con tu diario. Son medias simples, calculadas aquí: no prueban causas.</p>
+</section>
+
+{{if .Stats}}
+<section class="group">
+  <h2 class="label">Cumplimiento</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th scope="col">Hábito</th><th scope="col">Racha</th><th scope="col">Mejor</th><th scope="col">Este mes</th><th scope="col">30 días</th></tr></thead>
+      <tbody>
+        {{range .Stats}}
+        <tr><th scope="row"><a href="{{$.Base}}/habito/{{.ID}}">{{.Label}}</a><br><span class="help">{{.Week}}</span></th>
+          <td class="tnum">{{with .Streak}}{{.}}{{else}}—{{end}}</td><td class="tnum">{{with .Best}}{{.}}{{else}}—{{end}}</td>
+          <td class="tnum">{{.Month}}</td><td class="tnum">{{.Last30}}</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="help">En los diarios y de días concretos, días hechos de los que tocaban; en los semanales, veces hechas de las previstas. Hoy y la semana en curso solo cuentan si ya están cumplidos.</p>
+</section>
+
+<section class="group">
+  <h2 class="label">Con tu diario (últimos {{.Range}} días)</h2>
+  <ul class="corrs">
+    {{range .Corrs}}
+    <li class="corr">
+      <h3>{{.Label}}</h3>
+      {{if .Enough}}
+      <p>Ánimo: <strong class="tnum">{{.Mood}}</strong>.</p>
+      {{with .Energy}}<p>Energía: <span class="tnum">{{.}}</span>.</p>{{end}}
+      {{with .Sleep}}<p>Sueño: <span class="tnum">{{.}}</span>.</p>{{end}}
+      <p class="n">{{.DoneN}} días hecho y {{.OtherN}} sin hacer, con el ánimo apuntado.</p>
+      {{else}}
+      <p class="n">{{.Missing}}</p>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{with .SleepCorr}}<p class="quiet">😴 {{.}}</p>{{end}}
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no hay datos.</p>
+  <p>Crea un hábito y márcalo unos días; si además escribes el diario, aquí verás cómo se relacionan. <a href="{{.Base}}/habito/nuevo">Crear un hábito</a>.</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

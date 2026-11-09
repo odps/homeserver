@@ -1,0 +1,110 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Hábitos</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Hábitos, hoy"><span class="mark" aria-hidden="true"></span>Hábitos</a>
+    <nav class="tabs" aria-label="Secciones de Hábitos">
+      <a href="{{.Base}}/"{{if eq .Tab "hoy"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.8 2.8L16.2 9.5"/></svg><span>Hoy</span></a>
+      <a href="{{.Base}}/habitos"{{if eq .Tab "habitos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M14 17l2 2 4-4.5"/></svg><span>Hábitos</span></a>
+      <a href="{{.Base}}/diario"{{if eq .Tab "diario"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6z"/><path d="M6 3.5v17"/><path d="M10 8h5M10 11.5h5"/></svg><span>Diario</span></a>
+      <a href="{{.Base}}/datos"{{if eq .Tab "datos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/></svg><span>Datos</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tus hábitos y tu diario, cifrados en tu servidor.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "item"}}<li class="habit{{if .Done}} is-done{{end}}" id="h{{.ID}}">
+  <span class="habit-emoji" aria-hidden="true">{{with .Emoji}}{{.}}{{else}}·{{end}}</span>
+  <div class="habit-body">
+    <a class="habit-name" href="{{.Base}}/habito/{{.ID}}">{{.Name}}</a>
+    <span class="habit-meta">{{if .Amount}}<span class="count tnum">{{.Value}} de {{.Goal}}</span> · {{end}}{{if .Weekly}}{{.Week}}{{else}}{{.Freq}}{{end}}{{with .Streak}} · <span class="fire">racha de {{.}}</span>{{end}}</span>
+  </div>
+  <div class="habit-act">
+    {{if .Amount}}
+    <form method="post" action="{{.Base}}/marcar">
+      <input type="hidden" name="habito" value="{{.ID}}"><input type="hidden" name="dia" value="{{.DayISO}}">
+      <input type="hidden" name="accion" value="sumar"><input type="hidden" name="cantidad" value="{{.Step}}">
+      <button class="check{{if .Done}} on{{end}}" aria-label="Sumar {{.StepLabel}} a {{.Name}}">{{if .Done}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{{end}}<span>{{.StepLabel}}</span></button>
+    </form>
+    {{else}}
+    <form method="post" action="{{.Base}}/marcar">
+      <input type="hidden" name="habito" value="{{.ID}}"><input type="hidden" name="dia" value="{{.DayISO}}">
+      <input type="hidden" name="accion" value="{{if .Done}}deshacer{{else}}hecho{{end}}">
+      <button class="check{{if .Done}} on{{end}}" aria-pressed="{{if .Done}}true{{else}}false{{end}}" aria-label="{{.Name}}: {{if .Done}}hecho (pulsa para desmarcar){{else}}marcar como hecho{{end}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>{{if .Done}}Hecho{{else}}Marcar{{end}}</span></button>
+    </form>
+    {{end}}
+  </div>
+  {{if .Amount}}
+  <div class="amount">
+    <svg class="progress" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="6" rx="3"/><rect class="fill" width="{{.Progress}}" height="6" rx="3"/></svg>
+    <form class="set-form" method="post" action="{{.Base}}/marcar">
+      <input type="hidden" name="habito" value="{{.ID}}"><input type="hidden" name="dia" value="{{.DayISO}}"><input type="hidden" name="accion" value="fijar">
+      <label class="vh" for="c{{.ID}}">Cantidad de {{.Name}}</label>
+      <input id="c{{.ID}}" name="cantidad" value="{{.Value}}" inputmode="decimal" autocomplete="off">
+      <button class="btn small">Poner</button>
+    </form>
+  </div>
+  {{end}}
+</li>{{end}}
+
+{{define "heatmap"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{range .Months}}<text class="lbl" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .Days}}<text class="lbl" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .Cells}}{{if .Day}}<a href="?dia={{.Day}}#dia"><rect class="{{.Class}}{{if .On}} on{{end}}" x="{{.X}}" y="{{.Y}}" width="13" height="13" rx="3"><title>{{.Title}}</title></rect></a>{{else}}<rect class="{{.Class}}" x="{{.X}}" y="{{.Y}}" width="13" height="13" rx="3"/>{{end}}{{end}}
+    </svg>{{end}}
+
+{{define "habitform"}}{{$f := .Form}}<form class="panel form" method="post" action="{{.Base}}/habito/{{if $f.ID}}{{$f.ID}}{{else}}nuevo{{end}}">
+  <div class="form-grid">
+    <label class="field">Nombre<input name="nombre" value="{{$f.Name}}" maxlength="60" required autocomplete="off" placeholder="Beber agua"></label>
+    <label class="field">Emoji <span class="help">opcional</span><input name="emoji" value="{{$f.Emoji}}" maxlength="16" autocomplete="off" placeholder="💧"></label>
+  </div>
+  <fieldset class="choice">
+    <legend>Tipo</legend>
+    <label><input type="radio" name="tipo" value="si_no"{{if ne $f.Kind "cantidad"}} checked{{end}}> Sí o no <span class="help">meditar, estirar, no fumar…</span></label>
+    <label><input type="radio" name="tipo" value="cantidad"{{if eq $f.Kind "cantidad"}} checked{{end}}> Cantidad con objetivo <span class="help">8 vasos de agua, 20 min de lectura…</span></label>
+  </fieldset>
+  <div class="form-grid">
+    <label class="field">Objetivo de cada día <span class="help">si es de cantidad</span><input name="objetivo" value="{{$f.Target}}" inputmode="decimal" autocomplete="off" placeholder="8"></label>
+    <label class="field">Unidad <span class="help">vasos, min, páginas…</span><input name="unidad" value="{{$f.Unit}}" maxlength="20" autocomplete="off" placeholder="vasos"></label>
+  </div>
+  <fieldset class="choice">
+    <legend>Cuándo</legend>
+    <div class="freq-opt"><label><input type="radio" name="frecuencia" value="diaria"{{if or (eq $f.FreqKind "diaria") (eq $f.FreqKind "")}} checked{{end}}> Cada día</label></div>
+    <div class="freq-opt">
+      <label><input type="radio" name="frecuencia" value="dias"{{if eq $f.FreqKind "dias"}} checked{{end}}> Unos días de la semana</label>
+      <fieldset class="days"><legend class="vh">Qué días</legend>{{range $f.Days}}<label><input type="checkbox" name="dias" value="{{.Value}}"{{if .On}} checked{{end}}><span aria-hidden="true">{{.Short}}</span><span class="vh">{{.Day}}</span></label>{{end}}</fieldset>
+    </div>
+    <div class="freq-opt">
+      <label><input type="radio" name="frecuencia" value="semana"{{if eq $f.FreqKind "semana"}} checked{{end}}> Unas veces por semana, el día que sea</label>
+      <label class="inline"><input name="veces" value="{{$f.Times}}" inputmode="numeric" maxlength="1" autocomplete="off"> veces por semana</label>
+    </div>
+  </fieldset>
+  <label class="field">Recordatorio <span class="help">opcional: te avisa por Telegram a esa hora si aún no está hecho</span><input type="time" name="recordatorio" value="{{$f.Remind}}"></label>
+  <div class="actions">
+    <button class="btn primary big">{{if $f.ID}}Guardar{{else}}Crear hábito{{end}}</button>
+    <a class="btn ghost" href="{{.Base}}/{{if $f.ID}}habito/{{$f.ID}}{{else}}habitos{{end}}">Cancelar</a>
+  </div>
+</form>{{end}}
