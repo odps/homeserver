@@ -1,0 +1,45 @@
+{{define "hoy.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Hábitos</p>
+  <h1 class="date">{{.Day.Label}}</h1>
+  <nav class="day-nav" aria-label="Cambiar de día">
+    <a href="{{.Base}}/?dia={{.Day.Prev}}">← Día anterior</a>
+    {{with .Day.Next}}<a href="{{$.Base}}/?dia={{.}}">Día siguiente →</a>{{end}}
+    {{if not .Day.IsToday}}<a class="now" href="{{.Base}}/">Volver a hoy</a>{{end}}
+  </nav>
+</section>
+
+{{if .Items}}
+<section class="group">
+  <h2 class="label">{{if .Day.IsToday}}Para hoy{{else}}Ese día tocaba{{end}}</h2>
+  <ul class="habits">{{range .Items}}{{template "item" .}}{{end}}</ul>
+</section>
+{{end}}
+
+{{if .Others}}
+<section class="group others">
+  <h2 class="label">{{if .Day.IsToday}}Hoy no toca{{else}}Ese día no tocaba{{end}}</h2>
+  <p class="quiet">Los de otros días de la semana y los semanales ya cumplidos. Si lo has hecho igualmente, márcalo.</p>
+  <ul class="habits">{{range .Others}}{{template "item" .}}{{end}}</ul>
+</section>
+{{end}}
+
+{{if and (not .Items) (not .Others)}}
+<section class="empty">
+  <p class="big">Aún no tienes hábitos.</p>
+  <p>Empieza con uno pequeño: beber agua, leer 20 minutos, estirar… <a href="{{.Base}}/habito/nuevo">Crear un hábito</a>.</p>
+</section>
+{{end}}
+
+{{with .Journal}}
+<section class="journal-cta">
+  {{if .Written}}
+  <p>📓 Diario de {{if .Today}}hoy{{else}}ese día{{end}}: escrito.</p>
+  <a class="btn small" href="{{$.Base}}/diario?dia={{$.Day.ISO}}">Verlo</a>
+  {{else}}
+  <p>📓 ¿Qué tal {{if .Today}}el día{{else}}fue ese día{{end}}? Apunta tu ánimo, tu energía y cómo has dormido.</p>
+  <a class="btn small primary" href="{{$.Base}}/diario?dia={{$.Day.ISO}}">Escribir</a>
+  {{end}}
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

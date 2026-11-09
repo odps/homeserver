@@ -1,0 +1,42 @@
+{{define "habitos.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Hábitos</p>
+  <h1 class="date">Tus hábitos</h1>
+  <div class="actions"><a class="btn primary" href="{{.Base}}/habito/nuevo">Nuevo hábito</a></div>
+</section>
+
+{{if .Items}}
+<section class="group">
+  <ul class="rows">
+    {{range .Items}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/habito/{{.ID}}">
+      <span class="row-main">{{.Label}}</span>
+      <span class="row-side tnum">{{if .Streak}}<span class="fire">{{.Streak}}</span>{{else}}<span class="muted">sin racha</span>{{end}}</span>
+      <span class="row-meta">{{.Freq}}{{with .Goal}} · {{.}}{{end}}{{with .Remind}} · aviso a las {{.}}{{end}}</span>
+      <span class="row-side2 tnum">{{.Last30}} en 30 días</span>
+    </a></li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no tienes hábitos.</p>
+  <p>Pueden ser de sí o no (meditar, estirar) o de cantidad con un objetivo (8 vasos de agua, 20 minutos de lectura), cada día, unos días de la semana o unas veces por semana.</p>
+</section>
+{{end}}
+
+{{if .Archived}}
+<details class="panel fold group">
+  <summary>Archivados ({{len .Archived}})</summary>
+  <ul class="rows off">
+    {{range .Archived}}
+    <li class="row"><a class="row-link" href="{{$.Base}}/habito/{{.ID}}">
+      <span class="row-main">{{.Label}}</span>
+      <span class="row-side tnum">{{with .Best}}mejor: {{.}}{{end}}</span>
+      <span class="row-meta">{{.Freq}}{{with .Goal}} · {{.}}{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+</details>
+{{end}}
+{{template "foot" .}}{{end}}

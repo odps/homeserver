@@ -1,0 +1,125 @@
+{{define "diario.html"}}{{template "head" .}}
+{{$f := .Entry}}
+<section class="hero compact">
+  <p class="eyebrow">Diario</p>
+  <h1 class="date">{{$f.Label}}</h1>
+  <nav class="day-nav" aria-label="Cambiar de día">
+    <a href="{{.Base}}/diario?dia={{$f.Prev}}">← Día anterior</a>
+    {{with $f.Next}}<a href="{{$.Base}}/diario?dia={{.}}">Día siguiente →</a>{{end}}
+    {{if not $f.IsToday}}<a class="now" href="{{.Base}}/diario">Volver a hoy</a>{{end}}
+  </nav>
+</section>
+
+<form class="panel form" method="post" action="{{.Base}}/diario">
+  <input type="hidden" name="dia" value="{{$f.ISO}}">
+  <fieldset class="scale">
+    <legend>Ánimo</legend>
+    {{range $f.Mood}}<label{{if eq .Value "0"}} class="none"{{end}}><input type="radio" name="animo" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}
+  </fieldset>
+  <fieldset class="scale">
+    <legend>Energía</legend>
+    {{range $f.Energy}}<label{{if eq .Value "0"}} class="none"{{end}}><input type="radio" name="energia" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}
+  </fieldset>
+  <div class="form-grid">
+    <label class="field">Horas de sueño <span class="help">la noche anterior</span><input name="sueno" value="{{$f.Sleep}}" inputmode="decimal" autocomplete="off" placeholder="7,5"></label>
+    <label class="field">Etiquetas <span class="help">separadas por comas</span><input name="etiquetas" value="{{$f.Tags}}" maxlength="400" autocomplete="off" placeholder="trabajo, familia"></label>
+  </div>
+  <label class="field">Nota <span class="help">solo para ti; Talia solo la lee si se lo pides</span><textarea name="nota" maxlength="4000" rows="5">{{$f.Note}}</textarea></label>
+  <div class="actions">
+    <button class="btn primary big">Guardar</button>
+  </div>
+  {{with $f.Updated}}<p class="help">Guardado el {{.}}{{if eq $f.Origin "asistente"}}, por Talia{{end}}.</p>{{end}}
+</form>
+
+{{if $f.Exists}}
+{{if .Confirm}}
+<form class="dangerzone confirm" id="borrar" method="post" action="{{.Base}}/diario/borrar">
+  <input type="hidden" name="dia" value="{{$f.ISO}}"><input type="hidden" name="confirmar" value="1">
+  <p><strong>¿Borrar lo de este día?</strong> Ánimo, energía, sueño, nota y etiquetas. No se puede deshacer.</p>
+  <div class="actions tight">
+    <button class="btn danger">Sí, borrarlo</button>
+    <a class="btn ghost" href="{{.Base}}/diario?dia={{$f.ISO}}">Cancelar</a>
+  </div>
+</form>
+{{else}}
+<div class="dangerzone" id="borrar">
+  <p>¿Quieres quitar lo de este día?</p>
+  <form method="post" action="{{.Base}}/diario/borrar"><input type="hidden" name="dia" value="{{$f.ISO}}"><button class="btn danger small">Borrar…</button></form>
+</div>
+{{end}}
+{{end}}
+
+{{with .Month}}
+<section class="group" id="mes">
+  <div class="group-head">
+    <h2 class="label">{{.Label}}</h2>
+    <nav class="day-nav" aria-label="Cambiar de mes">
+      <a href="{{$.Base}}/diario?dia={{$f.ISO}}&amp;mes={{.Prev}}#mes">← Mes anterior</a>
+      {{with .Next}}<a href="{{$.Base}}/diario?dia={{$f.ISO}}&amp;mes={{.}}#mes">Mes siguiente →</a>{{end}}
+    </nav>
+  </div>
+
+  {{with $.MonthAvg}}
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Días escritos</span><span class="stat-value tnum">{{.Days}}</span></div>
+    {{if .HasMood}}<div class="stat"><span class="stat-label">Ánimo medio</span><span class="stat-value tnum">{{.Mood}}</span><span class="stat-meta">de 5</span></div>{{end}}
+    {{if .HasEnergy}}<div class="stat"><span class="stat-label">Energía media</span><span class="stat-value tnum">{{.Energy}}</span><span class="stat-meta">de 5</span></div>{{end}}
+    {{if .HasSleep}}<div class="stat"><span class="stat-label">Sueño medio</span><span class="stat-value tnum">{{.Sleep}}</span></div>{{end}}
+  </div>
+  {{with .BestTag}}<p class="quiet">La etiqueta con mejor ánimo: «{{.}}» ({{$.MonthAvg.BestTagMood}} de media).</p>{{end}}
+  {{end}}
+
+  {{with $.Chart}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key"></span>Ánimo{{if .HasEnergy}} <span class="key energy"></span>Energía{{end}} · de 1 a 5</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="Ánimo y energía de cada día del mes">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .Grid}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.}}" y2="{{.}}"/>{{end}}
+      {{range .YTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .Energy}}<polyline class="energy" points="{{.}}"/>{{end}}
+      {{range .Mood}}<polyline class="mood" points="{{.}}"/>{{end}}
+      {{range .EnergyDots}}<circle class="pt-energy" cx="{{.X}}" cy="{{.Y}}" r="2.5"><title>{{.Title}}</title></circle>{{end}}
+      {{range .MoodDots}}<circle class="pt-mood" cx="{{.X}}" cy="{{.Y}}" r="3.5"><title>{{.Title}}</title></circle>{{end}}
+    </svg>
+  </figure>
+  {{if .HasSleep}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key sleep"></span>Horas de sueño</figcaption>
+    <svg viewBox="0 0 {{.W}} {{.SleepH}}" role="img" aria-label="Horas de sueño de cada día del mes">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{range .SleepGrid}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.}}" y2="{{.}}"/>{{end}}
+      {{range .SleepTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .SleepXTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+      {{range .Bars}}<rect class="sleep" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="1.5"><title>{{.Title}}</title></rect>{{end}}
+    </svg>
+  </figure>
+  {{end}}
+  {{end}}
+
+  {{if $.Entries}}
+  <ul class="entries">
+    {{range $.Entries}}
+    <li class="entry">
+      <div class="entry-head"><a href="{{$.Base}}/diario?dia={{.ISO}}">{{.Label}}</a>{{with .MoodIcon}}<span class="entry-mood" aria-hidden="true">{{.}}</span>{{end}}</div>
+      <p class="entry-meta">{{with .Mood}}Ánimo: {{.}}{{end}}{{if and .Mood .Energy}} · {{end}}{{.Energy}}{{if and (or .Mood .Energy) .Sleep}} · {{end}}{{.Sleep}}</p>
+      {{with .Note}}<p class="entry-note">{{.}}</p>{{end}}
+      {{with .Tags}}<ul class="tags">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="quiet">Nada escrito este mes.</p>
+  {{end}}
+</section>
+{{end}}
+
+<section class="group" id="aviso">
+  <h2 class="label">Aviso de la tarde</h2>
+  <form class="panel form" method="post" action="{{.Base}}/ajustes">
+    <label class="check-line"><input type="checkbox" name="aviso" value="1"{{if .Nudge.Nudge}} checked{{end}}> Avisarme por Telegram si a esa hora aún no he escrito el diario</label>
+    <label class="field">Hora<input type="time" name="hora" value="{{.NudgeTime}}"></label>
+    <div class="actions"><button class="btn">Guardar el aviso</button></div>
+  </form>
+</section>
+{{template "foot" .}}{{end}}
