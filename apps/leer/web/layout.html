@@ -1,0 +1,82 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Leer después</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}} size-{{.Size}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Leer después, pendientes"><span class="mark" aria-hidden="true"></span>Leer después</a>
+    <nav class="tabs" aria-label="Secciones de Leer después">
+      <a href="{{.Base}}/"{{if eq .Tab "pendientes"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5h11v15.5L12 16l-5.5 4z"/></svg><span>Pendientes</span></a>
+      <a href="{{.Base}}/favoritos"{{if eq .Tab "favoritos"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l2.3 4.8 5.2.7-3.8 3.6.9 5.2L12 16.3l-4.6 2.5.9-5.2-3.8-3.6 5.2-.7z"/></svg><span>Favoritos</span></a>
+      <a href="{{.Base}}/archivo"{{if eq .Tab "archivo"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v4H4z"/><path d="M5.5 9.5v9h13v-9"/><path d="M10 13h4"/></svg><span>Archivo</span></a>
+      <a href="{{.Base}}/ajustes"{{if eq .Tab "ajustes"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2"/></svg><span>Ajustes</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tus lecturas, cifradas en tu servidor. Solo se guarda el texto: sin anuncios, sin rastreadores.</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "tags"}}{{range .}}<span class="tag">{{.}}</span>{{end}}{{end}}
+
+{{define "rows"}}<ul class="rows">
+  {{- /* recibe la página entera: usa .Rows, .Tab y .Base */ -}}
+  {{range .Rows}}
+  <li class="row{{if .Read}} read{{end}}">
+    <a class="row-link" href="{{$.Base}}/articulo/{{.ID}}">
+      <span class="row-main">{{if not .Read}}<span class="dot" aria-hidden="true"></span><span class="vh">Sin leer: </span>{{end}}<span class="row-title">{{.Title}}</span>{{if .Favorite}} <span class="star" aria-label="favorito">★</span>{{end}}</span>
+      <span class="row-meta">{{.Site}}{{if .Minutes}} · {{.Minutes}} min{{end}} · {{.Saved}}{{if .Archived}} · archivado{{end}}</span>
+      {{if .Failed}}<span class="row-meta bad">No se ha podido leer la página</span>{{else if .Queued}}<span class="row-meta">Descargando…</span>{{else}}{{with .Excerpt}}<span class="row-excerpt">{{.}}</span>{{end}}{{end}}
+      {{with .Tags}}<span class="row-tags">{{template "tags" .}}</span>{{end}}
+    </a>
+    <div class="row-actions">
+      {{if .Archived}}
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+        <input type="hidden" name="campo" value="archivado"><input type="hidden" name="valor" value="0"><input type="hidden" name="volver" value="{{$.Tab}}">
+        <button class="btn small" aria-label="Devolver a pendientes: {{.Title}}">Devolver</button>
+      </form>
+      {{else}}
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+        <input type="hidden" name="campo" value="archivado"><input type="hidden" name="valor" value="1"><input type="hidden" name="volver" value="{{$.Tab}}">
+        <button class="btn small" aria-label="Archivar: {{.Title}}">Archivar</button>
+      </form>
+      {{end}}
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+        <input type="hidden" name="campo" value="favorito"><input type="hidden" name="valor" value="{{if .Favorite}}0{{else}}1{{end}}"><input type="hidden" name="volver" value="{{$.Tab}}">
+        <button class="btn small ghost fav{{if .Favorite}} on{{end}}" aria-label="{{if .Favorite}}Quitar de favoritos{{else}}Poner en favoritos{{end}}: {{.Title}}" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}">★</button>
+      </form>
+    </div>
+  </li>
+  {{end}}
+</ul>{{end}}
+
+{{define "search"}}<form class="search" method="post" action="{{.Base}}/buscar" role="search">
+  <input type="hidden" name="lista" value="{{.Tab}}">
+  <label class="vh" for="q">Buscar en lo guardado</label>
+  <div class="add-row">
+    <input id="q" name="q" type="search" value="{{.Query}}" placeholder="Buscar en todo lo guardado" autocomplete="off" maxlength="200">
+    <button class="btn">Buscar</button>
+  </div>
+</form>
+{{with .Tags}}<div class="chips" aria-label="Etiquetas">
+  {{range .}}<form method="post" action="{{$.Base}}/buscar"><input type="hidden" name="lista" value="{{$.Tab}}"><input type="hidden" name="etiqueta" value="{{.Name}}"><button class="chip{{if .On}} on{{end}}"{{if .On}} aria-pressed="true"{{end}}>{{.Name}} <span class="n">{{.N}}</span></button></form>{{end}}
+</div>{{end}}{{end}}

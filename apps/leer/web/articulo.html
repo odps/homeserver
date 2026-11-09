@@ -1,0 +1,100 @@
+{{define "articulo.html"}}{{template "head" .}}
+{{with .Art}}
+<article class="reader">
+  <header class="reader-head">
+    <p class="eyebrow"><a href="{{$.Base}}{{.Back}}">{{.BackLabel}}</a></p>
+    <h1 class="reader-title" lang="{{.Lang}}">{{.Title}}</h1>
+    <p class="byline">
+      <span class="site">{{.Site}}</span>{{with .Author}} · {{.}}{{end}}{{with .Date}} · {{.}}{{end}}{{if .Minutes}} · <span class="nowrap tnum">{{.Minutes}} min de lectura</span>{{end}}
+    </p>
+    <p class="saved">Guardado {{.Saved}}{{if .Read}} · leído{{end}}{{if .Archived}} · archivado{{end}}{{with .Tags}} · {{template "tags" .}}{{end}}</p>
+    <div class="actions tight">
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+        <input type="hidden" name="campo" value="leido"><input type="hidden" name="valor" value="{{if .Read}}0{{else}}1{{end}}"><input type="hidden" name="volver" value="articulo">
+        <button class="btn small">{{if .Read}}Marcar sin leer{{else}}Marcar leído{{end}}</button>
+      </form>
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+        <input type="hidden" name="campo" value="favorito"><input type="hidden" name="valor" value="{{if .Favorite}}0{{else}}1{{end}}"><input type="hidden" name="volver" value="articulo">
+        <button class="btn small fav{{if .Favorite}} on{{end}}" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}">★ Favorito</button>
+      </form>
+      <a class="btn small ghost" href="{{.URL}}" rel="noopener noreferrer nofollow">Abrir el original</a>
+    </div>
+  </header>
+
+  {{if .Failed}}
+  <div class="note warn">
+    <p><strong>No se ha podido leer la página.</strong> {{.Err}}</p>
+    <form method="post" action="{{$.Base}}/articulo/{{.ID}}/reintentar"><button class="btn small">Reintentar</button></form>
+  </div>
+  {{else if .Queued}}
+  <div class="note">
+    <p>Aún se está descargando. Vuelve en un momento.</p>
+    <form method="post" action="{{$.Base}}/articulo/{{.ID}}/reintentar"><button class="btn small">Descargar ahora</button></form>
+  </div>
+  {{end}}
+
+  {{if .Blocks}}
+  <div class="text" lang="{{.Lang}}">
+    {{range .Blocks}}
+      {{if eq .Kind "p"}}<p>{{.Text}}</p>
+      {{else if eq .Kind "h2"}}<h2>{{.Text}}</h2>
+      {{else if eq .Kind "h3"}}<h3>{{.Text}}</h3>
+      {{else if eq .Kind "ul"}}<ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>
+      {{else if eq .Kind "ol"}}<ol>{{range .Items}}<li>{{.}}</li>{{end}}</ol>
+      {{else if eq .Kind "cita"}}<blockquote>{{.Text}}</blockquote>
+      {{else if eq .Kind "pre"}}<pre>{{.Text}}</pre>
+      {{else if eq .Kind "pie"}}<p class="caption">{{.Text}}</p>
+      {{end}}
+    {{end}}
+  </div>
+  {{if .Truncated}}<p class="note">El artículo era muy largo: aquí está hasta donde cabe. El resto, en el original.</p>{{end}}
+  {{end}}
+
+  <footer class="reader-foot">
+    {{if not .Archived}}
+    <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+      <input type="hidden" name="campo" value="archivado"><input type="hidden" name="valor" value="1"><input type="hidden" name="volver" value="pendientes">
+      <button class="btn big primary">Terminado: archivar</button>
+    </form>
+    {{else}}
+    <form method="post" action="{{$.Base}}/articulo/{{.ID}}/marcar">
+      <input type="hidden" name="campo" value="archivado"><input type="hidden" name="valor" value="0"><input type="hidden" name="volver" value="articulo">
+      <button class="btn big">Devolver a pendientes</button>
+    </form>
+    {{end}}
+
+    <details class="panel fold"{{if $.Error}} open{{end}}>
+      <summary>Etiquetas</summary>
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/etiquetas">
+        <label class="field" for="etiquetas">Separadas por comas
+          <input id="etiquetas" name="etiquetas" value="{{.TagsText}}" maxlength="400" autocomplete="off">
+        </label>
+        <div class="actions"><button class="btn">Guardar etiquetas</button></div>
+      </form>
+    </details>
+
+    <form class="sizes" method="post" action="{{$.Base}}/tamano" aria-label="Tamaño de letra">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <span class="help">Letra</span>
+      {{range $.Sizes}}<button class="size-btn s-{{.Key}}" name="tamano" value="{{.Key}}"{{if .Selected}} aria-pressed="true"{{end}} aria-label="{{.Label}}">A</button>{{end}}
+    </form>
+
+    {{if $.Confirm}}
+    <div class="dangerzone confirm" id="borrar">
+      <p>¿Borrar este artículo? Se borran el enlace y el texto guardado, y no se puede deshacer.</p>
+      <form method="post" action="{{$.Base}}/articulo/{{.ID}}/borrar">
+        <input type="hidden" name="confirmar" value="1">
+        <button class="btn danger">Sí, borrar</button>
+      </form>
+      <a class="btn ghost" href="{{$.Base}}/articulo/{{.ID}}">Cancelar</a>
+    </div>
+    {{else}}
+    <div class="dangerzone" id="borrar">
+      <p>Si no lo quieres ni en el archivo, bórralo.</p>
+      <a class="btn danger" href="{{$.Base}}/articulo/{{.ID}}?borrar=1#borrar">Borrar…</a>
+    </div>
+    {{end}}
+  </footer>
+</article>
+{{end}}
+{{template "foot" .}}{{end}}
