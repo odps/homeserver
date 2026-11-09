@@ -1,0 +1,78 @@
+{{define "head"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>{{with .Title}}{{.}} · {{end}}Casa</title>
+<link rel="stylesheet" href="{{.Base}}/static/app.css">
+<link rel="icon" href="{{.Base}}/static/icon.svg" type="image/svg+xml">
+</head>
+<body class="tab-{{.Tab}}">
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="{{.Base}}/" aria-label="Casa, precio de la luz"><span class="mark" aria-hidden="true"></span>Casa</a>
+    <nav class="tabs" aria-label="Secciones de Casa">
+      <a href="{{.Base}}/"{{if eq .Tab "luz"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2.5L5.5 13.5h6l-1 8 8-11.5h-6z"/></svg><span>Luz</span></a>
+      <a href="{{.Base}}/mantenimiento"{{if eq .Tab "mantenimiento"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0 5 5l-8.5 8.5a2.1 2.1 0 0 1-3-3z"/><path d="M14.5 6.5l2.5-2.5 3 3-2.5 2.5"/></svg><span>Mantenimiento</span></a>
+      <a href="{{.Base}}/lecturas"{{if eq .Tab "lecturas"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.3"/></svg><span>Lecturas</span></a>
+      <a href="{{.Base}}/ajustes"{{if eq .Tab "ajustes"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 16.5v-5a5.5 5.5 0 0 1 11 0v5l1.5 2h-14z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Avisos</span></a>
+    </nav>
+  </div>
+</header>
+<main id="contenido">
+{{with .Flash}}<p class="toast" role="status">{{.}}</p>{{end}}
+{{with .Error}}<p class="toast error" role="alert">{{.}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="foot"><p>Tu casa, cifrada en tu servidor. Precios de la luz: Red Eléctrica (PVPC, sin impuestos).</p><p class="ver">{{.Version}}</p></footer>
+</body>
+</html>
+{{end}}
+
+{{define "bars"}}<svg viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="{{.Label}}">
+      {{$x0 := .X0}}{{$x1 := .X1}}
+      {{with .Band}}<rect class="band" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="6"><title>{{.Title}}</title></rect>{{end}}
+      {{range .YTicks}}<line class="grid" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Y}}" y2="{{.Y}}"/><text class="tick" x="{{.X}}" y="{{.Y}}" dy="4" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+      {{range .Bars}}<rect class="b {{.Class}}" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="2"><title>{{.Title}}</title></rect>{{end}}
+      <line class="base" x1="{{$x0}}" x2="{{$x1}}" y1="{{.Base}}" y2="{{.Base}}"/>
+      {{range .XTicks}}<text class="tick" x="{{.X}}" y="{{.Y}}" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+    </svg>{{end}}
+
+{{define "hourlist"}}<ul class="hours">{{range .}}<li class="lv-{{.Level}}{{if .Now}} is-now{{end}}"><span class="h-label">{{.Label}}</span><span class="h-price tnum">{{.Price}}</span></li>{{end}}</ul>{{end}}
+
+{{define "luzday"}}
+<section class="group" id="{{if .IsToday}}hoy{{else}}manana{{end}}">
+  <div class="group-head"><h2 class="label">{{.Title}} · {{.Date}}</h2></div>
+  <section class="stats" aria-label="Precios de {{.Title}}">
+    <div class="stat"><span class="stat-label">Más barata</span><span class="stat-value lv-barata tnum">{{.Lo}}</span><span class="stat-meta">{{.LoAt}}</span></div>
+    <div class="stat"><span class="stat-label">Más cara</span><span class="stat-value lv-cara tnum">{{.Hi}}</span><span class="stat-meta">{{.HiAt}}</span></div>
+    <div class="stat"><span class="stat-label">Media del día</span><span class="stat-value tnum">{{.Avg}}</span><span class="stat-meta">PVPC sin impuestos</span></div>
+  </section>
+  {{with .Chart}}
+  <figure class="chart">
+    <figcaption class="legend"><span class="key k-barata"></span>Barata <span class="key k-media"></span>Media <span class="key k-cara"></span>Cara <span class="key k-band"></span>3 h más baratas{{if $.IsToday}} <span class="key k-now"></span>Ahora{{end}}</figcaption>
+    {{template "bars" .}}
+  </figure>
+  {{end}}
+  <div class="blocks">
+    {{if .Block3}}<div class="block-card"><span class="stat-label">Para la lavadora o el lavavajillas</span><span class="block-main">Bloque de 3 h: <strong>de {{.Block3}}</strong></span><span class="stat-meta tnum">{{.Block3Avg}} de media</span></div>{{end}}
+    {{if .Block2}}<div class="block-card"><span class="stat-label">Algo más corto</span><span class="block-main">Bloque de 2 h: <strong>de {{.Block2}}</strong></span><span class="stat-meta tnum">{{.Block2Avg}} de media</span></div>{{end}}
+    {{if .RestDiffers}}<div class="block-card now-card"><span class="stat-label">{{if .RestPast}}El más barato ya ha pasado; desde ahora{{else}}Lo mejor desde ahora{{end}}</span><span class="block-main"><strong>de {{.Rest}}</strong></span><span class="stat-meta tnum">{{.RestAvg}} de media</span></div>{{end}}
+  </div>
+  <div class="split">
+    <div><h3 class="sub">Las 3 horas más baratas</h3>{{template "hourlist" .Cheap}}</div>
+    <div><h3 class="sub">Las 3 horas más caras</h3>{{template "hourlist" .Dear}}</div>
+  </div>
+  <details class="panel fold">
+    <summary>Todas las horas</summary>
+    {{template "hourlist" .Hours}}
+  </details>
+</section>
+{{end}}

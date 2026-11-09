@@ -1,0 +1,80 @@
+{{define "taskform"}}
+  <div class="field-row">
+    <label class="field">Tarea<input name="nombre" value="{{.TForm.Name}}" maxlength="80" required placeholder="Limpiar el filtro de la campana"></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Cada<input name="cada" value="{{.TForm.Every}}" inputmode="numeric" pattern="[0-9]*" required></label>
+    <label class="field">Unidad<select name="unidad">{{range .Units}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+  </div>
+  <div class="form-grid">
+    <label class="field">Última vez <span class="help">(si la sabes)</span><input type="date" name="ultima" value="{{.TForm.Last}}"></label>
+    <label class="field">Próxima <span class="help">(si no, la última más el periodo)</span><input type="date" name="proxima" value="{{.TForm.Due}}"></label>
+  </div>
+  <label class="field">Nota <span class="help">(opcional)</span><input name="nota" value="{{.TForm.Note}}" maxlength="300"></label>
+{{end}}
+
+{{define "mantenimiento.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Casa</p>
+  <h1 class="date">Mantenimiento</h1>
+  {{if .Tasks}}<p class="lead">{{if .Late}}<span class="chip st-atrasada">{{.Late}} atrasada{{if gt .Late 1}}s{{end}}</span> {{end}}{{if .Due}}<span class="chip st-hoy">{{.Due}} para hoy</span> {{end}}{{if and (not .Late) (not .Due)}}Todo al día.{{end}} Te avisa por Telegram el día que toca, una vez.</p>{{end}}
+</section>
+
+{{if .Tasks}}
+<section class="group">
+  <ul class="rows tasks">
+    {{range .Tasks}}
+    <li class="row st-{{.State}}">
+      <a class="row-link" href="{{$.Base}}/tarea/{{.ID}}">
+        <span class="row-main"><span class="row-title">{{.Name}}</span></span>
+        <span class="row-side"><span class="chip st-{{.State}}">{{.StateName}}</span></span>
+        <span class="row-meta">{{.When}} · {{.Every}}{{with .Last}} · última vez el {{.}}{{end}}</span>
+      </a>
+      {{if or (eq .State "atrasada") (eq .State "hoy") (eq .State "pronto")}}
+      <div class="row-actions">
+        <form method="post" action="{{$.Base}}/tarea/{{.ID}}/hecho">
+          <input type="hidden" name="desde" value="lista">
+          <button class="btn small primary" aria-label="Hecha hoy: {{.Name}}">Hecha</button>
+        </form>
+      </div>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<section class="empty">
+  <p class="big">Aún no hay tareas.</p>
+  <p>Añade las sugerencias de abajo con un clic o crea las tuyas: cada cuánto toca y, si la sabes, la última vez. Talia también puede apuntarlas y darlas por hechas.</p>
+</section>
+{{end}}
+
+{{with .Suggest}}
+<section class="group">
+  <h2 class="label">Sugerencias</h2>
+  <ul class="rows compact">
+    {{range .}}
+    <li class="row">
+      <div class="row-body"><span class="row-main">{{.Name}}</span><span class="row-meta">{{.EveryLabel}}{{with .Note}} · {{.}}{{end}}</span></div>
+      <div class="row-actions">
+        <form method="post" action="{{$.Base}}/mantenimiento/sugerencia">
+          <input type="hidden" name="clave" value="{{.Key}}">
+          <button class="btn small" aria-label="Añadir: {{.Name}}">Añadir</button>
+        </form>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<section class="group">
+  <details class="panel fold"{{if .Error}} open{{end}}>
+    <summary>Nueva tarea</summary>
+    <form method="post" action="{{.Base}}/mantenimiento/nueva">
+      {{template "taskform" .}}
+      <div class="actions"><button class="btn primary">Añadir</button></div>
+    </form>
+  </details>
+</section>
+{{template "foot" .}}{{end}}

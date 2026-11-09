@@ -1,0 +1,30 @@
+{{define "ajustes.html"}}{{template "head" .}}
+{{$s := .Settings}}
+<section class="hero compact">
+  <p class="eyebrow">Casa</p>
+  <h1 class="date">Avisos</h1>
+  <p class="lead">Llegan por Telegram, una sola vez cada uno.</p>
+</section>
+
+<form class="panel" method="post" action="{{.Base}}/ajustes">
+  <fieldset class="choice">
+    <legend class="sub">Mantenimiento</legend>
+    <label><input type="checkbox" name="mantenimiento" value="1"{{if $s.Maint}} checked{{end}}> Avisarme el día que toca una tarea</label>
+  </fieldset>
+  <fieldset class="choice">
+    <legend class="sub">Precio de la luz de mañana <span class="help">(se publica hacia las 20:30)</span></legend>
+    <label><input type="checkbox" name="barata" value="1"{{if $s.Low}} checked{{end}}> Avisarme si alguna hora va a estar muy barata</label>
+    <label class="field">Muy barata: hasta <span class="help">(€/kWh)</span><input name="barata_hasta" value="{{$s.LowBelow}}" inputmode="decimal" required></label>
+    <label><input type="checkbox" name="cara" value="1"{{if $s.High}} checked{{end}}> Avisarme si alguna hora va a estar muy cara</label>
+    <label class="field">Muy cara: desde <span class="help">(€/kWh)</span><input name="cara_desde" value="{{$s.HighAbove}}" inputmode="decimal" required></label>
+  </fieldset>
+  <fieldset class="choice">
+    <legend class="sub">Contador del gas</legend>
+    <label class="field">Unidad<select name="unidad_gas">
+      <option value="m³"{{if eq $s.GasUnit "m³"}} selected{{end}}>m³</option>
+      <option value="kWh"{{if eq $s.GasUnit "kWh"}} selected{{end}}>kWh</option>
+    </select></label>
+  </fieldset>
+  <div class="actions"><button class="btn primary">Guardar</button></div>
+</form>
+{{template "foot" .}}{{end}}

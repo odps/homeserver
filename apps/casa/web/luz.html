@@ -1,0 +1,35 @@
+{{define "luz.html"}}{{template "head" .}}
+<section class="hero compact">
+  <p class="eyebrow">Precio de la luz</p>
+  {{with .Today}}{{if .Now}}
+  <h1 class="big-value tnum lv-{{.NowLevel}}">{{.Now}}</h1>
+  <div class="hero-meta">
+    <span>Ahora, de {{.NowAt}}: <span class="chip lv-{{.NowLevel}}">{{if eq .NowLevel "barata"}}barata{{else if eq .NowLevel "cara"}}cara{{else}}normal{{end}}</span></span>
+    {{if .Rest}}<span>Lo mejor desde ahora: de {{.Rest}}</span>{{else if .Block3}}<span>3 h más baratas: de {{.Block3}}</span>{{end}}
+  </div>
+  {{else}}
+  <h1 class="date">Hoy</h1>
+  {{end}}{{else}}
+  <h1 class="date">Luz por horas</h1>
+  <p class="lead">Aún no están los precios de hoy. Se piden a Red Eléctrica en cuanto se puede.</p>
+  {{end}}
+</section>
+
+{{with .Today}}{{template "luzday" .}}{{end}}
+
+{{with .Tomorrow}}{{template "luzday" .}}{{else}}
+<section class="group" id="manana">
+  <h2 class="label">Mañana</h2>
+  <p class="quiet">Los precios de mañana se publican hacia las 20:30. Saldrán aquí en cuanto estén.</p>
+</section>
+{{end}}
+
+<section class="group sources">
+  <h2 class="label">Fuente</h2>
+  <ul class="rows compact">
+    <li class="row"><div class="row-body"><span class="row-main"><span class="dot {{if .Source.OK}}ok{{else}}bad{{end}}" aria-hidden="true"></span>Red Eléctrica (PVPC, península)</span>
+      <span class="row-meta">{{if .Source.Pending}}Aún no se ha consultado{{else if .Source.OK}}Consultada {{.Source.Last}}{{else}}Falla: {{.Source.Error}}{{with .Source.Retry}}; {{.}}{{end}}. Última buena: {{.Source.Last}}{{end}}</span></div></li>
+  </ul>
+  <p class="help">Es el término de energía de la tarifa regulada (2.0TD), con peajes y cargos y sin impuestos. Con una tarifa de mercado libre tu precio es otro, pero las horas baratas suelen coincidir.</p>
+</section>
+{{template "foot" .}}{{end}}
