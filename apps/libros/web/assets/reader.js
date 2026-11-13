@@ -116,12 +116,54 @@ export async function showReader(view, id) {
 
   const onKey = e => keyNav(e, fv, root)
   document.addEventListener('keydown', onKey)
-  const onHide = () => { if (document.visibilityState === 'hidden') save(fv.lastLocation, true) }
+  const awake = keepAwake()
+  fv.addEventListener('relocate', awake.touch)
+  const onHide = () => {
+    if (document.visibilityState === 'hidden') save(fv.lastLocation, true)
+    else awake.touch()
+  }
   document.addEventListener('visibilitychange', onHide)
   current = { fv, save, cleanup: () => {
     document.removeEventListener('keydown', onKey)
     document.removeEventListener('visibilitychange', onHide)
+    awake.stop()
   } }
+}
+
+// keepAwake evita que la pantalla se apague mientras se lee en el móvil o la
+// tableta (API Wake Lock). El navegador lo suelta al cambiar de app o
+// bloquear, y se vuelve a pedir al volver. Si no se pasa de página ni se toca
+// la pantalla en AWAKE_IDLE, se suelta para no gastar batería si te duermes
+// leyendo; con el siguiente toque o página vuelve.
+const AWAKE_IDLE = 15 * 60 * 1000
+
+function keepAwake() {
+  const none = { touch() {}, stop() {} }
+  if (!('wakeLock' in navigator) || !matchMedia('(pointer: coarse)').matches) return none
+  let lock = null, timer = 0, stopped = false
+  const release = () => { lock?.release().catch(() => {}); lock = null }
+  const touch = async () => {
+    if (stopped || document.visibilityState !== 'visible') return
+    clearTimeout(timer)
+    timer = setTimeout(release, AWAKE_IDLE)
+    if (lock && !lock.released) return
+    try {
+      lock = await navigator.wakeLock.request('screen')
+      if (stopped) release()
+    } catch { lock = null } // sin permiso o con ahorro de batería: se apaga como siempre
+  }
+  const onTouch = () => touch()
+  document.addEventListener('pointerdown', onTouch, { passive: true })
+  touch()
+  return {
+    touch,
+    stop() {
+      stopped = true
+      clearTimeout(timer)
+      document.removeEventListener('pointerdown', onTouch)
+      release()
+    },
+  }
 }
 
 export function closeReader() {
