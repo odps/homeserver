@@ -198,12 +198,15 @@ func (a asura) fetch(ctx context.Context, id string) (seriesData, error) {
 	for _, g := range s.Genres {
 		d.Genres = append(d.Genres, g.Name)
 	}
+	now := time.Now()
 	for _, ch := range chapters.Data {
-		cd := chapterData{Number: ch.Number, Title: ch.Title, URL: d.URL + "/chapter/" + numberLabel(ch.Number), PublishedAt: ch.Published}
-		if ch.Premium && ch.Early != nil && ch.Early.After(time.Now()) {
-			cd.EarlyUntil = ch.Early
+		// Los de acceso anticipado (de pago) no cuentan hasta que son para
+		// todos (decisión del usuario): entonces llegan como nuevos y avisan.
+		// is_premium pasa a false al liberarse; early_access_until es la hora.
+		if ch.Premium && (ch.Early == nil || ch.Early.After(now)) {
+			continue
 		}
-		d.Chapters = append(d.Chapters, cd)
+		d.Chapters = append(d.Chapters, chapterData{Number: ch.Number, Title: ch.Title, URL: d.URL + "/chapter/" + numberLabel(ch.Number), PublishedAt: ch.Published})
 	}
 	return d, nil
 }

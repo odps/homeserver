@@ -46,16 +46,12 @@ func fakeComics(t *testing.T) (*httptest.Server, *int) {
 	})
 	mux.HandleFunc("/api/series/killer-pietro/chapters", func(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
-		b.WriteString(`{"data":[`)
+		// Encima, uno de acceso anticipado (de pago) que no debe salir hasta
+		// que sea para todos.
+		b.WriteString(`{"data":[{"number":` + strconv.Itoa(chapters+1) + `,"is_premium":true,"early_access_until":"` +
+			time.Now().Add(time.Hour).UTC().Format(time.RFC3339) + `"}`)
 		for n := chapters; n >= 1; n-- {
-			if n < chapters {
-				b.WriteString(",")
-			}
-			early := ""
-			if n == chapters {
-				early = `,"is_premium":true,"early_access_until":"` + time.Now().Add(time.Hour).UTC().Format(time.RFC3339) + `"`
-			}
-			b.WriteString(`{"number":` + strconv.Itoa(n) + `,"published_at":"2026-10-0` + strconv.Itoa(n%9+1) + `T10:00:00Z"` + early + `}`)
+			b.WriteString(`,{"number":` + strconv.Itoa(n) + `,"published_at":"2026-10-0` + strconv.Itoa(n%9+1) + `T10:00:00Z","is_premium":false}`)
 		}
 		b.WriteString(`]}`)
 		w.Write([]byte(b.String()))
@@ -151,7 +147,7 @@ func TestSeriesTracking(t *testing.T) {
 		s.Unread != 3 || s.Next == nil || s.Next.Number != 1 || s.Description != "Un asesino & más" || len(s.Authors) != 1 || s.Authors[0] != "Kim Junghyun" {
 		t.Fatalf("seguir: %+v", d)
 	}
-	if d.Chapters[0].Number != 3 || d.Chapters[0].EarlyUntil == nil || d.Chapters[0].URL != s.URL+"/chapter/3" || d.Chapters[1].EarlyUntil != nil {
+	if d.Chapters[0].Number != 3 || d.Chapters[0].URL != s.URL+"/chapter/3" || s.LatestNumber == nil || *s.LatestNumber != 3 {
 		t.Fatalf("capítulos: %+v", d.Chapters)
 	}
 	id := itoa(s.ID)
