@@ -74,12 +74,42 @@ func (p prefs) weatherCity() string {
 	if len(parts) < 2 {
 		return ""
 	}
-	return strings.TrimSpace(strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' {
-			return -1
+	// De atrás adelante (sin la calle): la primera parte que, sin números,
+	// sin «CP» y sin el país, aún diga algo.
+	for i := len(parts) - 1; i >= 1; i-- {
+		if c := cityPart(parts[i]); c != "" {
+			return c
 		}
-		return r
-	}, parts[len(parts)-1]))
+	}
+	return ""
+}
+
+// cityPart limpia una parte de la dirección: «CP 46001 Valencia» → «Valencia»;
+// «Alboraya (Valencia)» → «Alboraya»; «CP», «46001» o «España» → «».
+func cityPart(s string) string {
+	if i := strings.Index(s, "("); i >= 0 {
+		s = s[:i] // la provincia entre paréntesis confunde al buscador
+	}
+	var words []string
+	for _, w := range strings.Fields(s) {
+		w = strings.Trim(strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return -1
+			}
+			return r
+		}, w), " .:-()")
+		switch fold(strings.ReplaceAll(w, ".", "")) {
+		case "", "cp", "cod", "codigo", "postal":
+			continue
+		}
+		words = append(words, w)
+	}
+	c := strings.Join(words, " ")
+	switch fold(c) {
+	case "espana", "spain":
+		return ""
+	}
+	return c
 }
 
 func defaultPrefs() prefs {

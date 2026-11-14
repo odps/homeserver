@@ -55,3 +55,26 @@ func TestWeatherInSummary(t *testing.T) {
 		t.Fatalf("la ciudad elegida manda: %q", asked)
 	}
 }
+
+// La ciudad del tiempo sale de la dirección sin el código postal, sin «CP»
+// ni el país; la elegida a mano manda.
+func TestWeatherCityFromHome(t *testing.T) {
+	for home, want := range map[string]string{
+		"Calle Mayor 3, 28013 Madrid":               "Madrid",
+		"Calle Falsa 1, Valencia, CP":               "Valencia",
+		"Calle Falsa 1, Valencia, CP 46001":         "Valencia",
+		"Calle Falsa 1, CP 46001 Valencia":          "Valencia",
+		"Calle Falsa 1, C.P. 46001, Valencia":       "Valencia",
+		"Calle Falsa 1, 46001 Valencia, España":     "Valencia",
+		"Avenida de Ejemplo 2, Alboraya (Valencia)": "Alboraya",
+		"Calle Falsa 1":                             "",
+		"Calle Falsa 1, CP":                         "",
+	} {
+		if got := (prefs{Home: home}).weatherCity(); got != want {
+			t.Errorf("%q → %q, quería %q", home, got, want)
+		}
+	}
+	if got := (prefs{Home: "Calle Falsa 1, CP", WeatherCity: "Valencia"}).weatherCity(); got != "Valencia" {
+		t.Fatalf("elegida: %q", got)
+	}
+}
